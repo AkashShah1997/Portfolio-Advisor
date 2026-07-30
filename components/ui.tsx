@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { motion } from "motion/react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`bg-surface hairline rounded-xl ${className}`}>{children}</div>;
@@ -24,7 +25,7 @@ export function StatTile({
   hero = false,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   delta?: string;
   deltaGood?: boolean;
   hero?: boolean;
@@ -32,7 +33,7 @@ export function StatTile({
   return (
     <Card className="px-4 py-3 flex-1 min-w-[150px]">
       <div className="text-[12px] text-ink-2">{label}</div>
-      <div className={`${hero ? "text-[30px]" : "text-[21px]"} font-semibold text-ink leading-tight mt-0.5`}>
+      <div className={`${hero ? "text-[30px]" : "text-[21px]"} font-semibold text-ink leading-tight mt-0.5 tnum`}>
         {value}
       </div>
       {delta !== undefined && (
@@ -81,12 +82,24 @@ export function Spinner() {
   );
 }
 
-/** Meter: fill + lighter same-ramp track (per dataviz figure spec). */
+/** Meter: animated fill + lighter same-ramp track (per dataviz figure spec). */
 export function Meter({ value, max = 100 }: { value: number; max?: number }) {
   const pct = Math.max(0, Math.min(1, value / max));
   return (
-    <div className="h-2 rounded-full bg-series-1-track overflow-hidden" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
-      <div className="h-full rounded-full bg-series-1" style={{ width: `${pct * 100}%` }} />
+    <div
+      className="h-2 rounded-full bg-series-1-track overflow-hidden"
+      role="meter"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={max}
+    >
+      <motion.div
+        className="h-full rounded-full bg-series-1"
+        initial={{ width: 0 }}
+        whileInView={{ width: `${pct * 100}%` }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.7, ease: [0.22, 0.61, 0.36, 1] }}
+      />
     </div>
   );
 }

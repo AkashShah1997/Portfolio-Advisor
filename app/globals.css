@@ -39,6 +39,17 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* soft brand glow behind the header — light, print-safe */
+.page-glow {
+  background:
+    radial-gradient(900px 300px at 18% -80px, rgba(42, 120, 214, 0.07), transparent 70%),
+    radial-gradient(700px 260px at 85% -60px, rgba(27, 175, 122, 0.05), transparent 70%);
+}
+
+input[type="range"] {
+  cursor: pointer;
+}
+
 /* recharts text defaults */
 .recharts-cartesian-axis-tick text {
   fill: var(--color-muted);
@@ -51,5 +62,10 @@ body {
   }
   body {
     background: #fff;
+  }
+  /* entrance animations must never hide content on paper */
+  * {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

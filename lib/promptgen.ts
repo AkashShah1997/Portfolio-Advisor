@@ -2,6 +2,7 @@ import type { AnalyzedHolding, Currency, FxRates, PortfolioSummary } from "./typ
 import { VERDICT_META } from "./portfolio";
 import { FRAMEWORKS_LINE, ROSTER_LINE } from "./investors";
 import { fmtMoney } from "./symbols";
+import { buildValuation } from "./valuation";
 
 /**
  * Prompt generator — packages the app's computed data into a ready-to-paste
@@ -54,10 +55,16 @@ function stockBlock(r: AnalyzedHolding, includeHistory: boolean): string {
   const lines: string[] = [];
 
   lines.push(`### ${q?.name ?? h.rawSymbol} (${h.yahooSymbol})${q?.sector ? ` — ${q.sector} / ${q.industry ?? ""}` : ""}`);
-  lines.push(
-    `- My position: ${h.quantity} shares @ avg ${fmtMoney(h.avgCost, cur)} → invested ${fmtMoney(r.invested, cur, true)}; ` +
-      `current price ${fmtMoney(q?.price, cur)} (${r.pnlPct !== undefined ? `${r.pnl! >= 0 ? "+" : ""}${pct(r.pnlPct)} unrealized` : "P&L n/a"})`
-  );
+  if (h.quantity > 0) {
+    lines.push(
+      `- My position: ${h.quantity} shares @ avg ${fmtMoney(h.avgCost, cur)} → invested ${fmtMoney(r.invested, cur, true)}; ` +
+        `current price ${fmtMoney(q?.price, cur)} (${r.pnlPct !== undefined ? `${r.pnl! >= 0 ? "+" : ""}${pct(r.pnlPct)} unrealized` : "P&L n/a"})`
+    );
+  } else {
+    lines.push(
+      `- I do NOT own this yet — it's on my watchlist. Evaluate it as a fresh purchase at the current price of ${fmtMoney(q?.price, cur)}.`
+    );
+  }
   if (q) {
     lines.push(
       `- Market snapshot: P/E ${num(q.trailingPE)}${sc?.avgPE ? ` (own 5-yr avg ≈ ${num(sc.avgPE)})` : ""}, ` +
@@ -79,6 +86,17 @@ function stockBlock(r: AnalyzedHolding, includeHistory: boolean): string {
     lines.push(
       `- Growth (${sc.cagr.years}-yr CAGR): revenue ${pct(sc.cagr.revenue)}, EPS ${pct(sc.cagr.eps)}, FCF ${pct(sc.cagr.fcf)}`
     );
+    if (data) {
+      const val = buildValuation(data, sc);
+      if (val.intrinsic !== undefined) {
+        lines.push(
+          `- My screener's rough mechanical fair-value estimate: ≈ ${fmtMoney(val.intrinsic, cur)}/share ` +
+            `(band ${fmtMoney(val.low, cur)}–${fmtMoney(val.high, cur)}; I'd want to buy below ${fmtMoney(val.buyBelow, cur)}; ` +
+            `current price implies ${pct(val.marginOfSafety)} margin of safety). ` +
+            `Methods used: ${val.methods.map((m) => m.label).join(", ")}. Challenge this estimate rather than anchoring on it.`
+        );
+      }
+    }
 
     if (includeHistory && sc.ratios.length) {
       lines.push("", `5-year financial history (fiscal years, ${cur}; source: Yahoo Finance):`, "");

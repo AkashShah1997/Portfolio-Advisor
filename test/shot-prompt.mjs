@@ -1,10 +1,13 @@
 import { chromium } from "playwright";
+import { findChrome } from "./browser.mjs";
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const BASE = process.env.BASE_URL ?? "http://localhost:3400";
+const exe = findChrome();
+const browser = await chromium.launch(exe ? { executablePath: exe } : {});
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
 const page = await ctx.newPage();
 
-await page.goto("http://localhost:3400", { waitUntil: "networkidle" });
+await page.goto(BASE, { waitUntil: "networkidle" });
 await page.getByText("load a sample portfolio").click();
 await page.getByRole("button", { name: /Analyze portfolio/ }).click();
 await page.waitForSelector("text=AI prompt generator", { timeout: 60000 });
@@ -21,6 +24,7 @@ await page.waitForTimeout(400);
 const preview = await page.locator("#prompt-preview").inputValue();
 if (!preview.includes("TCS.NS") || !preview.includes("RELIANCE.NS")) throw new Error("prompt missing selected stocks");
 if (!preview.includes("Rank them")) throw new Error("multi-stock ranking task missing");
+if (!preview.includes("fair-value estimate")) throw new Error("valuation line missing from prompt");
 
 // copy works
 await page.getByRole("button", { name: "Copy prompt" }).click();

@@ -1,9 +1,10 @@
-import { chromium } from "playwright";
+import { launchBrowser } from "./browser.mjs";
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const BASE = process.env.BASE_URL ?? "http://localhost:3400";
+const browser = await launchBrowser();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
-await page.goto("http://localhost:3400", { waitUntil: "networkidle" });
+await page.goto(BASE, { waitUntil: "networkidle" });
 
 // masters card on import page
 const summary = page.locator("summary", { hasText: "The masters behind the checks" });
@@ -27,6 +28,7 @@ await page.waitForTimeout(600);
 const body = await page.locator("body").textContent();
 if (!body.includes("Coffee Can test")) throw new Error("Coffee Can check not rendered");
 if (!body.includes("Reinvestment engine")) throw new Error("Reinvestment check not rendered");
+if (!body.includes("Intrinsic value (rough)")) throw new Error("Valuation block not rendered");
 
 console.log("MASTERS E2E OK");
 await browser.close();

@@ -8,6 +8,11 @@ import { mockStockData } from "../lib/mock";
 import { buildScorecard, computeRatios } from "../lib/scorecard";
 import { summarize } from "../lib/portfolio";
 import { buildPrompt } from "../lib/promptgen";
+import { buildValuation } from "../lib/valuation";
+import { UNIVERSES, UNIVERSE_COUNTRIES, candidatesFor } from "../lib/universe";
+import { computeHealth, computeIncome, activeRows } from "../lib/health";
+import { project, portfolioGrowthGuess, yearsToMultiple } from "../lib/project";
+import { currencyForSymbol } from "../lib/symbols";
 import type { AnalyzedHolding, FxRates } from "../lib/types";
 
 let failures = 0;
@@ -250,6 +255,182 @@ console.log("\n== Prompt generator ==");
 
   const p4 = buildPrompt(many, { focus: "news", includeHistory: false, baseCurrency: "CAD" }, summary, fx);
   check("news focus handles no-web-access case", p4.includes("web access"));
+}
+
+console.log("\n== Valuation math ==");
+{
+  const data = mockStockData("TCS.NS");
+  const sc = buildScorecard(data);
+  const v = buildValuation(data, sc);
+  check("valuation produces ≥2 methods", v.methods.length >= 2, String(v.methods.length));
+  check("intrinsic is positive & finite", (v.intrinsic ?? 0) > 0 && Number.isFinite(v.intrinsic ?? NaN));
+  check("buy-below sits below intrinsic", (v.buyBelow ?? 0) < (v.intrinsic ?? 0));
+  check(
+    "MoS target scales with quality",
+    v.mosTarget === (sc.totalScore >= 70 ? 0.2 : sc.totalScore >= 55 ? 0.3 : 0.4),
+    `score ${sc.totalScore} → ${v.mosTarget}`
+  );
+  const price = data.quote.price!;
+  const expStatus = price <= v.buyBelow! ? "BUY_ZONE" : price <= v.intrinsic! * 1.05 ? "FAIR" : "PRICEY";
+  check("status consistent with price vs bands", v.status === expStatus, v.status);
+
+  // hand-check Graham Number: √(22.5 × EPS × BVPS)
+  const last = data.years[data.years.length - 1];
+  const eps = data.quote.epsTrailing!;
+  const bvps = last.equity! / last.shares!;
+  const graham = v.methods.find((m) => m.id === "graham");
+  check(
+    "Graham Number = √(22.5·EPS·BVPS)",
+    !!graham && Math.abs(graham.value - Math.sqrt(22.5 * eps * bvps)) < 1e-6,
+    graham ? String(graham.value) : "missing"
+  );
+  // MoS identity: 1 − price/intrinsic
+  check(
+    "margin of safety = 1 − price/intrinsic",
+    Math.abs((v.marginOfSafety ?? 0) - (1 - price / v.intrinsic!)) < 1e-9
+  );
+
+  const fin = mockStockData("HDFCBANK.NS");
+  const fsc = buildScorecard(fin);
+  const fval = buildValuation(fin, fsc);
+  check("financials skip the FCF DCF", !fval.methods.some((m) => m.id === "dcf"));
+  check(
+    "financials get justified-P/B method",
+    fval.methods.some((m) => m.id === "justpb"),
+    fval.methods.map((m) => m.id).join(",")
+  );
+}
+
+console.log("\n== Scan universes ==");
+{
+  check(
+    "three universes with ≥25 names each",
+    UNIVERSE_COUNTRIES.every((c) => UNIVERSES[c].length >= 25),
+    UNIVERSE_COUNTRIES.map((c) => `${c}:${UNIVERSES[c].length}`).join(" ")
+  );
+  const noDup = (arr: { symbol: string }[]) => new Set(arr.map((x) => x.symbol)).size === arr.length;
+  check("no duplicate symbols within a universe", UNIVERSE_COUNTRIES.every((c) => noDup(UNIVERSES[c])));
+  check("India universe is all .NS", UNIVERSES.India.every((c) => c.symbol.endsWith(".NS")));
+  check(
+    "Canada universe maps to CAD",
+    UNIVERSES.Canada.every((c) => currencyForSymbol(c.symbol) === "CAD")
+  );
+  check(
+    "US universe maps to USD",
+    UNIVERSES["United States"].every((c) => currencyForSymbol(c.symbol) === "USD")
+  );
+  const cands = candidatesFor("India", ["TCS.NS", "itc.ns"]);
+  check(
+    "candidatesFor excludes held symbols (case-insensitive)",
+    !cands.some((c) => c.symbol === "TCS.NS" || c.symbol === "ITC.NS") &&
+      cands.length === UNIVERSES.India.length - 2
+  );
+}
+
+console.log("\n== Health checks & income ==");
+{
+  const fx: FxRates = { base: "CAD", rates: { CAD: 1, USD: 1.36, INR: 1.36 / 87.2 }, asOf: "t", source: "test" };
+  const mk = (sym: string, invested: number, current: number, watch = false): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    return {
+      holding: {
+        id: sym + (watch ? "-w" : ""),
+        broker: "manual",
+        rawSymbol: sym,
+        yahooSymbol: sym,
+        quantity: watch ? 0 : 10,
+        avgCost: watch ? 0 : invested / 10,
+        currency: sym.endsWith(".NS") ? "INR" : sym.endsWith(".TO") ? "CAD" : "USD",
+        watch,
+      },
+      data,
+      scorecard: buildScorecard(data),
+      invested: watch ? 0 : invested,
+      currentValue: watch ? undefined : current,
+    };
+  };
+  const rows = [mk("TCS.NS", 30000, 40000), mk("AAPL", 1750, 2000), mk("MSFT", 0, 0, true)];
+  check("watch rows carry no capital in health math", activeRows(rows).length === 2);
+
+  const checks = computeHealth(rows, fx);
+  check("health produces a battery of checks", checks.length >= 6, String(checks.length));
+  const tcsCad = 40000 * (1.36 / 87.2);
+  const aaplCad = 2000 * 1.36;
+  const total = tcsCad + aaplCad;
+  const top1 = checks.find((c) => c.id === "top1");
+  const expTop1 = Math.max(tcsCad, aaplCad) / total; // ≈ 81% → fail
+  check("top-holding check fails at ~81%", top1?.status === "fail", top1?.detail);
+  const hhi = checks.find((c) => c.id === "hhi");
+  const expHhi = Math.pow(tcsCad / total, 2) + Math.pow(aaplCad / total, 2);
+  check(
+    "HHI matches hand computation",
+    !!hhi && hhi.detail.includes(expHhi.toFixed(3)),
+    `${hhi?.detail} vs ${expHhi.toFixed(3)}`
+  );
+  check("top1 share sanity", Math.abs(expTop1 - aaplCad / total) < 1e-9);
+
+  const income = computeIncome(rows, fx);
+  const yTcs = mockStockData("TCS.NS").quote.dividendYield ?? 0;
+  const yAapl = mockStockData("AAPL").quote.dividendYield ?? 0;
+  const expIncome = tcsCad * yTcs + aaplCad * yAapl;
+  check("income = Σ value × trailing yield", Math.abs(income.total - expIncome) < 1e-6, `${income.total} vs ${expIncome}`);
+  check("yield-on-value consistent", Math.abs((income.yieldOnValue ?? 0) - expIncome / total) < 1e-9);
+}
+
+console.log("\n== Sit-tight projection math ==");
+{
+  const pts = project(1000, 10, 0, 0.1);
+  check("pure compounding = start × 1.1^n", Math.abs(pts[10].value - 1000 * Math.pow(1.1, 10)) < 1e-6);
+  const flat = project(1000, 5, 100, 0);
+  check("zero-return contributions just add up", Math.abs(flat[5].value - (1000 + 100 * 12 * 5)) < 1e-6);
+  check("invested tracks start + contributions", Math.abs(flat[5].invested - 7000) < 1e-9);
+  check("projection is year-indexed", pts.length === 11 && pts[0].year === 0 && pts[10].year === 10);
+  const y2 = yearsToMultiple(2, 0.1)!;
+  check("years-to-double at 10% ≈ 7.27", Math.abs(y2 - Math.log(2) / Math.log(1.1)) < 1e-9, y2.toFixed(2));
+
+  const fx: FxRates = { base: "CAD", rates: { CAD: 1, USD: 1.36, INR: 1.36 / 87.2 }, asOf: "t", source: "test" };
+  const data = mockStockData("TCS.NS");
+  const rows: AnalyzedHolding[] = [
+    {
+      holding: { id: "1", broker: "manual", rawSymbol: "TCS", yahooSymbol: "TCS.NS", quantity: 10, avgCost: 3000, currency: "INR" },
+      data,
+      scorecard: buildScorecard(data),
+      invested: 30000,
+      currentValue: 40000,
+    },
+  ];
+  const g = portfolioGrowthGuess(rows, fx);
+  check("growth scenarios are ordered", g.conservative <= g.base && g.base <= g.optimistic, JSON.stringify(g));
+  check("growth guess is clamped to 0–18%", g.base >= 0 && g.base <= 0.18, String(g.base));
+}
+
+console.log("\n== Watchlist & valuation in prompts ==");
+{
+  const data = mockStockData("ASIANPAINT.NS");
+  const sc = buildScorecard(data);
+  const watchRow: AnalyzedHolding = {
+    holding: {
+      id: "w1",
+      broker: "manual",
+      rawSymbol: "ASIANPAINT.NS",
+      yahooSymbol: "ASIANPAINT.NS",
+      quantity: 0,
+      avgCost: 0,
+      currency: "INR",
+      watch: true,
+    },
+    data,
+    scorecard: sc,
+    invested: 0,
+  };
+  const p = buildPrompt([watchRow], { focus: "deep_dive", includeHistory: true, baseCurrency: "INR" });
+  check("watchlist prompt says 'not owned yet'", p.includes("do NOT own this yet"));
+  check("prompt carries fair-value estimate", /fair-value estimate/.test(p));
+  check("prompt warns against anchoring", /Challenge this estimate/.test(p));
+
+  const owned: AnalyzedHolding = { ...watchRow, holding: { ...watchRow.holding, quantity: 25, avgCost: 2800, watch: false }, invested: 70000, currentValue: 25 * (data.quote.price ?? 2800) };
+  const p2 = buildPrompt([owned], { focus: "deep_dive", includeHistory: true, baseCurrency: "INR" });
+  check("owned prompt keeps position line", p2.includes("25 shares"));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL CHECKS PASSED");

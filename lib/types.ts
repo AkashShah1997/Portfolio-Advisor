@@ -12,6 +12,7 @@ export interface Holding {
   avgCost: number; // in the stock's trading currency
   currency: Currency; // trading currency of the stock
   validated?: boolean;
+  watch?: boolean; // watchlist row — analyzed and scored, but carries no capital
 }
 
 export type Currency = "INR" | "CAD" | "USD";

@@ -7,6 +7,8 @@ import { VERDICT_META } from "@/lib/portfolio";
 import { buildPrompt } from "@/lib/promptgen";
 import { Badge, Card, Meter, Spinner } from "./ui";
 import { EpsBars, PriceLine, RevenueEarnings } from "./charts";
+import { ValuationBlock } from "./ValuationBlock";
+import { AnimatedNumber, Collapse } from "./anim";
 import ReactMarkdown from "react-markdown";
 
 const STATUS_ICON: Record<CheckStatus, { icon: string; cls: string; label: string }> = {
@@ -108,16 +110,19 @@ export function StockCard({
   row,
   aiKey,
   aiModel,
+  onRemove,
 }: {
   row: AnalyzedHolding;
   aiKey?: string;
   aiModel?: string;
+  onRemove?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; text?: string; error?: string }>({ loading: false });
   const [promptCopied, setPromptCopied] = useState(false);
   const { holding, data, scorecard } = row;
   const cur = (data?.quote.currency ?? holding.currency) as Currency;
+  const isWatch = !!holding.watch;
 
   const copyPrompt = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -210,22 +215,36 @@ export function StockCard({
               <span className="font-semibold text-[15px]">{q.name ?? holding.yahooSymbol}</span>
               <span className="text-muted text-[12px] tnum">{holding.yahooSymbol}</span>
               {q.sector && <Badge tone="neutral">{q.sector}</Badge>}
+              {isWatch && (
+                <Badge tone="muted" icon="☆">
+                  watchlist
+                </Badge>
+              )}
               {data.mock && <Badge tone="muted">demo data</Badge>}
             </div>
             <div className="text-[12.5px] text-ink-2 mt-0.5 tnum">
-              {fmtMoney(q.price, cur)} · {holding.quantity} sh · avg {fmtMoney(holding.avgCost, cur)}
-              {row.pnlPct !== undefined && (
-                <span className={`ml-2 font-medium ${(row.pnl ?? 0) >= 0 ? "text-success-text" : "text-status-critical"}`}>
-                  {(row.pnl ?? 0) >= 0 ? "+" : ""}
-                  {fmtPct(row.pnlPct)}
-                </span>
+              {fmtMoney(q.price, cur)}
+              {!isWatch && (
+                <>
+                  {" "}
+                  · {holding.quantity} sh · avg {fmtMoney(holding.avgCost, cur)}
+                  {row.pnlPct !== undefined && (
+                    <span className={`ml-2 font-medium ${(row.pnl ?? 0) >= 0 ? "text-success-text" : "text-status-critical"}`}>
+                      {(row.pnl ?? 0) >= 0 ? "+" : ""}
+                      {fmtPct(row.pnlPct)}
+                    </span>
+                  )}
+                </>
               )}
+              {isWatch && <span className="ml-2 text-muted">no capital committed — evaluating</span>}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
               <div className="text-[11px] text-muted">Score</div>
-              <div className="text-[22px] font-semibold tnum leading-none">{scorecard.totalScore}</div>
+              <div className="text-[22px] font-semibold tnum leading-none">
+                <AnimatedNumber value={scorecard.totalScore} />
+              </div>
             </div>
             <Badge tone={vm.tone} icon={vm.icon}>
               {vm.label}
@@ -249,15 +268,28 @@ export function StockCard({
           ))}
         </ul>
       )}
-      <button
-        onClick={copyPrompt}
-        className="mt-1.5 text-[12px] text-series-1 hover:underline no-print"
-        title="Copies a full analysis prompt (position + 5-yr ratios + scorecard) to paste into ChatGPT, Claude, Gemini…"
-      >
-        {promptCopied ? "✓ Prompt copied — paste into any AI" : "📋 Copy AI prompt for this stock"}
-      </button>
+      <div className="flex flex-wrap gap-x-4 items-center">
+        <button
+          onClick={copyPrompt}
+          className="mt-1.5 text-[12px] text-series-1 hover:underline no-print"
+          title="Copies a full analysis prompt (position + 5-yr ratios + scorecard) to paste into ChatGPT, Claude, Gemini…"
+        >
+          {promptCopied ? "✓ Prompt copied — paste into any AI" : "📋 Copy AI prompt for this stock"}
+        </button>
+        {isWatch && onRemove && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="mt-1.5 text-[12px] text-status-critical hover:underline no-print"
+          >
+            ✕ remove from watchlist
+          </button>
+        )}
+      </div>
 
-      {open && (
+      <Collapse open={open}>
         <div className="mt-4 space-y-5">
           {/* pillars */}
           <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
@@ -301,6 +333,9 @@ export function StockCard({
               52w {fmtMoney(q.fiftyTwoWeekLow, cur, true)}–{fmtMoney(q.fiftyTwoWeekHigh, cur, true)}
             </span>
           </div>
+
+          {/* intrinsic value strip */}
+          <ValuationBlock data={data} scorecard={scorecard} avgCost={isWatch ? undefined : holding.avgCost} />
 
           {/* charts */}
           <div className="grid md:grid-cols-2 gap-5">
@@ -356,7 +391,7 @@ export function StockCard({
             <p className="text-[11px] text-muted">Data notes: {data.errors.join(" · ")}</p>
           )}
         </div>
-      )}
+      </Collapse>
     </Card>
   );
 }
