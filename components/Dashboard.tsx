@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   Area,
@@ -11,27 +11,41 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AnalyzedHolding, Currency, FxRates, Scorecard, StockData, Verdict } from "@/lib/types";
+import type { AnalyzedHolding, Currency, FxRates, Holding, Scorecard, StockData, Verdict } from "@/lib/types";
 import { portfolioSeries, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
 import { MARKET_META, type Market } from "@/lib/store";
-import { candidatesFor, type UniverseCountry } from "@/lib/universe";
-import { buildValuation } from "@/lib/valuation";
+import { candidatesFor, parseCustomSymbols, type CandidateStock, type UniverseCountry } from "@/lib/universe";
+import { toMetricRow, type MetricRow } from "@/lib/screens";
+import {
+  fromLite,
+  loadScanLites,
+  saveScanLites,
+  type ScanMode,
+  type ScanState,
+} from "@/lib/scancache";
 import { Badge, Card, SectionTitle, Spinner } from "./ui";
 import { compactMoney, HBars, StackedSplit } from "./charts";
 import { StockCard } from "./StockCard";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
 import { Matrix } from "./Matrix";
-import { DiscoverPanel, type ScanResult, type ScanState } from "./DiscoverPanel";
+import { DiscoverPanel } from "./DiscoverPanel";
 import { DecisionBoard } from "./DecisionBoard";
 import { ScreenerPanel } from "./ScreenerPanel";
+import { SmartMoney } from "./SmartMoney";
 import { ChartPanel } from "./ChartPanel";
 import { HealthPanel } from "./HealthPanel";
 import { Projector } from "./Projector";
 import { AnimatedNumber, Stagger, StaggerItem, Switcher } from "./anim";
 import ReactMarkdown from "react-markdown";
+
+/** Full stock payload fetched on demand for prompts / watchlist adds. */
+export interface Hydrated {
+  data: StockData;
+  scorecard: Scorecard;
+}
 
 const VERDICT_ORDER: Verdict[] = [
   "REVIEW_EXIT",
@@ -46,6 +60,7 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "decisions", label: "Decisions" },
   { id: "screeners", label: "Screeners" },
+  { id: "smart", label: "Smart money" },
   { id: "chart", label: "Chart" },
   { id: "health", label: "Health & income" },
   { id: "future", label: "Projector" },
@@ -96,10 +111,33 @@ export function Dashboard({
 
   const [sortBy, setSortBy] = useState<"weight" | "score" | "verdict">("verdict");
   const [tab, setTab] = useState<TabId>("overview");
-  const [scans, setScans] = useState<Partial<Record<UniverseCountry, ScanState>>>({});
   const [portfolioAi, setPortfolioAi] = useState<{ loading: boolean; text?: string; error?: string }>({
     loading: false,
   });
+
+  // ---- shared market scan state (Decisions + Screeners), seeded from the on-device cache ----
+  const [scans, setScans] = useState<Record<string, ScanState>>(() => {
+    const seeded: Record<string, ScanState> = {};
+    for (const key of [...meta.countries, "Custom"]) {
+      const lites = loadScanLites(key);
+      if (lites.length) {
+        seeded[key] = {
+          status: "done",
+          done: lites.length,
+          total: lites.length,
+          results: lites.map(fromLite).sort((a, b) => b.score - a.score),
+          errors: 0,
+          failed: [],
+          throttled: false,
+          fromCache: true,
+        };
+      }
+    }
+    return seeded;
+  });
+  const runningRef = useRef<Set<string>>(new Set());
+  const customCandsRef = useRef<CandidateStock[]>([]);
+  const failedRef = useRef<Record<string, string[]>>({});
 
   const invRows = useMemo(() => rows.filter((r) => !r.holding.watch), [rows]);
   const watchRows = useMemo(() => rows.filter((r) => r.holding.watch), [rows]);
@@ -159,88 +197,142 @@ export function Dashboard({
     return list;
   }, [ok]);
 
-  // ---- shared market scan (feeds Decisions upgrades + Screeners) ----
+  // ---- scanning machinery ----
   const runScan = useCallback(
-    async (c: UniverseCountry) => {
-      if (scans[c]?.status === "running") return;
+    async (key: string, mode: ScanMode = "auto", customText?: string) => {
+      if (runningRef.current.has(key)) return;
       const held = rows.map((r) => r.holding.yahooSymbol);
-      const cands = candidatesFor(c, held);
-      setScans((s) => ({
-        ...s,
-        [c]: { status: cands.length ? "running" : "done", done: 0, total: cands.length, results: [], errors: 0 },
-      }));
-      if (!cands.length) return;
-      const queue = [...cands];
-      const results: ScanResult[] = [];
-      let errors = 0;
-      let done = 0;
-      const push = (status: ScanState["status"]) =>
+      let cands: CandidateStock[];
+      if (key === "Custom") {
+        if (customText !== undefined) customCandsRef.current = parseCustomSymbols(customText, held);
+        cands = customCandsRef.current;
+      } else {
+        cands = candidatesFor(key as UniverseCountry, held);
+      }
+
+      const prevResults = mode === "force" ? [] : loadScanLites(key).map(fromLite);
+      const existing = new Map(prevResults.map((r) => [r.symbol.toUpperCase(), r] as const));
+
+      let target = cands;
+      if (mode === "failed") {
+        const failedList = failedRef.current[key] ?? [];
+        target = cands.filter((x) => failedList.includes(x.symbol));
+      } else if (mode === "auto") {
+        target = cands.filter((x) => !existing.has(x.symbol.toUpperCase()));
+      }
+
+      const publish = (status: ScanState["status"], done: number, total: number, failedNow: string[], throttled: boolean) =>
         setScans((s) => ({
           ...s,
-          [c]: {
+          [key]: {
             status,
             done,
-            total: cands.length,
-            results: [...results].sort((a, b) => b.score - a.score),
-            errors,
+            total,
+            results: [...existing.values()].sort((a, b) => b.score - a.score),
+            errors: failedNow.length,
+            failed: failedNow,
+            throttled,
+            fromCache: false,
           },
         }));
+
+      if (!target.length) {
+        failedRef.current[key] = [];
+        publish("done", 0, 0, [], false);
+        return;
+      }
+
+      runningRef.current.add(key);
+      const queue = [...target];
+      const failedNow: string[] = [];
+      let throttled = false;
+      let done = 0;
+      const saveBuffer: MetricRow[] = [];
+      publish("running", 0, target.length, [], false);
+
       const worker = async () => {
         while (queue.length) {
           const cand = queue.shift()!;
           try {
             const res = await fetch(`/api/stock/${encodeURIComponent(cand.symbol)}`);
-            const j = (await res.json()) as { data?: StockData; scorecard?: Scorecard; error?: string };
-            if (!res.ok || !j.data || !j.scorecard) throw new Error(j.error ?? `HTTP ${res.status}`);
-            const val = buildValuation(j.data, j.scorecard);
-            results.push({
-              symbol: cand.symbol,
-              name: j.data.quote.name ?? cand.name,
-              sector: j.data.quote.sector ?? cand.sector,
-              score: j.scorecard.totalScore,
-              verdict: j.scorecard.verdict,
-              data: j.data,
-              scorecard: j.scorecard,
-              mos: val.marginOfSafety,
-              valStatus: val.status,
+            const j = (await res.json()) as {
+              data?: StockData;
+              scorecard?: Scorecard;
+              error?: string;
+              throttled?: boolean;
+            };
+            if (!res.ok || !j.data || !j.scorecard) {
+              if (res.status === 429 || j.throttled) throttled = true;
+              throw new Error(j.error ?? `HTTP ${res.status}`);
+            }
+            const mr = toMetricRow(j.data, j.scorecard, {
+              fallbackName: cand.name,
+              fallbackSector: cand.sector,
             });
+            existing.set(mr.symbol.toUpperCase(), mr);
+            saveBuffer.push(mr);
+            if (saveBuffer.length >= 5) saveScanLites(key, saveBuffer.splice(0, saveBuffer.length));
           } catch {
-            errors++;
+            failedNow.push(cand.symbol);
           }
           done++;
-          push("running");
+          publish("running", done, target.length, [...failedNow], throttled);
+          // gentle client-side pacing on top of the server-side queue
+          await new Promise((r) => setTimeout(r, 120));
         }
       };
-      await Promise.all([worker(), worker(), worker()]);
-      push("done");
+      await Promise.all([worker(), worker()]);
+      if (saveBuffer.length) saveScanLites(key, saveBuffer.splice(0, saveBuffer.length));
+      failedRef.current[key] = failedNow;
+      runningRef.current.delete(key);
+      publish("done", done, target.length, failedNow, throttled);
     },
-    [rows, scans]
+    [rows]
   );
 
-  /** Add a scanned candidate as a watchlist row (no capital; saved on this device). */
-  const addWatch = (r: ScanResult): boolean => {
-    if (rows.some((x) => x.holding.yahooSymbol.toUpperCase() === r.symbol.toUpperCase())) return false;
-    const row: AnalyzedHolding = {
-      holding: {
-        id: nextId(),
-        broker: "manual",
-        rawSymbol: r.symbol,
-        yahooSymbol: r.symbol,
-        name: r.data.quote.name ?? r.name,
-        quantity: 0,
-        avgCost: 0,
-        currency: currencyForSymbol(r.symbol),
-        watch: true,
-      },
-      data: r.data,
-      scorecard: r.scorecard,
-      invested: 0,
-    };
-    onRowsChange([...rows, row]);
-    return true;
-  };
+  const hydrate = useCallback(async (symbol: string): Promise<Hydrated | null> => {
+    try {
+      const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}`);
+      const j = (await res.json()) as { data?: StockData; scorecard?: Scorecard };
+      if (!res.ok || !j.data || !j.scorecard) return null;
+      return { data: j.data, scorecard: j.scorecard };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /** Add a symbol as a watchlist row (no capital; saved on this device). */
+  const addWatch = useCallback(
+    async (symbol: string, prefetched?: Hydrated): Promise<boolean> => {
+      if (rows.some((x) => x.holding.yahooSymbol.toUpperCase() === symbol.toUpperCase())) return false;
+      const full = prefetched ?? (await hydrate(symbol));
+      if (!full) return false;
+      const row: AnalyzedHolding = {
+        holding: {
+          id: nextId(),
+          broker: "manual",
+          rawSymbol: symbol,
+          yahooSymbol: symbol,
+          name: full.data.quote.name ?? symbol,
+          quantity: 0,
+          avgCost: 0,
+          currency: currencyForSymbol(symbol),
+          watch: true,
+        },
+        data: full.data,
+        scorecard: full.scorecard,
+        invested: 0,
+      };
+      onRowsChange([...rows, row]);
+      return true;
+    },
+    [rows, onRowsChange, hydrate]
+  );
 
   const removeRow = (id: string) => onRowsChange(rows.filter((x) => x.holding.id !== id));
+
+  const patchHolding = (id: string, patch: Partial<Holding>) =>
+    onRowsChange(rows.map((r) => (r.holding.id === id ? { ...r, holding: { ...r.holding, ...patch } } : r)));
 
   const runPortfolioAi = async () => {
     if (!aiKey) return;
@@ -448,7 +540,10 @@ export function Dashboard({
                     <Badge tone="serious" icon="!">
                       No data
                     </Badge>
-                    <span className="text-ink-2">{failed.map((r) => r.holding.yahooSymbol).join(", ")}</span>
+                    <span className="text-ink-2">
+                      {failed.map((r) => r.holding.yahooSymbol).join(", ")} — often Yahoo throttling; go back
+                      and re-analyze in a minute.
+                    </span>
                   </div>
                 )}
                 <p className="text-[12px] text-ink-2 pt-1">
@@ -515,7 +610,7 @@ export function Dashboard({
 
             {/* stock cards */}
             <div>
-              <SectionTitle sub="Click a card for the full 5-year breakdown: pillar scores, every check with evidence, intrinsic-value band, ratio history, and charts. Watchlist names sit at the end.">
+              <SectionTitle sub="Click a card for the full 5-year breakdown: pillar scores, every check with evidence, intrinsic-value band, the since-you-bought fundamentals journey, ratio history, and charts.">
                 Holdings — deep dive
               </SectionTitle>
               <Stagger>
@@ -527,6 +622,7 @@ export function Dashboard({
                         aiKey={aiKey}
                         aiModel={aiModel}
                         onRemove={r.holding.watch ? () => removeRow(r.holding.id) : undefined}
+                        onPatchHolding={(patch) => patchHolding(r.holding.id, patch)}
                       />
                     </StaggerItem>
                   ))}
@@ -545,8 +641,9 @@ export function Dashboard({
               rows={rows}
               countries={meta.countries}
               scans={scans}
-              onScan={(c) => void runScan(c)}
+              onScan={(key, mode) => void runScan(key, mode)}
               onAddWatch={addWatch}
+              hydrate={hydrate}
             />
           </div>
         )}
@@ -556,10 +653,14 @@ export function Dashboard({
             rows={rows}
             countries={meta.countries}
             scans={scans}
-            onScan={(c) => void runScan(c)}
+            onScan={(key, mode) => void runScan(key, mode)}
+            onScanCustom={(text) => void runScan("Custom", "force", text)}
             onAddWatch={addWatch}
+            hydrate={hydrate}
           />
         )}
+
+        {tab === "smart" && <SmartMoney rows={rows} market={market} onAddWatch={(s) => addWatch(s)} />}
 
         {tab === "chart" && <ChartPanel rows={rows} />}
 

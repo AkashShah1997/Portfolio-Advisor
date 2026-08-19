@@ -1,92 +1,214 @@
 import "server-only";
 import YahooFinance from "yahoo-finance2";
 import type { PricePoint, QuoteInfo, StockData, YearFinancials } from "./types";
-import { mockHistory, mockStockData, MOCK_ENABLED } from "./mock";
+import { mockHistory, mockOwnership, mockStockData, MOCK_ENABLED } from "./mock";
+import { mapOwnership, type OwnershipPayload } from "./ownership";
+import {
+  hasSubstance,
+  mapStatementHistory,
+  mapYearRow,
+  mergeYears,
+  parseTimeseries,
+  TS_KEYS,
+  type AnyRow,
+} from "./fundamentals";
 import type { Candle, HistoryRange } from "./history";
 export { HISTORY_RANGES } from "./history";
 export type { Candle, HistoryRange } from "./history";
 
-// One shared instance per lambda/server process.
-const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+/**
+ * Yahoo data layer — hardened for the real world.
+ *
+ * Free Yahoo endpoints fail in three characteristic ways: rate limiting
+ * (429/999/"Too Many Requests"), the cookie/crumb handshake breaking
+ * ("No set-cookie header…"), and the library's giant `module:"all"`
+ * fundamentals URL getting rejected or returning odd shapes that fail schema
+ * validation. Every one of those used to surface as "insufficient data".
+ *
+ * Defenses, in order:
+ *  1. A polite global queue: max 3 in-flight, ≥250ms between launches, and
+ *     automatic retries with backoff + jitter on retryable errors.
+ *  2. Fundamentals come from a MINIMAL direct timeseries request (23 fields,
+ *     no crumb needed, tiny URL) → library fundamentalsTimeSeries → 4-year
+ *     quoteSummary statement history, first one that yields rows wins.
+ *  3. Quotes fall back to the chart endpoint's metadata (also crumb-free)
+ *     when the quote/crumb handshake fails.
+ *  4. Schema validation is disabled on library calls — a new Yahoo field must
+ *     never turn a valid response into an error.
+ */
 
-type AnyRow = Record<string, unknown>;
+const yf = new YahooFinance({
+  suppressNotices: ["yahooSurvey"],
+  validation: { logErrors: false, logOptionsErrors: false },
+});
 
-function num(v: unknown): number | undefined {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (v && typeof v === "object" && "raw" in (v as AnyRow)) {
-    const raw = (v as AnyRow).raw;
-    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  }
-  return undefined;
+const NO_VALIDATE = { validateResult: false } as const;
+
+// With validateResult:false the library returns `unknown`; these are the
+// minimal shapes we actually read (tolerant by construction).
+interface YFQuote {
+  longName?: string;
+  shortName?: string;
+  regularMarketPrice?: number;
+  currency?: string;
+  fullExchangeName?: string;
+  marketCap?: number;
+  trailingPE?: number;
+  forwardPE?: number;
+  priceToBook?: number;
+  epsTrailingTwelveMonths?: number;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+}
+interface YFChartQuoteRow {
+  date: string | number | Date;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  close?: number | null;
+  volume?: number | null;
+}
+interface YFChart {
+  meta?: ChartMeta;
+  quotes?: YFChartQuoteRow[];
+}
+interface YFQuoteSummary {
+  assetProfile?: { sector?: string; industry?: string; country?: string };
+  financialData?: {
+    returnOnEquity?: number;
+    profitMargins?: number;
+    revenueGrowth?: number;
+    earningsGrowth?: number;
+    freeCashflow?: number;
+    totalDebt?: number;
+    totalCash?: number;
+    currentRatio?: number;
+    debtToEquity?: number;
+  };
+  defaultKeyStatistics?: { pegRatio?: number; priceToBook?: number };
+  summaryDetail?: {
+    dividendYield?: number;
+    payoutRatio?: number;
+    trailingPE?: number;
+    marketCap?: number;
+  };
+  incomeStatementHistory?: { incomeStatementHistory?: AnyRow[] };
+  balanceSheetHistory?: { balanceSheetStatements?: AnyRow[] };
+  cashflowStatementHistory?: { cashflowStatements?: AnyRow[] };
+}
+interface YFSearch {
+  quotes?: Array<Record<string, unknown>>;
 }
 
-function mapYearRow(row: AnyRow): YearFinancials {
-  const date = row.date instanceof Date ? row.date : new Date(String(row.date));
-  const ocf = num(row.annualOperatingCashFlow);
-  const capexRaw = num(row.annualCapitalExpenditure);
-  let fcf = num(row.annualFreeCashFlow);
-  if (fcf === undefined && ocf !== undefined && capexRaw !== undefined) {
-    // Yahoo reports capex as a negative outflow; be tolerant of either sign.
-    fcf = capexRaw <= 0 ? ocf + capexRaw : ocf - capexRaw;
-  }
-  const pretax = num(row.annualPretaxIncome);
-  const interest = num(row.annualInterestExpense) ?? num(row.annualInterestExpenseNonOperating);
-  let ebit = num(row.annualEBIT);
-  if (ebit === undefined && pretax !== undefined && interest !== undefined) ebit = pretax + interest;
-  if (ebit === undefined) ebit = num(row.annualOperatingIncome);
+// ---------------- polite queue + retry ----------------
 
+const MAX_CONCURRENT = 3;
+const MIN_GAP_MS = 250;
+let inFlight = 0;
+let lastLaunch = 0;
+const waiters: Array<() => void> = [];
+
+function isRetryable(e: unknown): boolean {
+  const m = String((e as Error)?.message ?? e ?? "").toLowerCase();
+  return (
+    m.includes("429") ||
+    m.includes("999") ||
+    m.includes("too many request") ||
+    m.includes("set-cookie") ||
+    m.includes("crumb") ||
+    m.includes("econnreset") ||
+    m.includes("socket hang up") ||
+    m.includes("fetch failed") ||
+    m.includes("timeout") ||
+    m.includes("unauthorized")
+  );
+}
+
+async function politely<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
+  // acquire a slot
+  while (inFlight >= MAX_CONCURRENT) {
+    await new Promise<void>((res) => waiters.push(res));
+  }
+  inFlight++;
+  try {
+    for (let attempt = 1; ; attempt++) {
+      // pace launches
+      const wait = lastLaunch + MIN_GAP_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      lastLaunch = Date.now();
+      try {
+        return await fn();
+      } catch (e) {
+        if (attempt >= tries || !isRetryable(e)) throw e;
+        const backoff = 1200 * Math.pow(2.5, attempt - 1) * (0.7 + Math.random() * 0.6);
+        await new Promise((r) => setTimeout(r, backoff));
+      }
+    }
+  } finally {
+    inFlight--;
+    waiters.shift()?.();
+  }
+}
+
+async function fetchTimeseriesDirect(symbol: string): Promise<YearFinancials[]> {
+  const period2 = Math.floor(Date.now() / 1000);
+  const period1 = period2 - Math.floor(6.2 * 365.25 * 24 * 3600);
+  const url =
+    `https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}` +
+    `?symbol=${encodeURIComponent(symbol)}&type=${TS_KEYS.join(",")}` +
+    `&period1=${period1}&period2=${period2}&merge=false&padTimeSeries=false`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`timeseries HTTP ${res.status}`);
+  return parseTimeseries(await res.json());
+}
+
+// ---------------- quote with chart-meta fallback ----------------
+
+interface ChartMeta {
+  regularMarketPrice?: number;
+  currency?: string;
+  exchangeName?: string;
+  fullExchangeName?: string;
+  longName?: string;
+  shortName?: string;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+}
+
+async function quoteViaChart(symbol: string): Promise<Partial<QuoteInfo>> {
+  const period1 = new Date(Date.now() - 14 * 24 * 3600 * 1000);
+  const chart = (await yf.chart(symbol, { period1, interval: "1d" }, NO_VALIDATE)) as YFChart;
+  const meta = chart.meta ?? {};
+  const closes = (chart.quotes ?? []).filter((q) => typeof q.close === "number");
+  const last = closes[closes.length - 1];
   return {
-    year: date.getUTCFullYear(),
-    endDate: date.toISOString().slice(0, 10),
-    revenue: num(row.annualTotalRevenue),
-    grossProfit: num(row.annualGrossProfit),
-    operatingIncome: num(row.annualOperatingIncome),
-    ebit,
-    pretaxIncome: pretax,
-    netIncome: num(row.annualNetIncome) ?? num(row.annualNetIncomeCommonStockholders),
-    interestExpense: interest,
-    equity: num(row.annualStockholdersEquity) ?? num(row.annualTotalEquityGrossMinorityInterest),
-    totalDebt: num(row.annualTotalDebt),
-    totalAssets: num(row.annualTotalAssets),
-    currentAssets: num(row.annualCurrentAssets),
-    currentLiabilities: num(row.annualCurrentLiabilities),
-    cash: num(row.annualCashAndCashEquivalents),
-    fcf,
-    ocf,
-    capex: capexRaw,
-    dilutedEPS: num(row.annualDilutedEPS),
-    basicEPS: num(row.annualBasicEPS),
-    shares: num(row.annualOrdinarySharesNumber) ?? num(row.annualDilutedAverageShares),
+    name: meta.longName ?? meta.shortName,
+    price: meta.regularMarketPrice ?? (last?.close as number | undefined),
+    currency: meta.currency,
+    exchange: meta.fullExchangeName ?? meta.exchangeName,
+    fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+    fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
   };
 }
 
-/** Merge fundamentals rows that share a fiscal year (module:"all" can emit partial rows). */
-function mergeYears(rows: YearFinancials[]): YearFinancials[] {
-  const byKey = new Map<string, YearFinancials>();
-  for (const r of rows) {
-    const key = r.endDate;
-    const prev = byKey.get(key);
-    if (!prev) byKey.set(key, { ...r });
-    else {
-      const merged: AnyRow = { ...prev };
-      for (const [k, v] of Object.entries(r)) {
-        if (v !== undefined && (merged[k] === undefined || merged[k] === null)) merged[k] = v;
-      }
-      byKey.set(key, merged as unknown as YearFinancials);
-    }
-  }
-  return [...byKey.values()].sort((a, b) => a.endDate.localeCompare(b.endDate));
-}
+// ---------------- main entry ----------------
 
 export async function getStockData(symbol: string): Promise<StockData> {
   if (MOCK_ENABLED) return mockStockData(symbol);
 
   const errors: string[] = [];
-
-  // --- live quote + profile ---
   const quote: QuoteInfo = { symbol };
+
+  // --- live quote (library → chart-meta fallback) ---
   try {
-    const q = await yf.quote(symbol);
+    const q = (await politely(() => yf.quote(symbol, {}, NO_VALIDATE))) as YFQuote;
     quote.name = q.longName ?? q.shortName;
     quote.price = q.regularMarketPrice;
     quote.currency = q.currency;
@@ -99,13 +221,23 @@ export async function getStockData(symbol: string): Promise<StockData> {
     quote.fiftyTwoWeekHigh = q.fiftyTwoWeekHigh;
     quote.fiftyTwoWeekLow = q.fiftyTwoWeekLow;
   } catch (e) {
-    throw new Error(`Quote fetch failed for ${symbol}: ${(e as Error).message}`);
+    errors.push(`Quote endpoint failed (${(e as Error).message.slice(0, 80)}) — used chart fallback.`);
+    try {
+      Object.assign(quote, await politely(() => quoteViaChart(symbol)));
+    } catch (e2) {
+      throw new Error(`Quote fetch failed for ${symbol}: ${(e2 as Error).message}`);
+    }
   }
 
+  // --- profile & key stats (best-effort) ---
   try {
-    const qs = await yf.quoteSummary(symbol, {
-      modules: ["assetProfile", "financialData", "defaultKeyStatistics", "summaryDetail"],
-    });
+    const qs = (await politely(() =>
+      yf.quoteSummary(
+        symbol,
+        { modules: ["assetProfile", "financialData", "defaultKeyStatistics", "summaryDetail"] },
+        NO_VALIDATE
+      )
+    )) as YFQuoteSummary;
     quote.sector = qs.assetProfile?.sector;
     quote.industry = qs.assetProfile?.industry;
     quote.country = qs.assetProfile?.country;
@@ -123,38 +255,67 @@ export async function getStockData(symbol: string): Promise<StockData> {
     quote.dividendYield = qs.summaryDetail?.dividendYield ?? undefined;
     quote.payoutRatio = qs.summaryDetail?.payoutRatio ?? undefined;
     if (quote.trailingPE === undefined) quote.trailingPE = qs.summaryDetail?.trailingPE ?? undefined;
+    if (quote.marketCap === undefined) quote.marketCap = qs.summaryDetail?.marketCap ?? undefined;
+    if (quote.priceToBook === undefined) quote.priceToBook = qs.defaultKeyStatistics?.priceToBook ?? undefined;
   } catch (e) {
-    errors.push(`Profile/key-stats unavailable: ${(e as Error).message}`);
+    errors.push(`Profile/key-stats unavailable: ${(e as Error).message.slice(0, 80)}`);
   }
 
-  // --- ~6 fiscal years of annual statements ---
+  // --- annual statements: direct minimal → library → statement history ---
   let years: YearFinancials[] = [];
   try {
-    const period1 = new Date();
-    period1.setUTCFullYear(period1.getUTCFullYear() - 6);
-    const rows = (await yf.fundamentalsTimeSeries(symbol, {
-      period1: period1.toISOString().slice(0, 10),
-      period2: new Date().toISOString().slice(0, 10),
-      type: "annual",
-      module: "all",
-    })) as unknown as AnyRow[];
-    years = mergeYears(rows.map(mapYearRow)).filter(
-      (y) => y.revenue !== undefined || y.netIncome !== undefined || y.totalAssets !== undefined
-    );
+    years = await politely(() => fetchTimeseriesDirect(symbol));
   } catch (e) {
-    errors.push(`Annual fundamentals unavailable: ${(e as Error).message}`);
+    errors.push(`Direct fundamentals fetch failed: ${(e as Error).message.slice(0, 80)}`);
+  }
+  if (years.length < 2) {
+    try {
+      const period1 = new Date();
+      period1.setUTCFullYear(period1.getUTCFullYear() - 6);
+      const rows = (await politely(() =>
+        yf.fundamentalsTimeSeries(
+          symbol,
+          {
+            period1: period1.toISOString().slice(0, 10),
+            period2: new Date().toISOString().slice(0, 10),
+            type: "annual",
+            module: "all",
+          },
+          NO_VALIDATE
+        )
+      )) as unknown as AnyRow[];
+      const mapped = mergeYears(rows.map(mapYearRow)).filter(hasSubstance);
+      if (mapped.length > years.length) years = mapped;
+    } catch (e) {
+      errors.push(`Library fundamentals unavailable: ${(e as Error).message.slice(0, 80)}`);
+    }
+  }
+  if (years.length < 2) {
+    try {
+      const qs = (await politely(() =>
+        yf.quoteSummary(
+          symbol,
+          { modules: ["incomeStatementHistory", "balanceSheetHistory", "cashflowStatementHistory"] },
+          NO_VALIDATE
+        )
+      )) as YFQuoteSummary;
+      const mapped = mapStatementHistory(qs);
+      if (mapped.length > years.length) years = mapped;
+    } catch (e) {
+      errors.push(`Statement history unavailable: ${(e as Error).message.slice(0, 80)}`);
+    }
   }
 
   // --- ~5y of monthly closes ---
   let prices: PricePoint[] = [];
   try {
     const period1 = new Date(Date.now() - Math.round(5.1 * 365.25 * 24 * 3600 * 1000));
-    const chart = await yf.chart(symbol, { period1, interval: "1mo" });
+    const chart = (await politely(() => yf.chart(symbol, { period1, interval: "1mo" }, NO_VALIDATE))) as YFChart;
     prices = (chart.quotes ?? [])
       .filter((q) => typeof q.close === "number")
       .map((q) => ({ date: new Date(q.date).toISOString().slice(0, 10), close: q.close as number }));
   } catch (e) {
-    errors.push(`Price history unavailable: ${(e as Error).message}`);
+    errors.push(`Price history unavailable: ${(e as Error).message.slice(0, 80)}`);
   }
 
   return {
@@ -178,7 +339,7 @@ export async function resolveSymbol(query: string): Promise<ResolveMatch[]> {
   if (MOCK_ENABLED) {
     return [{ symbol: query.toUpperCase(), name: `${query.toUpperCase()} (mock match)`, exchange: "MOCK" }];
   }
-  const res = await yf.search(query, { quotesCount: 6, newsCount: 0 });
+  const res = (await politely(() => yf.search(query, { quotesCount: 6, newsCount: 0 }, NO_VALIDATE))) as YFSearch;
   const out: ResolveMatch[] = [];
   for (const q of (res.quotes ?? []) as Array<Record<string, unknown>>) {
     if (typeof q.symbol !== "string") continue;
@@ -208,7 +369,7 @@ export async function getHistory(symbol: string, range: HistoryRange): Promise<{
     return { symbol, range, interval: cfg.interval, candles: mockHistory(symbol, range), mock: true };
   }
   const period1 = new Date(Date.now() - cfg.days * 24 * 3600 * 1000);
-  const chart = await yf.chart(symbol, { period1, interval: cfg.interval });
+  const chart = (await politely(() => yf.chart(symbol, { period1, interval: cfg.interval }, NO_VALIDATE))) as YFChart;
   const candles: Candle[] = (chart.quotes ?? [])
     .filter(
       (q) =>
@@ -228,16 +389,38 @@ export async function getHistory(symbol: string, range: HistoryRange): Promise<{
   return { symbol, range, interval: cfg.interval, candles };
 }
 
+/** Which mutual funds & institutions hold a stock (best for US/CA; partial for NSE). */
+export async function getOwnership(symbol: string): Promise<OwnershipPayload> {
+  if (MOCK_ENABLED) return mockOwnership(symbol);
+  const qs = (await politely(() =>
+    yf.quoteSummary(
+      symbol,
+      { modules: ["majorHoldersBreakdown", "fundOwnership", "institutionOwnership"] },
+      NO_VALIDATE
+    )
+  )) as Parameters<typeof mapOwnership>[1];
+  return mapOwnership(symbol, qs ?? {});
+}
+
 /** USD-based FX via Yahoo as a fallback when frankfurter is unreachable. */
 export async function yahooUsdRates(): Promise<{ INR?: number; CAD?: number }> {
   if (MOCK_ENABLED) return { INR: 87.2, CAD: 1.36 };
   const out: { INR?: number; CAD?: number } = {};
   try {
-    const [inr, cad] = await Promise.all([yf.quote("USDINR=X"), yf.quote("USDCAD=X")]);
+    const [inr, cad] = (await Promise.all([
+      politely(() => yf.quote("USDINR=X", {}, NO_VALIDATE)),
+      politely(() => yf.quote("USDCAD=X", {}, NO_VALIDATE)),
+    ])) as [YFQuote, YFQuote];
     out.INR = inr.regularMarketPrice;
     out.CAD = cad.regularMarketPrice;
   } catch {
     // leave undefined; caller decides
   }
   return out;
+}
+
+/** True when an error message smells like Yahoo throttling (used by API routes). */
+export function isThrottleError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("429") || m.includes("999") || m.includes("too many request");
 }

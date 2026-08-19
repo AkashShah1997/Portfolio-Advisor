@@ -34,7 +34,17 @@ summary, the **Buffett matrix** (quality+growth vs valuation, bubble = weight), 
 geography / sector splits, and deep-dive cards per stock: pillar meters, every check with evidence,
 an **intrinsic-value band** (Graham Number, Graham growth formula, 10-y owner-earnings DCF,
 own-history P/E anchor, justified P/B for financials → buy-below price that demands 20/30/40% margin
-of safety by quality), 5-year charts and ratio tables.
+of safety by quality), the **since-you-bought fundamentals journey** (below), 5-year charts and
+ratio tables.
+
+**Since you bought (fundamentals journey)** — every held stock gets a then-vs-now table: revenue,
+net income, EPS, ROE/ROCE, margins, leverage, interest cover and FCF **in the fiscal year you
+bought** versus **today**, each marked ▲ better / ▼ worse. The buy month is estimated from your
+average cost against the price history (editable — set the real month and it's saved on-device).
+The verdict separates the three reasons a stock "did nothing" for years: improving business +
+lagging price (coiled spring — keep), flat business + flat price (dead money — recycle), or
+deteriorating business (the fall is deserved — exit review). The same chip appears on the Decisions
+board.
 
 **Decisions** — the straight answer to "I've held this for years and it's done nothing":
 every holding sorted into **Consider exiting / Trim / Accumulate / Hold** with the full evidence
@@ -44,11 +54,27 @@ refuses to call a growing business an exit just because the price lagged. Below 
 **upgrade scanner**: same-market quality names that currently screen far stronger than your weak
 holdings, one click to watchlist.
 
-**Screeners** — the classic long-term screens, run over your market's scanned universe plus your own
-holdings, entirely client-side: **Coffee Can** (Mukherjea), **Magic Formula** (Greenblatt, joint
-rank of earnings yield × ROCE), **QGLP** (Agrawal), **Dividend compounders**, **Fortress balance
-sheets**, **GARP / PEG ≤ 1** (Lynch), **Quality in the buy zone** (Damani/Graham) — plus a **custom
-screen builder** (min score/ROCE/growth, max P/E/PEG/D-E, yield, buy-zone-only, exclude-owned).
+**Screeners** — classic long-term screens run over the scanned market universe (**~140 India / ~95
+Canada / ~135 US widely-traded names**, editable), any **pasted custom list** (≤100 symbols), and
+your own holdings — entirely client-side: **Two-year keepers** (quality + zero red flags + sane
+price for a 2-year-minimum hold), **Coffee Can** (Mukherjea), **Magic Formula** (Greenblatt),
+**QGLP** (Agrawal), **Dividend compounders**, **Fortress balance sheets**, **GARP / PEG ≤ 1**
+(Lynch), **Quality in the buy zone** (Damani/Graham) — plus a **raw-fundamentals custom builder**:
+min/max P/E ("P/E at least…" included), PEG, P/B, D/E, interest cover, ROCE, revenue/EPS CAGR,
+dividend yield, payout, FCF yield, market cap, red flags, no-loss-years, buy-zone-only,
+exclude-owned. Scan results are **cached on-device for 24h** and refresh incrementally, so screens
+stay populated between sessions; failed names are listed with one-click retry.
+
+**Smart money** — two honest lenses on what serious long-horizon capital is doing. (1)
+**Superinvestor conviction moves**: a hand-picked bench of nine managers with decades-long public
+records (Buffett's Berkshire, Terry Smith's Fundsmith, Akre, Li Lu's Himalaya, Chris Hohn's TCI,
+Ackman's Pershing Square, Klarman's Baupost, Gayner's Markel, Rochon's Giverny), read straight from
+their official **SEC EDGAR 13F filings** (free, no key): new buys, ≥20% adds/trims, exits and top-10
+weights, quarter over quarter, plus a consensus strip for names bought by ≥2 of the bench —
+with the 45-day-lag and US-longs-only caveats stated, not hidden. (2) **Who owns your stock**: top
+mutual funds/ETFs and institutions holding any symbol (full for US/Canada, partial for NSE, where
+promoter stakes appear under "insiders"). One click adds any smart-money name to your watchlist,
+where **your own scorecard** judges it.
 
 **Chart** — TradingView-style charting (built on TradingView's open-source `lightweight-charts`):
 candles or area, 6M→Max ranges (daily/weekly/monthly), SMA 50/200, volume, **two-click trendline
@@ -79,6 +105,13 @@ Inter — reduced-motion is respected, and print always shows full content.
   quotes, ~5y annual statements, 5y monthly prices, and OHLCV history for the chart. Covers NSE
   (`.NS`), BSE (`.BO`), TSX (`.TO`) and US tickers.
 - **frankfurter.dev** (ECB rates): INR/CAD/USD conversion, with Yahoo FX pairs as fallback.
+
+The data layer is hardened for free-API reality: a polite global queue (3 in-flight, spaced, with
+backoff retries), fundamentals fetched via a minimal 23-field timeseries request (no cookie/crumb,
+tiny URL) with the library call and 4-year `quoteSummary` statement history as fallbacks, quotes
+falling back to chart metadata when Yahoo's cookie handshake hiccups, and schema validation
+disabled so new Yahoo fields never break parsing. Rate-limited symbols surface as retryable
+failures instead of silently becoming "insufficient data".
 
 ## Run locally
 
@@ -114,7 +147,8 @@ or click **"load a sample portfolio"** inside either market.
 
 ```sh
 MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, decisions, screeners,
-                                     # OHLC history, portfolio series, health, projection, FX (110+ checks)
+                                     # fundamentals fallbacks, journey, scan cache, OHLC history,
+                                     # portfolio series, health, projection, FX (150+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

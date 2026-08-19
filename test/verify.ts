@@ -12,6 +12,20 @@ import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
 import { runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
 import { sma } from "../lib/history";
 import { loadHoldings, saveHoldings } from "../lib/store";
+import { mapStatementHistory, parseTimeseries } from "../lib/fundamentals";
+import {
+  buildTickerMap,
+  diffFilings,
+  normalizeIssuer,
+  parseInfoTable,
+  SUPERINVESTORS,
+  tickerFor,
+} from "../lib/thirteenf";
+import { mapOwnership } from "../lib/ownership";
+import { mockOwnership, mockSmartMoves } from "../lib/mock";
+import { buildJourney, estimateBuyMonth } from "../lib/journey";
+import { fromLite, toLite } from "../lib/scancache";
+import { parseCustomSymbols } from "../lib/universe";
 import type { StockData } from "../lib/types";
 import { buildValuation } from "../lib/valuation";
 import { UNIVERSES, UNIVERSE_COUNTRIES, candidatesFor } from "../lib/universe";
@@ -643,6 +657,252 @@ console.log("\n== Portfolio value series ==");
   const withWatch = [...rows, { ...mk("W", "USD", 5, [["2024-01-01", 999]]), holding: { ...mk("W", "USD", 5, [["2024-01-01", 999]]).holding, watch: true, quantity: 0 } }];
   const s2 = portfolioSeries(withWatch, fx);
   check("watch rows never enter the value series", JSON.stringify(s2) === JSON.stringify(s));
+}
+
+console.log("\n== Fundamentals parsers (live-data fallbacks) ==");
+{
+  // direct timeseries payload → YearFinancials
+  const tsJson = {
+    timeseries: {
+      result: [
+        {
+          meta: { type: ["annualTotalRevenue"] },
+          annualTotalRevenue: [
+            { asOfDate: "2023-03-31", reportedValue: { raw: 1000 } },
+            { asOfDate: "2024-03-31", reportedValue: { raw: 1200 } },
+          ],
+        },
+        {
+          meta: { type: ["annualNetIncome"] },
+          annualNetIncome: [
+            { asOfDate: "2023-03-31", reportedValue: { raw: 100 } },
+            { asOfDate: "2024-03-31", reportedValue: { raw: 150 } },
+            null,
+          ],
+        },
+        {
+          meta: { type: ["annualOperatingCashFlow"] },
+          annualOperatingCashFlow: [{ asOfDate: "2024-03-31", reportedValue: { raw: 180 } }],
+        },
+        {
+          meta: { type: ["annualCapitalExpenditure"] },
+          annualCapitalExpenditure: [{ asOfDate: "2024-03-31", reportedValue: { raw: -40 } }],
+        },
+        { meta: {}, junk: true },
+      ],
+    },
+  };
+  const parsed = parseTimeseries(tsJson);
+  check("timeseries parser pivots by fiscal year", parsed.length === 2, String(parsed.length));
+  check("timeseries parser maps values", parsed[1].revenue === 1200 && parsed[1].netIncome === 150);
+  check("timeseries parser derives FCF from OCF − capex", parsed[1].fcf === 140, String(parsed[1].fcf));
+  check("timeseries parser sorts ascending", parsed[0].year === 2023 && parsed[1].year === 2024);
+  check("timeseries parser survives junk entries", parseTimeseries({ nope: 1 }).length === 0);
+
+  // quoteSummary statement-history fallback → YearFinancials
+  const qs = {
+    incomeStatementHistory: {
+      incomeStatementHistory: [
+        { endDate: new Date("2023-03-31"), totalRevenue: 1000, netIncome: 100, incomeBeforeTax: 130, interestExpense: -20 },
+        { endDate: { raw: 1711843200 }, totalRevenue: 1200, netIncome: 150, incomeBeforeTax: 190, interestExpense: -25 },
+      ],
+    },
+    balanceSheetHistory: {
+      balanceSheetStatements: [
+        { endDate: new Date("2023-03-31"), totalStockholderEquity: 800, longTermDebt: 300, shortLongTermDebt: 50, totalAssets: 2000, totalCurrentAssets: 400, totalCurrentLiabilities: 250, cash: 90 },
+      ],
+    },
+    cashflowStatementHistory: {
+      cashflowStatements: [{ endDate: new Date("2023-03-31"), totalCashFromOperatingActivities: 160, capitalExpenditures: -30 }],
+    },
+  };
+  const hist = mapStatementHistory(qs);
+  check("statement-history fallback merges 3 modules by year", hist.length === 2, String(hist.length));
+  const y23 = hist.find((y) => y.year === 2023)!;
+  check("fallback merges income+balance+cashflow", y23.revenue === 1000 && y23.equity === 800 && y23.fcf === 130);
+  check("fallback computes EBIT = pretax + |interest|", y23.ebit === 150, String(y23.ebit));
+  check("fallback sums short+long debt", y23.totalDebt === 350);
+  check("fallback handles {raw} epoch endDate", hist.some((y) => y.year === 2024));
+}
+
+console.log("\n== Fundamentals journey (then vs now) ==");
+{
+  // buy-month estimation from avg cost
+  const prices = Array.from({ length: 61 }, (_, i) => {
+    const y = 2021 + Math.floor(i / 12);
+    const m = (i % 12) + 1;
+    return { date: `${y}-${String(m).padStart(2, "0")}-01`, close: 100 + i * 5 }; // rising 100→400
+  });
+  const est = estimateBuyMonth(prices, 200)!;
+  // closes rise 100,105,… so 195 (i=19 → 2022-08) is the EARLIEST close within 3% of a ₹200 avg cost
+  check("buy month estimated at earliest close within 3%", est.ym === "2022-08", est.ym);
+  const estEdge = estimateBuyMonth(prices, 50)!;
+  check("avg cost below the window ⇒ earliest month flagged", estEdge.ym === "2021-01" && estEdge.atWindowEdge);
+
+  // journey on a coiled spring: strong business (TCS mock) with a flat price history
+  const flatPrices = prices.map((p) => ({ ...p, close: 3500 }));
+  const springData = { ...mockStockData("TCS.NS"), prices: flatPrices };
+  const springRow: AnalyzedHolding = {
+    holding: { id: "j1", broker: "zerodha", rawSymbol: "TCS", yahooSymbol: "TCS.NS", quantity: 10, avgCost: 3500, currency: "INR" },
+    data: springData,
+    scorecard: buildScorecard(springData),
+    invested: 35000,
+    currentValue: 10 * (springData.quote.price ?? 3500),
+  };
+  const j = buildJourney(springRow)!;
+  check("journey exists for held positions", !!j);
+  check("journey compares an earlier FY to the latest FY", (j.thenYear ?? 0) < (j.nowYear ?? 0));
+  check("growing mock business shows more ▲ than ▼", j.improved > j.worsened, `${j.improved}▲ ${j.worsened}▼`);
+  check("flat price + improving business ⇒ coiled-spring verdict", j.verdict.tone === "good", j.verdict.line);
+  check("user-set buy date wins over the estimate", buildJourney({ ...springRow, holding: { ...springRow.holding, buyDate: "2023-05" } })!.sinceYM === "2023-05");
+  check("no journey for watchlist rows", buildJourney({ ...springRow, holding: { ...springRow.holding, watch: true, quantity: 0 } }) === undefined);
+
+  // deteriorating business → critical verdict
+  const dead = makeDeadMoney();
+  const deadRow: AnalyzedHolding = {
+    holding: { id: "j2", broker: "zerodha", rawSymbol: "DEADCO", yahooSymbol: "DEADCO.NS", quantity: 10, avgCost: 100, currency: "INR" },
+    data: dead,
+    scorecard: buildScorecard(dead),
+    invested: 1000,
+    currentValue: 1000,
+  };
+  const jd = buildJourney(deadRow)!;
+  check("deteriorating business is called out", jd.verdict.tone === "critical" || jd.verdict.tone === "neutral", jd.verdict.tone);
+}
+
+console.log("\n== Scan cache round-trip ==");
+{
+  const data = mockStockData("TCS.NS");
+  const mr = toMetricRow(data, buildScorecard(data), { owned: false });
+  const lite = toLite(mr, 1000);
+  check("lite strips heavy objects", !("data" in lite) && !("scorecard" in lite));
+  const revived = fromLite(lite);
+  check("lite round-trips every screen metric", revived.score === mr.score && revived.pe === mr.pe && revived.coffeeCan === mr.coffeeCan && revived.pillarQuality === mr.pillarQuality && revived.redFlags === mr.redFlags);
+  check("revived rows carry no stale data objects", revived.data === undefined && revived.scorecard === undefined);
+}
+
+console.log("\n== New screens & custom fundamentals filters ==");
+{
+  const dataset = ["TCS.NS", "ITC.NS", "HDFCBANK.NS", "TATAMOTORS.NS", "RELIANCE.NS", "MSFT", "AAPL", "ENB.TO", "CNR.TO", "SHOP.TO"].map((s) => {
+    const d = mockStockData(s);
+    return toMetricRow(d, buildScorecard(d), { owned: s === "TCS.NS" });
+  });
+  const twoYear = SCREENS.find((s) => s.id === "two-year")!.apply(dataset);
+  check(
+    "Two-year keepers demand quality + clean flags + sane price",
+    twoYear.every((r) => r.score >= 60 && r.redFlags === 0 && (r.epsCagr ?? 0) >= 0.08 && r.valStatus !== "PRICEY")
+  );
+  const pe20 = runCustom(dataset, { minPE: 10, maxPE: 20 });
+  check("custom P/E band respects both bounds", pe20.every((r) => (r.pe ?? 0) >= 10 && (r.pe ?? 99) <= 20));
+  const clean = runCustom(dataset, { noLossYears: true, maxRedFlags: 0 });
+  check("no-loss-years + zero-flags filter works", clean.every((r) => r.lossYears === 0 && r.redFlags === 0));
+  const bigCaps = runCustom(dataset, { minMarketCapB: 100 });
+  check("market-cap floor filters small names", bigCaps.every((r) => (r.marketCap ?? 0) >= 100e9));
+
+  const parsedList = parseCustomSymbols("tcs.ns, GSY.TO\nCOST bad_sym!! tcs.ns", ["COST"]);
+  check(
+    "custom symbol parser dedups, uppercases, excludes held & junk",
+    parsedList.map((p) => p.symbol).join(",") === "TCS.NS,GSY.TO",
+    parsedList.map((p) => p.symbol).join(",")
+  );
+}
+
+console.log("\n== 13F parsing & diffing (smart money) ==");
+{
+  const xml = `<?xml version="1.0"?>
+<informationTable xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+  <infoTable>
+    <nameOfIssuer>APPLE INC</nameOfIssuer><titleOfClass>COM</titleOfClass><cusip>037833100</cusip>
+    <value>500000000</value><shrsOrPrnAmt><sshPrnamt>2000000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
+  </infoTable>
+  <ns1:infoTable>
+    <ns1:nameOfIssuer>COCA COLA CO</ns1:nameOfIssuer><ns1:cusip>191216100</ns1:cusip>
+    <ns1:value>300000000</ns1:value><ns1:shrsOrPrnAmt><ns1:sshPrnamt>4000000</ns1:sshPrnamt></ns1:shrsOrPrnAmt>
+  </ns1:infoTable>
+  <infoTable>
+    <nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>100000000</value>
+    <shrsOrPrnAmt><sshPrnamt>400000</sshPrnamt></shrsOrPrnAmt>
+  </infoTable>
+  <infoTable>
+    <nameOfIssuer>SPY</nameOfIssuer><cusip>78462F103</cusip><value>50000000</value>
+    <shrsOrPrnAmt><sshPrnamt>1000000</sshPrnamt></shrsOrPrnAmt><putCall>Put</putCall>
+  </infoTable>
+</informationTable>`;
+  const pos = parseInfoTable(xml);
+  check("parses plain + namespaced infoTables", pos.length === 2, String(pos.length));
+  const aapl = pos.find((p) => p.cusip === "037833100")!;
+  check("aggregates duplicate CUSIPs (multi-manager filings)", aapl.value === 600000000 && aapl.shares === 2400000);
+  check("skips option (putCall) rows", !pos.some((p) => p.cusip === "78462F103"));
+  check("positions sorted by value desc", pos[0].cusip === "037833100");
+
+  const prev = [
+    { issuer: "APPLE INC", cusip: "A", value: 500, shares: 100 },
+    { issuer: "OLD CO", cusip: "O", value: 300, shares: 30 },
+    { issuer: "TRIM CO", cusip: "T", value: 200, shares: 100 },
+  ];
+  const curr = [
+    { issuer: "APPLE INC", cusip: "A", value: 600, shares: 130 },
+    { issuer: "NEW CO", cusip: "N", value: 150, shares: 10 },
+    { issuer: "TRIM CO", cusip: "T", value: 90, shares: 60 },
+  ];
+  const d = diffFilings(curr, prev);
+  check("diff finds the new buy", d.newBuys.length === 1 && d.newBuys[0].cusip === "N");
+  check(
+    "diff flags a ≥20% share add with the change",
+    d.adds.length === 1 && d.adds[0].cusip === "A" && Math.abs((d.adds[0].sharesChangePct ?? 0) - 0.3) < 1e-9
+  );
+  check("diff flags the trim", d.trims.length === 1 && d.trims[0].cusip === "T");
+  check("diff flags the exit", d.exits.length === 1 && d.exits[0].cusip === "O");
+  check("current-book weights sum to 1", Math.abs(d.top.reduce((a, t) => a + t.weightPct, 0) - 1) < 1e-9);
+  check("AUM equals the current filing total", d.aumUsd === 840);
+
+  const map = buildTickerMap([
+    { cik_str: 320193, ticker: "AAPL", title: "Apple Inc." },
+    { cik_str: 1, ticker: "BRK-B", title: "BERKSHIRE HATHAWAY INC" },
+    { cik_str: 2, ticker: "UNP", title: "UNION PACIFIC CORP" },
+    { cik_str: 3, ticker: "UNH", title: "UNITEDHEALTH GROUP INC" },
+  ]);
+  check(
+    "issuer normalization strips suffixes & share classes",
+    normalizeIssuer("APPLE INC") === "APPLE" && normalizeIssuer("Berkshire Hathaway Inc CL B") === "BERKSHIRE HATHAWAY"
+  );
+  check("exact issuer→ticker match", tickerFor("APPLE INC", map) === "AAPL");
+  check("13F abbreviations expand (UNION PAC CORP → UNP)", tickerFor("UNION PAC CORP", map) === "UNP");
+  check("prefix fallback maps partial names", tickerFor("UNITEDHEALTH GROUP INC COM", map) === "UNH");
+  check(
+    "bench: 9 investors, unique 10-digit CIKs",
+    SUPERINVESTORS.length === 9 &&
+      new Set(SUPERINVESTORS.map((s) => s.cik)).size === 9 &&
+      SUPERINVESTORS.every((s) => /^\d{10}$/.test(s.cik))
+  );
+}
+
+console.log("\n== Ownership mapper & smart-money mocks ==");
+{
+  const own = mapOwnership("AAPL", {
+    majorHoldersBreakdown: { insidersPercentHeld: 0.02, institutionsPercentHeld: { raw: 0.61 }, institutionsCount: 5000 },
+    fundOwnership: {
+      ownershipList: [
+        { organization: "Vanguard Index Fund", pctHeld: 0.03, position: 1000, value: 2000, reportDate: 1719705600 },
+        { organization: "Small Fund", pctHeld: 0.001 },
+      ],
+    },
+    institutionOwnership: { ownershipList: [] },
+  });
+  check("ownership breakdown reads plain and {raw} numbers", own.breakdown.insidersPct === 0.02 && own.breakdown.institutionsPct === 0.61);
+  check("epoch reportDate becomes ISO date", own.funds[0].reportDate === "2024-06-30", own.funds[0].reportDate);
+  check("fund lists sort by % held", own.funds[0].organization === "Vanguard Index Fund");
+
+  const sm = mockSmartMoves();
+  check("mock smart moves are deterministic", JSON.stringify(sm) === JSON.stringify(mockSmartMoves()));
+  check(
+    "mock includes a ≥2-investor consensus name (UNH)",
+    sm.filter((i) => [...i.newBuys, ...i.adds].some((m) => m.ticker === "UNH")).length >= 2
+  );
+  const mo = mockOwnership("TCS.NS");
+  check("mock ownership deterministic & India-flavoured for .NS", JSON.stringify(mo) === JSON.stringify(mockOwnership("TCS.NS")) && mo.funds.some((f) => /SBI|ICICI|HDFC/.test(f.organization)));
+  const moUs = mockOwnership("MSFT");
+  check("mock ownership US-flavoured otherwise", moUs.funds.some((f) => /Vanguard|Fidelity/.test(f.organization)));
 }
 
 console.log("\n== Local store (server-side safety) ==");

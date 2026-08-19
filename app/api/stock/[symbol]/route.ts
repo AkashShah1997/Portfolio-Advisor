@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStockData } from "@/lib/yahoo";
+import { getStockData, isThrottleError } from "@/lib/yahoo";
 import { buildScorecard } from "@/lib/scorecard";
 
 export const maxDuration = 60;
@@ -30,9 +30,15 @@ export async function GET(
     cache.set(symbol, { at: Date.now(), body });
     return NextResponse.json(body);
   } catch (e) {
+    const message = (e as Error).message ?? "Fetch failed";
     return NextResponse.json(
-      { error: (e as Error).message ?? "Fetch failed" },
-      { status: 502 }
+      {
+        error: isThrottleError(message)
+          ? "Yahoo is rate-limiting right now — wait ~1 minute, then retry the failed names."
+          : message,
+        throttled: isThrottleError(message),
+      },
+      { status: isThrottleError(message) ? 429 : 502 }
     );
   }
 }

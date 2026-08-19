@@ -51,18 +51,16 @@ await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/05-decisions.png`, fullPage: true });
 
 // scan India universe from the discover section
+await page.waitForSelector("text=Scan the market for stronger businesses", { timeout: 10000 });
 await page.getByRole("button", { name: /^India/ }).last().click();
-await page.waitForSelector("text=Strongest India ideas outside your portfolio", { timeout: 240000 });
+await page.waitForSelector("text=Strongest India ideas outside your portfolio", { timeout: 300000 });
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/06-upgrades.png`, fullPage: true });
 
 const addBtn = page.getByRole("button", { name: "+ watchlist" }).first();
 if (await addBtn.count()) {
   await addBtn.click();
-  await page.waitForTimeout(300);
-  if (!(await page.getByRole("button", { name: "✓ watching" }).count())) {
-    throw new Error("watchlist add did not register");
-  }
+  await page.waitForSelector("text=✓ watching", { timeout: 10000 });
 }
 
 // ---- screeners tab (shares the scan) ----
@@ -78,9 +76,23 @@ await page.waitForTimeout(400);
 if (!(await page.locator("text=MF rank #1").count())) throw new Error("magic formula ranking missing");
 
 await page.getByRole("button", { name: /Custom screen/ }).first().click();
-await page.waitForSelector("text=your rules", { timeout: 5000 });
+await page.waitForSelector("text=raw fundamentals, your thresholds", { timeout: 5000 });
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${shots}/08-screener-custom.png`, fullPage: true });
+
+// ---- smart money tab ----
+await page.getByRole("button", { name: "Smart money" }).click();
+await page.waitForSelector("text=Superinvestor conviction moves", { timeout: 15000 });
+await page.waitForSelector("text=Berkshire Hathaway", { timeout: 15000 });
+if (!(await page.locator("text=Bought/added by ≥2 of the bench").count())) throw new Error("consensus strip missing");
+await page.locator("text=Berkshire Hathaway").first().click(); // expand the card
+await page.waitForSelector("text=New buys this quarter", { timeout: 5000 });
+await page.waitForSelector("text=Who owns your stock", { timeout: 5000 });
+await page.waitForSelector("text=Top mutual funds / ETFs", { timeout: 20000 });
+const bodySmart = await page.locator("body").textContent();
+if (!/SBI|Vanguard|ICICI/.test(bodySmart)) throw new Error("holders table missing");
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${shots}/16-smartmoney.png`, fullPage: true });
 
 // ---- chart tab ----
 await page.getByRole("button", { name: "Chart", exact: true }).click();

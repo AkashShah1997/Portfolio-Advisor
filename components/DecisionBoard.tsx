@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { AnalyzedHolding, Currency, FxRates } from "@/lib/types";
 import { ACTION_META, decideAll, type Action } from "@/lib/decisions";
+import { buildJourney } from "@/lib/journey";
 import { toBase, VERDICT_META } from "@/lib/portfolio";
 import { fmtMoney, fmtPct } from "@/lib/symbols";
 import { buildPrompt } from "@/lib/promptgen";
@@ -157,6 +158,26 @@ export function DecisionBoard({
                                 {reason}
                               </span>
                             ))}
+                            {(() => {
+                              const j = buildJourney(r);
+                              if (!j) return null;
+                              const tone =
+                                j.verdict.tone === "good"
+                                  ? "text-success-text border-status-good/40 bg-status-good/8"
+                                  : j.verdict.tone === "critical"
+                                    ? "text-status-critical border-status-critical/40 bg-status-critical/8"
+                                    : j.verdict.tone === "warning"
+                                      ? "text-[#8a6100] border-status-warning/50 bg-status-warning/10"
+                                      : "text-ink-2 bg-surface hairline";
+                              return (
+                                <span className={`text-[11px] rounded-full px-2 py-[2.5px] border ${tone}`}>
+                                  since you bought (≈{j.sinceYM}): {j.improved}▲/{j.worsened}▼ fundamentals
+                                  {j.priceCagrSince !== undefined
+                                    ? ` · price ${j.priceCagrSince >= 0 ? "+" : ""}${fmtPct(j.priceCagrSince)}/yr`
+                                    : ""}
+                                </span>
+                              );
+                            })()}
                           </div>
 
                           <button

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { AnalyzedHolding, Check, CheckStatus, Currency } from "@/lib/types";
+import type { AnalyzedHolding, Check, CheckStatus, Currency, Holding } from "@/lib/types";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/symbols";
 import { VERDICT_META } from "@/lib/portfolio";
 import { buildPrompt } from "@/lib/promptgen";
 import { Badge, Card, Meter, Spinner } from "./ui";
 import { EpsBars, PriceLine, RevenueEarnings } from "./charts";
 import { ValuationBlock } from "./ValuationBlock";
+import { Journey } from "./Journey";
 import { AnimatedNumber, Collapse } from "./anim";
 import ReactMarkdown from "react-markdown";
 
@@ -111,11 +112,13 @@ export function StockCard({
   aiKey,
   aiModel,
   onRemove,
+  onPatchHolding,
 }: {
   row: AnalyzedHolding;
   aiKey?: string;
   aiModel?: string;
   onRemove?: () => void;
+  onPatchHolding?: (patch: Partial<Holding>) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; text?: string; error?: string }>({ loading: false });
@@ -336,6 +339,9 @@ export function StockCard({
 
           {/* intrinsic value strip */}
           <ValuationBlock data={data} scorecard={scorecard} avgCost={isWatch ? undefined : holding.avgCost} />
+
+          {/* fundamentals then-vs-now */}
+          {!isWatch && <Journey row={row} onPatchHolding={onPatchHolding} />}
 
           {/* charts */}
           <div className="grid md:grid-cols-2 gap-5">

@@ -13,6 +13,7 @@ export interface Holding {
   currency: Currency; // trading currency of the stock
   validated?: boolean;
   watch?: boolean; // watchlist row — analyzed and scored, but carries no capital
+  buyDate?: string; // YYYY-MM — when the position was (roughly) built; user-set, else estimated
 }
 
 export type Currency = "INR" | "CAD" | "USD";

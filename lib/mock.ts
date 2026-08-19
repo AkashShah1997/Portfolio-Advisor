@@ -1,5 +1,7 @@
 import type { PricePoint, StockData, YearFinancials } from "./types";
 import type { Candle, HistoryRange } from "./history";
+import type { InvestorMoves, Move } from "./thirteenf";
+import type { OwnershipPayload } from "./ownership";
 
 /**
  * Deterministic mock data so the whole app can be exercised without network
@@ -272,4 +274,102 @@ export function mockHistory(symbol: string, range: HistoryRange): Candle[] {
     seen.add(c.time);
     return true;
   });
+}
+
+/** Deterministic superinvestor moves for offline/demo mode. */
+export function mockSmartMoves(): InvestorMoves[] {
+  const mv = (issuer: string, ticker: string, weightPct: number, sharesChangePct?: number, prevWeightPct?: number): Move => ({
+    issuer,
+    cusip: ticker.padEnd(9, "0"),
+    ticker,
+    valueUsd: weightPct * 1e9,
+    weightPct,
+    sharesChangePct,
+    prevWeightPct,
+  });
+  return [
+    {
+      cik: "0001067983",
+      name: "Berkshire Hathaway",
+      manager: "Warren Buffett",
+      blurb: "The reference compounder — durable moats held for decades.",
+      record: "~20%/yr over ~60 years",
+      quarter: "2026-06-30",
+      prevQuarter: "2026-03-31",
+      filedAt: "2026-08-14",
+      aumUsd: 285e9,
+      positionsCount: 41,
+      top: [mv("APPLE INC", "AAPL", 0.242, 0, 0.251), mv("AMERICAN EXPRESS CO", "AXP", 0.121, 0, 0.118), mv("COCA COLA CO", "KO", 0.093, 0, 0.095), mv("UNION PAC CORP", "UNP", 0.041, 0.6, 0.026)],
+      newBuys: [mv("UNITEDHEALTH GROUP INC", "UNH", 0.018), mv("DEERE & CO", "DE", 0.009)],
+      adds: [mv("UNION PAC CORP", "UNP", 0.041, 0.62, 0.026), mv("CHUBB LIMITED", "CB", 0.031, 0.28, 0.025)],
+      trims: [mv("BANK AMER CORP", "BAC", 0.062, -0.31, 0.089)],
+      exits: [mv("CITIGROUP INC", "C", 0.012)],
+    },
+    {
+      cik: "0001569205",
+      name: "Fundsmith LLP",
+      manager: "Terry Smith",
+      blurb: "Buy good companies, don't overpay, do nothing.",
+      record: "top-decile global quality since 2010",
+      quarter: "2026-06-30",
+      prevQuarter: "2026-03-31",
+      filedAt: "2026-08-12",
+      aumUsd: 24e9,
+      positionsCount: 26,
+      top: [mv("MICROSOFT CORP", "MSFT", 0.09, 0, 0.088), mv("STRYKER CORP", "SYK", 0.075, 0, 0.074), mv("AUTOMATIC DATA PROCESSING", "ADP", 0.071, 0.05, 0.069)],
+      newBuys: [mv("UNION PAC CORP", "UNP", 0.024), mv("IDEXX LABS INC", "IDXX", 0.021)],
+      adds: [mv("TEXAS INSTRS INC", "TXN", 0.048, 0.33, 0.036)],
+      trims: [mv("PEPSICO INC", "PEP", 0.03, -0.25, 0.041)],
+      exits: [mv("BROWN FORMAN CORP", "BF.B", 0.014)],
+    },
+    {
+      cik: "0001112520",
+      name: "Akre Capital Management",
+      manager: "Chuck Akre (legacy team)",
+      blurb: "Compounding machines: high ROE + reinvestment runway.",
+      record: "multi-decade compounding record",
+      quarter: "2026-06-30",
+      prevQuarter: "2026-03-31",
+      filedAt: "2026-08-11",
+      aumUsd: 11e9,
+      positionsCount: 18,
+      top: [mv("MASTERCARD INC", "MA", 0.16, 0, 0.158), mv("MOODYS CORP", "MCO", 0.14, 0, 0.139), mv("O REILLY AUTOMOTIVE INC", "ORLY", 0.11, 0.02, 0.108)],
+      newBuys: [mv("UNITEDHEALTH GROUP INC", "UNH", 0.012)],
+      adds: [mv("KKR & CO INC", "KKR", 0.065, 0.21, 0.052)],
+      trims: [],
+      exits: [],
+    },
+  ];
+}
+
+/** Deterministic fund/institution ownership for offline/demo mode. */
+export function mockOwnership(symbol: string): OwnershipPayload {
+  const rnd = mulberry(hashSeed(symbol + "|own"));
+  const isIndia = symbol.toUpperCase().endsWith(".NS") || symbol.toUpperCase().endsWith(".BO");
+  const fundNames = isIndia
+    ? ["SBI Bluechip Fund", "ICICI Pru Bluechip Fund", "HDFC Flexi Cap Fund", "Axis Long Term Equity", "Mirae Asset Large Cap", "UTI Nifty Index Fund"]
+    : ["Vanguard Total Stock Market Index", "Vanguard 500 Index Fund", "Fidelity 500 Index Fund", "iShares Core S&P 500 ETF", "T. Rowe Price Blue Chip Growth", "American Funds Growth Fund"];
+  const instNames = isIndia
+    ? ["Life Insurance Corp of India", "SBI Funds Management", "ICICI Prudential AMC", "HDFC AMC", "Government Pension Fund Global", "Vanguard Group"]
+    : ["Vanguard Group Inc", "BlackRock Inc", "State Street Corp", "FMR LLC (Fidelity)", "Geode Capital Management", "Norges Bank Investment Mgmt"];
+  const mkList = (names: string[], base: number) =>
+    names.map((organization, i) => ({
+      organization,
+      pctHeld: Math.max(0.002, base - i * 0.004 + rnd() * 0.002),
+      position: Math.round(1e7 * (1 + rnd())),
+      value: Math.round(1e9 * (1 + rnd() * 4)),
+      reportDate: "2026-06-30",
+    }));
+  return {
+    symbol,
+    breakdown: {
+      insidersPct: isIndia ? 0.45 + rnd() * 0.1 : 0.01 + rnd() * 0.05,
+      institutionsPct: isIndia ? 0.2 + rnd() * 0.15 : 0.6 + rnd() * 0.25,
+      institutionsFloatPct: isIndia ? undefined : 0.65 + rnd() * 0.25,
+      institutionsCount: Math.round(800 + rnd() * 3000),
+    },
+    funds: mkList(fundNames, isIndia ? 0.022 : 0.035),
+    institutions: mkList(instNames, isIndia ? 0.03 : 0.08),
+    mock: true,
+  };
 }
