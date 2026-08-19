@@ -1,7 +1,10 @@
 import "server-only";
 import YahooFinance from "yahoo-finance2";
 import type { PricePoint, QuoteInfo, StockData, YearFinancials } from "./types";
-import { mockStockData, MOCK_ENABLED } from "./mock";
+import { mockHistory, mockStockData, MOCK_ENABLED } from "./mock";
+import type { Candle, HistoryRange } from "./history";
+export { HISTORY_RANGES } from "./history";
+export type { Candle, HistoryRange } from "./history";
 
 // One shared instance per lambda/server process.
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
@@ -188,6 +191,41 @@ export async function resolveSymbol(query: string): Promise<ResolveMatch[]> {
     });
   }
   return out;
+}
+
+const RANGE_CONFIG: Record<HistoryRange, { days: number; interval: "1d" | "1wk" | "1mo" }> = {
+  "6m": { days: 185, interval: "1d" },
+  "1y": { days: 370, interval: "1d" },
+  "3y": { days: 3 * 366, interval: "1wk" },
+  "5y": { days: 5 * 366, interval: "1wk" },
+  max: { days: 25 * 366, interval: "1mo" },
+};
+
+/** OHLCV history for the interactive chart (daily/weekly/monthly by range). */
+export async function getHistory(symbol: string, range: HistoryRange): Promise<{ symbol: string; range: HistoryRange; interval: "1d" | "1wk" | "1mo"; candles: Candle[]; mock?: boolean }> {
+  const cfg = RANGE_CONFIG[range];
+  if (MOCK_ENABLED) {
+    return { symbol, range, interval: cfg.interval, candles: mockHistory(symbol, range), mock: true };
+  }
+  const period1 = new Date(Date.now() - cfg.days * 24 * 3600 * 1000);
+  const chart = await yf.chart(symbol, { period1, interval: cfg.interval });
+  const candles: Candle[] = (chart.quotes ?? [])
+    .filter(
+      (q) =>
+        typeof q.open === "number" &&
+        typeof q.high === "number" &&
+        typeof q.low === "number" &&
+        typeof q.close === "number"
+    )
+    .map((q) => ({
+      time: new Date(q.date).toISOString().slice(0, 10),
+      open: q.open as number,
+      high: q.high as number,
+      low: q.low as number,
+      close: q.close as number,
+      volume: typeof q.volume === "number" ? q.volume : undefined,
+    }));
+  return { symbol, range, interval: cfg.interval, candles };
 }
 
 /** USD-based FX via Yahoo as a fallback when frankfurter is unreachable. */

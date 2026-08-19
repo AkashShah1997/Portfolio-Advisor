@@ -2,7 +2,7 @@
 
 /* Data-viz reference palette (light mode) — components use roles, not raw hex */
 @theme {
-  --color-page: #f9f9f7;
+  --color-page: #f7f7f4;
   --color-surface: #fcfcfb;
   --color-ink: #0b0b0b;
   --color-ink-2: #52514e;
@@ -18,7 +18,7 @@
   --color-status-serious: #ec835a;
   --color-status-critical: #d03b3b;
   --color-success-text: #006300;
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 :root {
@@ -29,21 +29,39 @@ body {
   background: var(--color-page);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-feature-settings: "cv11" 1, "ss01" 1;
 }
 
 .hairline {
-  border: 1px solid rgba(11, 11, 11, 0.1);
+  border: 1px solid rgba(11, 11, 11, 0.09);
 }
 
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 
+/* v2 depth system — soft, modern, never heavy */
+.elev-1 {
+  box-shadow:
+    0 1px 2px rgba(11, 11, 11, 0.05),
+    0 1px 1px rgba(11, 11, 11, 0.03);
+}
+.elev-2 {
+  box-shadow:
+    0 2px 6px rgba(11, 11, 11, 0.06),
+    0 8px 24px -12px rgba(11, 11, 11, 0.1);
+}
+.glass {
+  background: rgba(252, 252, 251, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
 /* soft brand glow behind the header — light, print-safe */
 .page-glow {
   background:
-    radial-gradient(900px 300px at 18% -80px, rgba(42, 120, 214, 0.07), transparent 70%),
-    radial-gradient(700px 260px at 85% -60px, rgba(27, 175, 122, 0.05), transparent 70%);
+    radial-gradient(900px 320px at 18% -80px, rgba(42, 120, 214, 0.08), transparent 70%),
+    radial-gradient(700px 280px at 85% -60px, rgba(27, 175, 122, 0.06), transparent 70%);
 }
 
 input[type="range"] {

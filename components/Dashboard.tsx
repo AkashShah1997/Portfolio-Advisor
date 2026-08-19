@@ -1,18 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import type { AnalyzedHolding, Currency, FxRates, Verdict } from "@/lib/types";
-import { summarize, toBase, VERDICT_META } from "@/lib/portfolio";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { AnalyzedHolding, Currency, FxRates, Scorecard, StockData, Verdict } from "@/lib/types";
+import { portfolioSeries, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
-import { Badge, Card, SectionTitle, Spinner, StatTile } from "./ui";
-import { HBars, StackedSplit } from "./charts";
+import { MARKET_META, type Market } from "@/lib/store";
+import { candidatesFor, type UniverseCountry } from "@/lib/universe";
+import { buildValuation } from "@/lib/valuation";
+import { Badge, Card, SectionTitle, Spinner } from "./ui";
+import { compactMoney, HBars, StackedSplit } from "./charts";
 import { StockCard } from "./StockCard";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
 import { Matrix } from "./Matrix";
-import { DiscoverPanel, type ScanResult } from "./DiscoverPanel";
+import { DiscoverPanel, type ScanResult, type ScanState } from "./DiscoverPanel";
+import { DecisionBoard } from "./DecisionBoard";
+import { ScreenerPanel } from "./ScreenerPanel";
+import { ChartPanel } from "./ChartPanel";
 import { HealthPanel } from "./HealthPanel";
 import { Projector } from "./Projector";
 import { AnimatedNumber, Stagger, StaggerItem, Switcher } from "./anim";
@@ -29,13 +44,37 @@ const VERDICT_ORDER: Verdict[] = [
 
 const TABS = [
   { id: "overview", label: "Overview" },
-  { id: "ideas", label: "Upgrade ideas" },
+  { id: "decisions", label: "Decisions" },
+  { id: "screeners", label: "Screeners" },
+  { id: "chart", label: "Chart" },
   { id: "health", label: "Health & income" },
-  { id: "future", label: "Sit-tight projector" },
+  { id: "future", label: "Projector" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
+function SeriesTip({
+  active,
+  payload,
+  label,
+  base,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number | string }>;
+  label?: string | number;
+  base: Currency;
+}) {
+  if (!active || !payload?.length) return null;
+  const v = payload[0]?.value;
+  return (
+    <div className="bg-surface hairline rounded-lg px-3 py-2 shadow-sm text-[12px]">
+      <div className="text-ink-2 mb-0.5">{String(label ?? "").slice(0, 7)}</div>
+      <div className="font-semibold text-ink tnum">{typeof v === "number" ? fmtMoney(v, base, true) : v}</div>
+    </div>
+  );
+}
+
 export function Dashboard({
+  market,
   rows,
   fxAll,
   aiKey,
@@ -43,6 +82,7 @@ export function Dashboard({
   onBack,
   onRowsChange,
 }: {
+  market: Market;
   rows: AnalyzedHolding[];
   fxAll: Record<Currency, FxRates>;
   aiKey?: string;
@@ -50,17 +90,21 @@ export function Dashboard({
   onBack: () => void;
   onRowsChange: (rows: AnalyzedHolding[]) => void;
 }) {
-  const [base, setBase] = useState<Currency>("CAD");
+  const meta = MARKET_META[market];
+  const base = meta.base;
+  const fx = fxAll[base];
+
   const [sortBy, setSortBy] = useState<"weight" | "score" | "verdict">("verdict");
   const [tab, setTab] = useState<TabId>("overview");
+  const [scans, setScans] = useState<Partial<Record<UniverseCountry, ScanState>>>({});
   const [portfolioAi, setPortfolioAi] = useState<{ loading: boolean; text?: string; error?: string }>({
     loading: false,
   });
 
-  const fx = fxAll[base];
   const invRows = useMemo(() => rows.filter((r) => !r.holding.watch), [rows]);
   const watchRows = useMemo(() => rows.filter((r) => r.holding.watch), [rows]);
   const summary = useMemo(() => summarize(invRows, fx), [invRows, fx]);
+  const series = useMemo(() => portfolioSeries(invRows, fx), [invRows, fx]);
 
   const ok = useMemo(() => invRows.filter((r) => r.scorecard && r.data), [invRows]);
   const failed = useMemo(() => invRows.filter((r) => r.error || !r.data), [invRows]);
@@ -115,7 +159,65 @@ export function Dashboard({
     return list;
   }, [ok]);
 
-  /** Add a scanned candidate as a watchlist row (no capital, scored + charted). */
+  // ---- shared market scan (feeds Decisions upgrades + Screeners) ----
+  const runScan = useCallback(
+    async (c: UniverseCountry) => {
+      if (scans[c]?.status === "running") return;
+      const held = rows.map((r) => r.holding.yahooSymbol);
+      const cands = candidatesFor(c, held);
+      setScans((s) => ({
+        ...s,
+        [c]: { status: cands.length ? "running" : "done", done: 0, total: cands.length, results: [], errors: 0 },
+      }));
+      if (!cands.length) return;
+      const queue = [...cands];
+      const results: ScanResult[] = [];
+      let errors = 0;
+      let done = 0;
+      const push = (status: ScanState["status"]) =>
+        setScans((s) => ({
+          ...s,
+          [c]: {
+            status,
+            done,
+            total: cands.length,
+            results: [...results].sort((a, b) => b.score - a.score),
+            errors,
+          },
+        }));
+      const worker = async () => {
+        while (queue.length) {
+          const cand = queue.shift()!;
+          try {
+            const res = await fetch(`/api/stock/${encodeURIComponent(cand.symbol)}`);
+            const j = (await res.json()) as { data?: StockData; scorecard?: Scorecard; error?: string };
+            if (!res.ok || !j.data || !j.scorecard) throw new Error(j.error ?? `HTTP ${res.status}`);
+            const val = buildValuation(j.data, j.scorecard);
+            results.push({
+              symbol: cand.symbol,
+              name: j.data.quote.name ?? cand.name,
+              sector: j.data.quote.sector ?? cand.sector,
+              score: j.scorecard.totalScore,
+              verdict: j.scorecard.verdict,
+              data: j.data,
+              scorecard: j.scorecard,
+              mos: val.marginOfSafety,
+              valStatus: val.status,
+            });
+          } catch {
+            errors++;
+          }
+          done++;
+          push("running");
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      push("done");
+    },
+    [rows, scans]
+  );
+
+  /** Add a scanned candidate as a watchlist row (no capital; saved on this device). */
   const addWatch = (r: ScanResult): boolean => {
     if (rows.some((x) => x.holding.yahooSymbol.toUpperCase() === r.symbol.toUpperCase())) return false;
     const row: AnalyzedHolding = {
@@ -178,97 +280,116 @@ export function Dashboard({
 
   const exportJson = () => {
     const blob = new Blob(
-      [JSON.stringify({ generatedAt: new Date().toISOString(), baseCurrency: base, summary, rows }, null, 2)],
+      [JSON.stringify({ generatedAt: new Date().toISOString(), market, baseCurrency: base, summary, rows }, null, 2)],
       { type: "application/json" }
     );
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `portfolio-analysis-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `portfolio-${market}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* controls */}
       <div className="flex flex-wrap items-center gap-2 no-print">
         <button onClick={onBack} className="text-[13px] text-series-1 hover:underline mr-auto">
-          ← Edit holdings / re-analyze
+          ← Edit holdings / re-import
         </button>
         <label className="text-[12px] text-ink-2">
-          Base currency{" "}
-          <select
-            value={base}
-            onChange={(e) => setBase(e.target.value as Currency)}
-            className="bg-surface hairline rounded px-2 py-1 text-[13px] ml-1"
-          >
-            <option value="CAD">CAD</option>
-            <option value="INR">INR</option>
-            <option value="USD">USD</option>
-          </select>
-        </label>
-        <label className="text-[12px] text-ink-2">
-          Sort{" "}
+          Sort cards{" "}
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="bg-surface hairline rounded px-2 py-1 text-[13px] ml-1"
+            className="bg-surface hairline rounded-lg px-2 py-1 text-[13px] ml-1"
           >
             <option value="verdict">by action needed</option>
             <option value="weight">by weight</option>
             <option value="score">by score</option>
           </select>
         </label>
-        <button onClick={exportJson} className="bg-surface hairline rounded px-3 py-1 text-[13px] hover:bg-page">
+        <button onClick={exportJson} className="bg-surface hairline rounded-lg px-3 py-1 text-[13px] hover:bg-page">
           Download JSON
         </button>
-        <button onClick={() => window.print()} className="bg-surface hairline rounded px-3 py-1 text-[13px] hover:bg-page">
+        <button onClick={() => window.print()} className="bg-surface hairline rounded-lg px-3 py-1 text-[13px] hover:bg-page">
           Print / PDF
         </button>
       </div>
 
-      {/* headline tiles */}
-      <Stagger mode="mount" className="flex flex-wrap gap-3">
-        <StaggerItem className="flex-1 min-w-[150px] flex">
-          <StatTile
-            label={`Current value (${base})`}
-            value={<AnimatedNumber value={summary.totalCurrent} format={(v) => fmtMoney(v, base, true)} />}
-            hero
-          />
-        </StaggerItem>
-        <StaggerItem className="flex-1 min-w-[150px] flex">
-          <StatTile
-            label={`Invested (${base})`}
-            value={<AnimatedNumber value={summary.totalInvested} format={(v) => fmtMoney(v, base, true)} />}
-          />
-        </StaggerItem>
-        <StaggerItem className="flex-1 min-w-[150px] flex">
-          <StatTile
-            label="Unrealized P&L"
-            value={<AnimatedNumber value={summary.totalPnl} format={(v) => fmtMoney(v, base, true)} />}
-            delta={`${summary.totalPnl >= 0 ? "+" : ""}${fmtPct(summary.totalPnlPct)} vs cost`}
-            deltaGood={summary.totalPnl >= 0}
-          />
-        </StaggerItem>
-        <StaggerItem className="flex-1 min-w-[150px] flex">
-          <StatTile
-            label="Portfolio quality score"
-            value={<AnimatedNumber value={summary.weightedScore} format={(v) => `${Math.round(v)}/100`} />}
-          />
-        </StaggerItem>
-        <StaggerItem className="flex-1 min-w-[150px] flex">
-          <StatTile
-            label="Top holding concentration"
-            value={fmtPct(summary.topHoldingPct)}
-            delta={summary.topHoldingPct > 0.25 ? "concentrated — Buffett approves only if it's your best idea" : "diversified"}
-            deltaGood={summary.topHoldingPct <= 0.25}
-          />
-        </StaggerItem>
-      </Stagger>
+      {/* hero band */}
+      <Card className="overflow-hidden elev-2">
+        <div className="grid lg:grid-cols-[340px_1fr]">
+          <div className="p-5 border-b lg:border-b-0 lg:border-r border-grid">
+            <div className="text-[12px] text-ink-2">
+              {meta.flag} {meta.label} portfolio · current value ({base})
+            </div>
+            <div className="text-[34px] font-semibold tracking-tight tnum leading-tight mt-1">
+              <AnimatedNumber value={summary.totalCurrent} format={(v) => fmtMoney(v, base, true)} />
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              <Badge tone={summary.totalPnl >= 0 ? "good" : "critical"}>
+                {summary.totalPnl >= 0 ? "+" : ""}
+                {fmtMoney(summary.totalPnl, base, true)} · {fmtPct(summary.totalPnlPct)} vs cost
+              </Badge>
+              <Badge tone="neutral">invested {fmtMoney(summary.totalInvested, base, true)}</Badge>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3.5 text-[12.5px] text-ink-2">
+              <span>
+                Quality score{" "}
+                <strong className="text-ink tnum">
+                  <AnimatedNumber value={summary.weightedScore} format={(v) => `${Math.round(v)}`} />
+                  /100
+                </strong>
+              </span>
+              <span>
+                Top holding <strong className="text-ink tnum">{fmtPct(summary.topHoldingPct)}</strong>
+              </span>
+              <span>
+                {invRows.length} holdings{watchRows.length ? ` · ${watchRows.length} watched` : ""}
+              </span>
+            </div>
+          </div>
+          {series.length > 1 && (
+            <div className="p-3 pl-1 min-h-[190px]">
+              <div className="text-[11px] text-muted text-right pr-3 pt-1">
+                your current holdings, valued over the last {Math.round(series.length / 12)}y — not account history
+              </div>
+              <ResponsiveContainer width="100%" height={165}>
+                <AreaChart data={series} margin={{ top: 6, right: 14, bottom: 0, left: 6 }}>
+                  <defs>
+                    <linearGradient id="pfv" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2a78d6" stopOpacity={0.25} />
+                      <stop offset="100%" stopColor="#2a78d6" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#efeee9" strokeWidth={1} vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(v: string) => v.slice(0, 4)}
+                    tickLine={false}
+                    axisLine={{ stroke: "#e1e0d9" }}
+                    minTickGap={110}
+                  />
+                  <YAxis
+                    width={58}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => compactMoney(v, base)}
+                    domain={["auto", "auto"]}
+                  />
+                  <Tooltip content={<SeriesTip base={base} />} cursor={{ stroke: "#c3c2b7", strokeWidth: 1 }} />
+                  <Area type="monotone" dataKey="value" stroke="#2a78d6" strokeWidth={2} fill="url(#pfv)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* tab bar */}
-      <div className="flex gap-1 bg-surface hairline rounded-xl p-1 w-fit max-w-full overflow-x-auto no-print">
+      <div className="flex gap-1 bg-surface hairline rounded-xl p-1 w-fit max-w-full overflow-x-auto no-print elev-1 sticky top-[66px] z-30">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -287,7 +408,7 @@ export function Dashboard({
             )}
             <span className="relative z-10">
               {t.label}
-              {t.id === "ideas" && weakCount > 0 && (
+              {t.id === "decisions" && weakCount > 0 && (
                 <span
                   className={`ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 py-[1px] ${
                     tab === t.id ? "bg-white/25 text-white" : "bg-status-warning/20 text-[#8a6100]"
@@ -304,7 +425,7 @@ export function Dashboard({
 
       <Switcher id={tab}>
         {tab === "overview" && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             {/* verdict summary */}
             <Card className="p-4">
               <SectionTitle sub="What the value-investing scorecard suggests, at a glance. 5-year+ horizon.">
@@ -330,22 +451,17 @@ export function Dashboard({
                     <span className="text-ink-2">{failed.map((r) => r.holding.yahooSymbol).join(", ")}</span>
                   </div>
                 )}
-                {weakCount > 0 && (
-                  <p className="text-[12px] text-ink-2 pt-1">
-                    <button onClick={() => setTab("ideas")} className="text-series-1 hover:underline no-print">
-                      → See same-market businesses that screen stronger than your {weakCount} weakest
-                    </button>
-                  </p>
-                )}
+                <p className="text-[12px] text-ink-2 pt-1">
+                  <button onClick={() => setTab("decisions")} className="text-series-1 hover:underline no-print">
+                    → Open the full decision board: what to sell, what to accumulate, with every reason
+                  </button>
+                </p>
               </div>
             </Card>
 
-            {/* AI prompt generator — take the analysis to any AI */}
-            <PromptGenerator rows={rows} summary={summary} fx={fx} baseCurrency={base} />
-
             {/* the Buffett matrix */}
             <Card className="p-4">
-              <SectionTitle sub="Every holding placed by business quality + growth (up) vs valuation margin of safety (right). Bubble = weight. The masters live top-right: wonderful companies at fair prices. Watchlist names appear translucent.">
+              <SectionTitle sub="Every holding placed by business quality + growth (up) vs valuation margin of safety (right). Bubble = weight. The masters live top-right. Watchlist names appear translucent.">
                 Quality vs price — the Buffett matrix
               </SectionTitle>
               <Matrix rows={rows} fx={fx} base={base} />
@@ -368,6 +484,9 @@ export function Dashboard({
                 </Card>
               </div>
             </div>
+
+            {/* AI prompt generator */}
+            <PromptGenerator rows={rows} summary={summary} fx={fx} baseCurrency={base} />
 
             {/* portfolio AI */}
             {aiKey && (
@@ -419,20 +538,41 @@ export function Dashboard({
           </div>
         )}
 
-        {tab === "ideas" && <DiscoverPanel rows={rows} onAddWatch={addWatch} />}
+        {tab === "decisions" && (
+          <div className="space-y-5">
+            <DecisionBoard rows={rows} fx={fx} base={base} />
+            <DiscoverPanel
+              rows={rows}
+              countries={meta.countries}
+              scans={scans}
+              onScan={(c) => void runScan(c)}
+              onAddWatch={addWatch}
+            />
+          </div>
+        )}
+
+        {tab === "screeners" && (
+          <ScreenerPanel
+            rows={rows}
+            countries={meta.countries}
+            scans={scans}
+            onScan={(c) => void runScan(c)}
+            onAddWatch={addWatch}
+          />
+        )}
+
+        {tab === "chart" && <ChartPanel rows={rows} />}
 
         {tab === "health" && <HealthPanel rows={rows} fx={fx} base={base} />}
 
-        {tab === "future" && (
-          <Projector rows={rows} fx={fx} base={base} startValue={summary.totalCurrent} />
-        )}
+        {tab === "future" && <Projector rows={rows} fx={fx} base={base} startValue={summary.totalCurrent} />}
       </Switcher>
 
       <p className="text-[11.5px] text-muted leading-relaxed border-t border-grid pt-3">
         FX: {fx.source} · Data: Yahoo Finance (free, unofficial; figures can lag or contain errors — verify before
-        acting). This tool encodes public value-investing principles as arithmetic checks. It is analysis to support
-        your own judgment, <strong>not financial advice</strong>, and it knows nothing about your taxes, cash needs, or
-        risk tolerance.
+        acting). Everything you import stays in this browser. This tool encodes public value-investing principles as
+        arithmetic checks; it is analysis to support your own judgment, <strong>not financial advice</strong>, and it
+        knows nothing about your taxes, cash needs, or risk tolerance.
       </p>
     </div>
   );

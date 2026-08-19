@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/inter";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Portfolio Advisor — long-term value analysis",
   description:
-    "Analyze your Zerodha + Wealthsimple portfolio through the lens of Buffett, Damani and Jhunjhunwala. Free data, 5-year horizon, no accounts.",
+    "India (Zerodha) and Canada (Wealthsimple) portfolios analyzed through the lens of Buffett, Damani and Jhunjhunwala. Free data, 5-year horizon, everything stored only on your device.",
 };
 
 export default function RootLayout({

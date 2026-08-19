@@ -1,88 +1,70 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import type { Broker, Holding } from "@/lib/types";
-import { parseBrokerCsv } from "@/lib/parse";
-import { Card } from "./ui";
+import { useRef, useState } from "react";
+import { MARKET_META, type Market } from "@/lib/store";
 
-const BROKER_INFO: Record<Exclude<Broker, "manual">, { title: string; how: string }> = {
-  zerodha: {
-    title: "Zerodha (India)",
-    how: "Console → Portfolio → Holdings → Download (CSV). Symbols resolve to NSE (.NS).",
-  },
-  wealthsimple: {
-    title: "Wealthsimple (Canada)",
-    how: "Export your holdings/positions as CSV (or build one with columns: Symbol, Quantity, Avg cost, Currency).",
-  },
-};
-
+/** Single-broker CSV dropzone, scoped to the selected market. */
 export function ImportPanel({
-  onImport,
+  market,
+  onFile,
 }: {
-  onImport: (holdings: Holding[], warnings: string[], broker: Broker) => void;
+  market: Market;
+  onFile: (file: File) => void;
 }) {
-  const [dragOver, setDragOver] = useState<string | null>(null);
-  const fileRefs = {
-    zerodha: useRef<HTMLInputElement>(null),
-    wealthsimple: useRef<HTMLInputElement>(null),
-  };
-
-  const handleFile = useCallback(
-    (file: File, broker: Exclude<Broker, "manual">) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = String(reader.result ?? "");
-        const res = parseBrokerCsv(text, broker);
-        onImport(res.holdings, res.warnings, broker);
-      };
-      reader.readAsText(file);
-    },
-    [onImport]
-  );
+  const meta = MARKET_META[market];
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="grid sm:grid-cols-2 gap-3">
-      {(Object.keys(BROKER_INFO) as Array<Exclude<Broker, "manual">>).map((b) => (
-        <Card
-          key={b}
-          className={`p-4 transition-colors ${dragOver === b ? "outline outline-2 outline-series-1" : ""}`}
-        >
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(b);
-            }}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(null);
-              const f = e.dataTransfer.files?.[0];
-              if (f) handleFile(f, b);
-            }}
-          >
-            <div className="font-semibold text-[14px]">{BROKER_INFO[b].title}</div>
-            <p className="text-[12px] text-ink-2 mt-1 min-h-[34px]">{BROKER_INFO[b].how}</p>
-            <button
-              className="mt-2 text-[13px] font-medium text-series-1 hover:underline"
-              onClick={() => fileRefs[b].current?.click()}
-            >
-              Choose CSV file
-            </button>
-            <span className="text-[12px] text-muted"> or drag &amp; drop here</span>
-            <input
-              ref={fileRefs[b]}
-              type="file"
-              accept=".csv,.txt"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f, b);
-                e.currentTarget.value = "";
-              }}
-            />
+    <div
+      className={`bg-surface hairline rounded-2xl elev-1 p-5 transition-all ${
+        dragOver ? "outline outline-2 outline-series-1 -translate-y-[1px]" : ""
+      }`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f) onFile(f);
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="text-[30px]" aria-hidden>
+          {meta.flag}
+        </span>
+        <div className="flex-1 min-w-[220px]">
+          <div className="font-semibold text-[14.5px]">
+            {meta.brokerName} holdings CSV <span className="text-muted font-normal">· {meta.exchanges}</span>
           </div>
-        </Card>
-      ))}
+          <p className="text-[12.5px] text-ink-2 mt-0.5">{meta.csvHint}</p>
+        </div>
+        <button
+          className="bg-series-1 text-white rounded-xl px-4 py-2 text-[13.5px] font-semibold hover:opacity-90"
+          onClick={() => inputRef.current?.click()}
+        >
+          Choose CSV
+        </button>
+        <span className="text-[12px] text-muted">or drag &amp; drop anywhere on this card</span>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,.txt"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+            e.currentTarget.value = "";
+          }}
+        />
+      </div>
+      <p className="text-[11.5px] text-muted mt-3">
+        🔒 The file is parsed in your browser and saved to <strong>this device only</strong> — it is
+        never uploaded anywhere. Only stock <em>symbols</em> go out, to fetch public price data.
+      </p>
     </div>
   );
 }

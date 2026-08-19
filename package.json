@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "lightweight-charts": "^5.2.1",
     "motion": "^12.43.0",
     "next": "16.2.12",
     "papaparse": "^5.5.4",

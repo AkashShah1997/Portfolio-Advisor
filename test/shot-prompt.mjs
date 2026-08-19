@@ -4,13 +4,15 @@ import { findChrome } from "./browser.mjs";
 const BASE = process.env.BASE_URL ?? "http://localhost:3400";
 const exe = findChrome();
 const browser = await chromium.launch(exe ? { executablePath: exe } : {});
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
+const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
 const page = await ctx.newPage();
 
 await page.goto(BASE, { waitUntil: "networkidle" });
-await page.getByText("load a sample portfolio").click();
-await page.getByRole("button", { name: /Analyze portfolio/ }).click();
-await page.waitForSelector("text=AI prompt generator", { timeout: 60000 });
+await page.getByRole("button", { name: /Enter India|Continue India/ }).click();
+await page.waitForSelector("text=Your India portfolio", { timeout: 10000 });
+await page.getByText(/load a sample India portfolio/).click();
+await page.getByRole("button", { name: /Analyze India portfolio/ }).click();
+await page.waitForSelector("text=AI prompt generator", { timeout: 90000 });
 await page.waitForTimeout(600);
 
 // scroll generator into view, switch to "Pick stocks", select two
@@ -34,7 +36,7 @@ if (!clip.includes("Buffett")) throw new Error("clipboard copy failed");
 
 // screenshot of the generator area
 const card = page.locator("#prompt-preview").locator("xpath=ancestor::div[contains(@class,'bg-surface')]").first();
-await card.screenshot({ path: "/tmp/shots/06-promptgen.png" });
+await card.screenshot({ path: "/tmp/shots/15-promptgen.png" });
 
 // per-stock copy button
 await page.getByRole("button", { name: /Copy AI prompt for this stock/ }).first().click();

@@ -3,8 +3,18 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`bg-surface hairline rounded-xl ${className}`}>{children}</div>;
+export function Card({
+  children,
+  className = "",
+  flat = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  flat?: boolean;
+}) {
+  return (
+    <div className={`bg-surface hairline rounded-2xl ${flat ? "" : "elev-1"} ${className}`}>{children}</div>
+  );
 }
 
 export function SectionTitle({ children, sub }: { children: ReactNode; sub?: string }) {

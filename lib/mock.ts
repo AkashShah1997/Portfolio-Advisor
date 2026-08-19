@@ -1,4 +1,5 @@
 import type { PricePoint, StockData, YearFinancials } from "./types";
+import type { Candle, HistoryRange } from "./history";
 
 /**
  * Deterministic mock data so the whole app can be exercised without network
@@ -202,4 +203,73 @@ export function mockStockData(symbol: string): StockData {
     fetchedAt: new Date().toISOString(),
     mock: true,
   };
+}
+
+/** Deterministic OHLCV history for the interactive chart in mock mode. */
+export function mockHistory(symbol: string, range: HistoryRange): Candle[] {
+  const cfg: Record<HistoryRange, { points: number; stepDays: number; vol: number }> = {
+    "6m": { points: 128, stepDays: 1, vol: 0.016 },
+    "1y": { points: 252, stepDays: 1, vol: 0.016 },
+    "3y": { points: 156, stepDays: 7, vol: 0.032 },
+    "5y": { points: 260, stepDays: 7, vol: 0.032 },
+    max: { points: 180, stepDays: 30, vol: 0.06 },
+  };
+  const { points, stepDays, vol } = cfg[range];
+  const base = mockStockData(symbol);
+  const endPrice = base.quote.price ?? 100;
+  const p = CURATED[symbol.toUpperCase()] ?? genericProfile(symbol);
+  const rnd = mulberry(hashSeed(symbol + "|hist|" + range));
+
+  const spanYears = (points * stepDays) / 365.25;
+  const totalGrowth = Math.pow(1 + p.revGrowth, spanYears);
+  const stepDrift = Math.pow(totalGrowth, 1 / points);
+
+  // build closes backwards from endPrice
+  const closes: number[] = new Array(points);
+  let px = endPrice;
+  for (let i = points - 1; i >= 0; i--) {
+    closes[i] = px;
+    px = (px / stepDrift) * (1 + (rnd() - 0.5) * vol);
+    px = Math.max(0.5, px);
+  }
+
+  // build the date axis: true business days for daily data, arithmetic steps otherwise
+  const now = new Date();
+  const dates: string[] = [];
+  if (stepDays === 1) {
+    const d = new Date(now);
+    while (dates.length < points) {
+      const dow = d.getUTCDay();
+      if (dow !== 0 && dow !== 6) dates.push(d.toISOString().slice(0, 10));
+      d.setUTCDate(d.getUTCDate() - 1);
+    }
+    dates.reverse();
+  } else {
+    for (let i = points - 1; i >= 0; i--) {
+      dates.push(new Date(now.getTime() - i * stepDays * 24 * 3600 * 1000).toISOString().slice(0, 10));
+    }
+  }
+
+  const candles: Candle[] = [];
+  const volBase = (p.shares ?? 1e9) / 500;
+  for (let i = 0; i < points; i++) {
+    const close = closes[i];
+    const open = i === 0 ? close * (1 + (rnd() - 0.5) * vol * 0.5) : closes[i - 1];
+    const hi = Math.max(open, close) * (1 + rnd() * vol * 0.6);
+    const lo = Math.min(open, close) * (1 - rnd() * vol * 0.6);
+    candles.push({
+      time: dates[i],
+      open,
+      high: hi,
+      low: lo,
+      close,
+      volume: Math.round(volBase * (0.6 + rnd() * 0.9)),
+    });
+  }
+  const seen = new Set<string>();
+  return candles.filter((c) => {
+    if (seen.has(c.time)) return false;
+    seen.add(c.time);
+    return true;
+  });
 }

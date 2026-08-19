@@ -15,11 +15,13 @@ interface ResolveMatch {
 export function HoldingsTable({
   holdings,
   onChange,
+  defaultBroker = "manual",
 }: {
   holdings: Holding[];
   onChange: (h: Holding[]) => void;
+  defaultBroker?: Broker;
 }) {
-  const [adding, setAdding] = useState({ symbol: "", qty: "", avg: "", broker: "manual" as Broker });
+  const [adding, setAdding] = useState({ symbol: "", qty: "", avg: "", broker: defaultBroker as Broker });
   const [resolving, setResolving] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, ResolveMatch[]>>({});
 

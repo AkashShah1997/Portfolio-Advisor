@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import type { AnalyzedHolding, Scorecard, StockData } from "@/lib/types";
-import { candidatesFor, UNIVERSES, UNIVERSE_COUNTRIES, type UniverseCountry } from "@/lib/universe";
-import { buildValuation, VALUATION_STATUS_META, type ValuationStatus } from "@/lib/valuation";
+import { UNIVERSES, type UniverseCountry } from "@/lib/universe";
+import { VALUATION_STATUS_META, type ValuationStatus } from "@/lib/valuation";
 import { VERDICT_META } from "@/lib/portfolio";
 import { countryForSymbol, currencyForSymbol, fmtPct } from "@/lib/symbols";
 import { buildPrompt } from "@/lib/promptgen";
@@ -12,15 +12,8 @@ import { Badge, Card, SectionTitle, Spinner } from "./ui";
 import { EASE, Stagger, StaggerItem } from "./anim";
 
 /**
- * Upgrade ideas — the "remove weeds, water flowers" panel.
- *
- * Scans a hand-curated universe of quality names in the SAME market as your
- * holdings, scores each with the exact same scorecard, then:
- *   1. for every holding the screener distrusts, shows same-country businesses
- *      that currently screen much stronger, and
- *   2. lists the strongest ideas you don't own at all.
- *
- * Candidates are a starting pond, not recommendations — the scorecard judges.
+ * Upgrade ideas — the "remove weeds, water flowers" panel. Scan state is owned
+ * by the dashboard and shared with the Screeners tab, so one scan feeds both.
  */
 
 export interface ScanResult {
@@ -35,7 +28,7 @@ export interface ScanResult {
   valStatus: ValuationStatus;
 }
 
-interface Scan {
+export interface ScanState {
   status: "running" | "done";
   done: number;
   total: number;
@@ -45,22 +38,18 @@ interface Scan {
 
 export function DiscoverPanel({
   rows,
+  countries,
+  scans,
+  onScan,
   onAddWatch,
 }: {
   rows: AnalyzedHolding[];
+  countries: UniverseCountry[];
+  scans: Partial<Record<UniverseCountry, ScanState>>;
+  onScan: (c: UniverseCountry) => void;
   onAddWatch: (r: ScanResult) => boolean;
 }) {
-  const dominantCountry = useMemo<UniverseCountry>(() => {
-    const count = new Map<UniverseCountry, number>();
-    for (const r of rows) {
-      const c = countryForSymbol(r.holding.yahooSymbol) as UniverseCountry;
-      count.set(c, (count.get(c) ?? 0) + 1);
-    }
-    return ([...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "India") as UniverseCountry;
-  }, [rows]);
-
-  const [country, setCountry] = useState<UniverseCountry>(dominantCountry);
-  const [scans, setScans] = useState<Partial<Record<UniverseCountry, Scan>>>({});
+  const [country, setCountry] = useState<UniverseCountry>(countries[0]);
   const [buyZoneOnly, setBuyZoneOnly] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -68,61 +57,6 @@ export function DiscoverPanel({
     () => new Set(rows.filter((r) => r.holding.watch).map((r) => r.holding.yahooSymbol.toUpperCase())),
     [rows]
   );
-  const anyRunning = Object.values(scans).some((s) => s?.status === "running");
-
-  const runScan = async (c: UniverseCountry) => {
-    if (scans[c]?.status === "running") return;
-    const held = rows.map((r) => r.holding.yahooSymbol);
-    const cands = candidatesFor(c, held);
-    if (!cands.length) {
-      setScans((s) => ({ ...s, [c]: { status: "done", done: 0, total: 0, results: [], errors: 0 } }));
-      return;
-    }
-    setScans((s) => ({ ...s, [c]: { status: "running", done: 0, total: cands.length, results: [], errors: 0 } }));
-    const queue = [...cands];
-    const results: ScanResult[] = [];
-    let errors = 0;
-    let done = 0;
-    const push = (status: Scan["status"]) =>
-      setScans((s) => ({
-        ...s,
-        [c]: {
-          status,
-          done,
-          total: cands.length,
-          results: [...results].sort((a, b) => b.score - a.score),
-          errors,
-        },
-      }));
-    const worker = async () => {
-      while (queue.length) {
-        const cand = queue.shift()!;
-        try {
-          const res = await fetch(`/api/stock/${encodeURIComponent(cand.symbol)}`);
-          const j = (await res.json()) as { data?: StockData; scorecard?: Scorecard; error?: string };
-          if (!res.ok || !j.data || !j.scorecard) throw new Error(j.error ?? `HTTP ${res.status}`);
-          const val = buildValuation(j.data, j.scorecard);
-          results.push({
-            symbol: cand.symbol,
-            name: j.data.quote.name ?? cand.name,
-            sector: j.data.quote.sector ?? cand.sector,
-            score: j.scorecard.totalScore,
-            verdict: j.scorecard.verdict,
-            data: j.data,
-            scorecard: j.scorecard,
-            mos: val.marginOfSafety,
-            valStatus: val.status,
-          });
-        } catch {
-          errors++;
-        }
-        done++;
-        push("running");
-      }
-    };
-    await Promise.all([worker(), worker(), worker()]);
-    push("done");
-  };
 
   const scan = scans[country];
   const weak = rows.filter(
@@ -171,16 +105,18 @@ export function DiscoverPanel({
     }
   };
 
-  const shown = (scan?.results ?? []).filter((r) => (buyZoneOnly ? r.valStatus === "BUY_ZONE" : true)).slice(0, 12);
+  const shown = (scan?.results ?? [])
+    .filter((r) => (buyZoneOnly ? r.valStatus === "BUY_ZONE" : true))
+    .slice(0, 12);
 
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <SectionTitle sub="Scores a hand-picked universe of widely-followed quality names in the same market with the exact same scorecard — so weeds and flowers are judged by one standard. Candidates, not recommendations.">
-          Scan a market for stronger businesses
+        <SectionTitle sub="Scores a hand-picked universe of widely-followed quality names in your market with the exact same scorecard — so weeds and flowers are judged by one standard. Candidates, not recommendations.">
+          Scan the market for stronger businesses
         </SectionTitle>
         <div className="flex flex-wrap items-center gap-2">
-          {UNIVERSE_COUNTRIES.map((c) => {
+          {countries.map((c) => {
             const s = scans[c];
             const active = country === c;
             return (
@@ -188,10 +124,9 @@ export function DiscoverPanel({
                 key={c}
                 onClick={() => {
                   setCountry(c);
-                  if (!scans[c]) void runScan(c);
+                  if (!scans[c]) onScan(c);
                 }}
-                disabled={anyRunning && !s}
-                className={`rounded-full px-3 py-[5px] text-[12.5px] font-medium border transition-colors disabled:opacity-50 ${
+                className={`rounded-full px-3.5 py-[6px] text-[12.5px] font-medium border transition-colors ${
                   active
                     ? "bg-series-1 text-white border-series-1"
                     : "bg-surface text-ink-2 border-baseline hover:bg-page"
@@ -209,10 +144,7 @@ export function DiscoverPanel({
             );
           })}
           {scan?.status === "done" && (
-            <button
-              onClick={() => void runScan(country)}
-              className="text-[12px] text-series-1 hover:underline ml-1"
-            >
+            <button onClick={() => onScan(country)} className="text-[12px] text-series-1 hover:underline ml-1">
               re-scan
             </button>
           )}
@@ -244,8 +176,7 @@ export function DiscoverPanel({
         )}
         {!scan && (
           <p className="text-[12.5px] text-muted mt-3">
-            Pick a market above to start a scan. Each name is fetched live and scored on the same
-            four pillars as your holdings (≈30–60s per market on live data; instant on demo data).
+            Pick a market above to start a scan (~30–60s on live data; instant on demo data).
           </p>
         )}
       </Card>
@@ -254,7 +185,7 @@ export function DiscoverPanel({
       {weak.length > 0 && (
         <Card className="p-4">
           <SectionTitle sub="“Selling your flowers and watering your weeds” is Lynch's cardinal sin — this flips it: for each holding the screener distrusts, same-market businesses that currently screen far stronger.">
-            Upgrade ideas for your weakest holdings
+            Upgrade candidates for your weakest holdings
           </SectionTitle>
           <div className="space-y-3">
             {weak.map((w) => {
@@ -262,7 +193,7 @@ export function DiscoverPanel({
               const wc = countryForSymbol(w.holding.yahooSymbol) as UniverseCountry;
               const vm = VERDICT_META[w.scorecard!.verdict];
               return (
-                <div key={w.holding.id} className="rounded-lg bg-page hairline p-3">
+                <div key={w.holding.id} className="rounded-xl bg-page hairline p-3">
                   <div className="flex flex-wrap items-center gap-2 text-[13px]">
                     <strong>{w.holding.yahooSymbol}</strong>
                     <Badge tone={vm.tone} icon={vm.icon}>
@@ -298,14 +229,14 @@ export function DiscoverPanel({
                       ))}
                     </div>
                   )}
-                  <p className="text-[11px] text-muted mt-2 italic">
-                    Swapping means selling — mind taxes, friction, and whether the weakness is
-                    temporary (a great business having a bad year is a buy, not a sell).
-                  </p>
                 </div>
               );
             })}
           </div>
+          <p className="text-[11px] text-muted mt-3 italic">
+            Swapping means selling — mind taxes, friction, and whether the weakness is temporary (a
+            great business having a bad year is a buy, not a sell).
+          </p>
         </Card>
       )}
 
@@ -325,12 +256,11 @@ export function DiscoverPanel({
                 const sc = r.scorecard;
                 return (
                   <StaggerItem key={r.symbol}>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-page hairline px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-page hairline px-3 py-2">
                       <span className="text-[11px] text-muted tnum w-4">{i + 1}</span>
                       <div className="min-w-[150px] flex-1">
                         <div className="text-[13px]">
-                          <strong>{r.symbol}</strong>{" "}
-                          <span className="text-ink-2">{r.name}</span>
+                          <strong>{r.symbol}</strong> <span className="text-ink-2">{r.name}</span>
                         </div>
                         <div className="text-[11px] text-muted">{r.sector}</div>
                       </div>
@@ -342,9 +272,7 @@ export function DiscoverPanel({
                       </Badge>
                       {r.valStatus !== "UNKNOWN" && (
                         <Badge tone={vs.tone}>
-                          {r.valStatus === "BUY_ZONE"
-                            ? `buy zone (MoS ${fmtPct(r.mos ?? 0, 0)})`
-                            : vs.label}
+                          {r.valStatus === "BUY_ZONE" ? `buy zone (MoS ${fmtPct(r.mos ?? 0, 0)})` : vs.label}
                         </Badge>
                       )}
                       {sc.currentPE !== undefined && sc.avgPE !== undefined && (
@@ -376,15 +304,14 @@ export function DiscoverPanel({
           </Stagger>
           {buyZoneOnly && shown.length === 0 && (
             <p className="text-[12.5px] text-muted">
-              Nothing in the scanned universe is in the buy zone right now — Damani would call that
-              a signal in itself. Patience is a position.
+              Nothing in the scanned universe is in the buy zone right now — Damani would call that a
+              signal in itself. Patience is a position.
             </p>
           )}
           <p className="text-[11px] text-muted italic mt-3">
             Universe = a hand-picked starting pond of widely-followed names (edit{" "}
-            <code className="text-[10.5px]">lib/universe.ts</code> to change it). High score ≠ buy
-            signal: read the checks, the price, and the business. Watchlist names carry no capital
-            and vanish on refresh, like everything here.
+            <code className="text-[10.5px]">lib/universe.ts</code>). High score ≠ buy signal. Watchlist
+            names carry no capital; they&apos;re saved on this device with everything else.
           </p>
         </Card>
       )}

@@ -4,10 +4,15 @@
  */
 import { readFileSync } from "node:fs";
 import { parseBrokerCsv } from "../lib/parse";
-import { mockStockData } from "../lib/mock";
+import { mockHistory, mockStockData } from "../lib/mock";
 import { buildScorecard, computeRatios } from "../lib/scorecard";
-import { summarize } from "../lib/portfolio";
+import { portfolioSeries, summarize } from "../lib/portfolio";
 import { buildPrompt } from "../lib/promptgen";
+import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
+import { runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
+import { sma } from "../lib/history";
+import { loadHoldings, saveHoldings } from "../lib/store";
+import type { StockData } from "../lib/types";
 import { buildValuation } from "../lib/valuation";
 import { UNIVERSES, UNIVERSE_COUNTRIES, candidatesFor } from "../lib/universe";
 import { computeHealth, computeIncome, activeRows } from "../lib/health";
@@ -431,6 +436,225 @@ console.log("\n== Watchlist & valuation in prompts ==");
   const owned: AnalyzedHolding = { ...watchRow, holding: { ...watchRow.holding, quantity: 25, avgCost: 2800, watch: false }, invested: 70000, currentValue: 25 * (data.quote.price ?? 2800) };
   const p2 = buildPrompt([owned], { focus: "deep_dive", includeHistory: true, baseCurrency: "INR" });
   check("owned prompt keeps position line", p2.includes("25 shares"));
+}
+
+// ---------- v2 helpers ----------
+function mkAnalyzed(sym: string, qty: number, avg: number, watch = false) {
+  const data = mockStockData(sym);
+  const price = data.quote.price ?? avg;
+  return {
+    holding: {
+      id: sym + (watch ? "-w" : ""),
+      broker: "manual" as const,
+      rawSymbol: sym,
+      yahooSymbol: sym,
+      quantity: watch ? 0 : qty,
+      avgCost: watch ? 0 : avg,
+      currency: (sym.endsWith(".NS") ? "INR" : sym.endsWith(".TO") ? "CAD" : "USD") as "INR" | "CAD" | "USD",
+      watch,
+    },
+    data,
+    scorecard: buildScorecard(data),
+    invested: watch ? 0 : qty * avg,
+    currentValue: watch ? undefined : qty * price,
+    pnl: watch ? undefined : qty * (price - avg),
+    pnlPct: watch ? undefined : (price - avg) / avg,
+  } as AnalyzedHolding;
+}
+
+/** Hand-built "dead money": flat price for 5y, flat/shrinking earnings, weak balance sheet. */
+function makeDeadMoney(): StockData {
+  const years = [0, 1, 2, 3, 4].map((i) => ({
+    year: 2021 + i,
+    endDate: `${2021 + i}-03-31`,
+    revenue: 1000 + (i % 2 ? 5 : -5),
+    netIncome: 50 - i * 1.5,
+    ebit: 70,
+    pretaxIncome: 66,
+    interestExpense: 60, // coverage ≈ 1.2x → red flag
+    equity: 800,
+    totalDebt: 700,
+    totalAssets: 2200,
+    currentAssets: 300,
+    currentLiabilities: 280,
+    cash: 60,
+    fcf: i % 2 ? -12 : 4, // negative most years → cash-burn flag
+    ocf: 20,
+    capex: -25,
+    dilutedEPS: 5 - i * 0.15,
+    basicEPS: 5 - i * 0.15,
+    shares: 10,
+  }));
+  const prices: { date: string; close: number }[] = [];
+  for (let i = 0; i <= 60; i++) {
+    const y = 2021 + Math.floor(i / 12);
+    const mo = (i % 12) + 1;
+    prices.push({ date: `${y}-${String(mo).padStart(2, "0")}-01`, close: 100 + (i % 3) - 1 });
+  }
+  return {
+    symbol: "DEADCO.NS",
+    quote: {
+      symbol: "DEADCO.NS",
+      name: "Dead Money Industries",
+      price: 100,
+      currency: "INR",
+      trailingPE: 100 / 4.4,
+      epsTrailing: 4.4,
+      marketCap: 1000,
+      sector: "Industrials",
+      industry: "Diversified",
+    },
+    years,
+    prices,
+    fetchedAt: "t",
+  };
+}
+
+console.log("\n== Decision engine ==");
+{
+  const tcs = mkAnalyzed("TCS.NS", 25, 3600);
+  const d = decideRow(tcs);
+  check("quality compounder never rated EXIT", d.action !== "EXIT", d.action);
+  check("decision carries evidence", d.reasons.length >= 3, String(d.reasons.length));
+  check("decision includes price-CAGR evidence", d.priceCagr !== undefined && (d.spanYears ?? 0) > 2.5);
+
+  const dead = makeDeadMoney();
+  const deadRow: AnalyzedHolding = {
+    holding: { id: "dm", broker: "zerodha", rawSymbol: "DEADCO", yahooSymbol: "DEADCO.NS", quantity: 100, avgCost: 110, currency: "INR" },
+    data: dead,
+    scorecard: buildScorecard(dead),
+    invested: 11000,
+    currentValue: 10000,
+    pnl: -1000,
+    pnlPct: -1000 / 11000,
+  };
+  const dd = decideRow(deadRow);
+  check("dead-money pattern detected (flat price + flat business)", dd.deadMoney === true);
+  check("dead money with weak score → EXIT", dd.action === "EXIT", `${dd.action} (score ${deadRow.scorecard?.totalScore})`);
+  check("dead-money reason surfaced", dd.reasons.some((r) => /Dead-money/i.test(r)));
+
+  // coiled spring: flat price but the business keeps compounding → must NOT be an exit
+  const springData = { ...mockStockData("TCS.NS"), prices: dead.prices };
+  const springRow: AnalyzedHolding = { ...tcs, data: springData, scorecard: buildScorecard(springData) };
+  const sd = decideRow(springRow);
+  check("flat price + growing business is never EXIT (coiled spring)", sd.action !== "EXIT", sd.action);
+
+  const pc = priceCagrOf([
+    { date: "2021-07-01", close: 100 },
+    { date: "2026-07-01", close: 200 },
+  ]);
+  check("price CAGR: doubling in 5y ≈ 14.9%/yr", Math.abs((pc.cagr ?? 0) - (Math.pow(2, 1 / 5) - 1)) < 0.002);
+  const pcShort = priceCagrOf([
+    { date: "2025-01-01", close: 100 },
+    { date: "2026-01-01", close: 200 },
+  ]);
+  check("under ~2.5y of history → no long-run CAGR claimed", pcShort.cagr === undefined);
+
+  const watchRow = mkAnalyzed("ITC.NS", 0, 0, true);
+  const groups = decideAll([tcs, deadRow, watchRow]);
+  check("watchlist rows get no capital decision", !groups.decisions.has(watchRow.holding.id));
+  const totalGrouped = groups.order.reduce((a, k) => a + groups.byAction[k].length, 0);
+  check("decision board partitions every position exactly once", totalGrouped === 2, String(totalGrouped));
+}
+
+console.log("\n== Screeners ==");
+{
+  const dataset = ["TCS.NS", "ITC.NS", "HDFCBANK.NS", "TATAMOTORS.NS", "RELIANCE.NS", "MSFT", "AAPL", "ENB.TO", "CNR.TO", "SHOP.TO"].map((s) => {
+    const d = mockStockData(s);
+    return toMetricRow(d, buildScorecard(d), { owned: s === "TCS.NS" });
+  });
+  check("metric rows extract fundamentals", dataset.every((r) => r.score >= 0 && (r.roceAvg !== undefined || r.isFin)));
+
+  const byId = (id: string) => SCREENS.find((s) => s.id === id)!;
+  const cc = byId("coffee-can").apply(dataset);
+  check("Coffee Can respects its bar", cc.every((r) => (r.coffeeCan ?? 0) >= 0.5 && r.score >= 60));
+  const fortress = byId("fortress").apply(dataset);
+  check("Fortress excludes financials & leverage", fortress.every((r) => !r.isFin && (r.d2e ?? 99) <= 0.35));
+  const garp = byId("garp").apply(dataset);
+  check("GARP enforces PEG ≤ 1 with growth ≥ 10%", garp.every((r) => (r.peg ?? 9) <= 1 && (r.epsCagr ?? 0) >= 0.1));
+  const mf = byId("magic-formula").apply(dataset);
+  check("Magic Formula ranks non-financials only", mf.length > 0 && mf.every((r) => !r.isFin));
+  check("Magic Formula annotates ranks", mf[0]?.rankNote === "MF rank #1", mf[0]?.rankNote);
+
+  // hand-check MF ranking on synthetic rows
+  const synth = (symbol: string, ey: number, roce: number): MetricRow =>
+    ({ ...dataset[0], symbol, isFin: false, earningsYield: ey, roceAvg: roce }) as MetricRow;
+  const ranked = byId("magic-formula").apply([synth("A", 0.1, 0.3), synth("B", 0.05, 0.4), synth("C", 0.08, 0.1)]);
+  check(
+    "Magic Formula combined-rank math (A < B < C)",
+    ranked.map((r) => r.symbol).join("") === "ABC",
+    ranked.map((r) => r.symbol).join("")
+  );
+
+  const custom = runCustom(dataset, { minScore: 70, maxPE: 30 });
+  check("custom filter respects bounds", custom.every((r) => r.score >= 70 && (r.pe ?? 0) <= 30));
+  const noOwned = runCustom(dataset, { excludeOwned: true });
+  check("custom filter can exclude owned", noOwned.every((r) => r.symbol !== "TCS.NS"));
+}
+
+console.log("\n== OHLC history (mock) ==");
+{
+  const h = mockHistory("TCS.NS", "1y");
+  check("1y daily history has ~250 candles", h.length > 200 && h.length <= 260, String(h.length));
+  check(
+    "OHLC is internally consistent",
+    h.every((c) => c.low <= Math.min(c.open, c.close) + 1e-9 && c.high >= Math.max(c.open, c.close) - 1e-9)
+  );
+  check("times ascending & unique", h.every((c, i) => i === 0 || c.time > h[i - 1].time));
+  const endPx = mockStockData("TCS.NS").quote.price ?? 0;
+  check("series ends at the quoted price", Math.abs(h[h.length - 1].close - endPx) < 1e-6);
+  check("deterministic across calls", JSON.stringify(mockHistory("TCS.NS", "1y")) === JSON.stringify(h));
+
+  const s = sma(h, 50);
+  const hand = h.slice(0, 50).reduce((a, c) => a + c.close, 0) / 50;
+  check("SMA(50) window math", s.length === h.length - 49 && Math.abs(s[0].value - hand) < 1e-9);
+  check("weekly range provides candles too", mockHistory("ENB.TO", "5y").length > 200);
+}
+
+console.log("\n== Portfolio value series ==");
+{
+  const fx: FxRates = { base: "CAD", rates: { CAD: 1, USD: 1.5, INR: 0.02 }, asOf: "t", source: "test" };
+  const mk = (sym: string, ccy: "INR" | "USD", qty: number, prices: [string, number][]): AnalyzedHolding => ({
+    holding: { id: sym, broker: "manual", rawSymbol: sym, yahooSymbol: sym, quantity: qty, avgCost: 1, currency: ccy },
+    data: {
+      symbol: sym,
+      quote: { symbol: sym },
+      years: [],
+      prices: prices.map(([date, close]) => ({ date, close })),
+      fetchedAt: "t",
+    },
+    invested: qty,
+  });
+  const rows = [
+    mk("A.NS", "INR", 10, [
+      ["2024-01-01", 100],
+      ["2024-02-01", 110],
+    ]),
+    mk("B", "USD", 2, [
+      ["2024-02-01", 50],
+      ["2024-03-01", 60],
+    ]),
+  ];
+  const s = portfolioSeries(rows, fx);
+  check("series spans the union of months", s.length === 3, String(s.length));
+  check("month 1 = A only (20 CAD)", Math.abs(s[0].value - 20) < 1e-9, String(s[0]?.value));
+  check("month 2 sums both (22 + 150)", Math.abs(s[1].value - 172) < 1e-9, String(s[1]?.value));
+  check("month 3 carries A forward (22 + 180)", Math.abs(s[2].value - 202) < 1e-9, String(s[2]?.value));
+  const withWatch = [...rows, { ...mk("W", "USD", 5, [["2024-01-01", 999]]), holding: { ...mk("W", "USD", 5, [["2024-01-01", 999]]).holding, watch: true, quantity: 0 } }];
+  const s2 = portfolioSeries(withWatch, fx);
+  check("watch rows never enter the value series", JSON.stringify(s2) === JSON.stringify(s));
+}
+
+console.log("\n== Local store (server-side safety) ==");
+{
+  check("loadHoldings is a safe no-op without a browser", loadHoldings("india") === null);
+  let threw = false;
+  try {
+    saveHoldings("india", []);
+  } catch {
+    threw = true;
+  }
+  check("saveHoldings never throws server-side", !threw);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL CHECKS PASSED");

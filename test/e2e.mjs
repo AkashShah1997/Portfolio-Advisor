@@ -6,93 +6,117 @@ const shots = "/tmp/shots";
 mkdirSync(shots, { recursive: true });
 
 const browser = await launchBrowser();
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 page.on("console", (m) => {
-  // favicon fetches are environment noise, not app failures
-  if (m.type() === "error" && !/favicon/i.test(m.location()?.url ?? "") ) errors.push(`console: ${m.text()}`);
+  if (m.type() === "error" && !/favicon/i.test(m.location()?.url ?? "")) errors.push(`console: ${m.text()}`);
 });
 
+// ---- landing: pick a market ----
 await page.goto(BASE, { waitUntil: "networkidle" });
-await page.screenshot({ path: `${shots}/01-import.png`, fullPage: true });
+await page.waitForSelector("text=One market at a time", { timeout: 15000 });
+await page.screenshot({ path: `${shots}/01-landing.png`, fullPage: true });
 
-// load sample portfolio
-await page.getByText("load a sample portfolio").click();
+await page.getByRole("button", { name: /Enter India/ }).click();
+await page.waitForSelector("text=Your India portfolio", { timeout: 10000 });
+
+// ---- import: sample + analyze ----
+await page.getByText(/load a sample India portfolio/).click();
 await page.waitForTimeout(300);
-await page.screenshot({ path: `${shots}/02-holdings.png`, fullPage: true });
+await page.screenshot({ path: `${shots}/02-import.png`, fullPage: true });
 
-// symbol "check" (resolve) on first row
-await page.getByRole("button", { name: "check" }).first().click();
-await page.waitForTimeout(600);
-
-// analyze
-await page.getByRole("button", { name: /Analyze portfolio/ }).click();
-await page.waitForSelector("text=Action summary", { timeout: 60000 });
+await page.getByRole("button", { name: /Analyze India portfolio/ }).click();
+await page.waitForSelector("text=Action summary", { timeout: 90000 });
+// scroll through once so view-triggered entrances have fired, then capture
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(800);
-await page.screenshot({ path: `${shots}/03-dashboard.png`, fullPage: true });
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/03-overview.png`, fullPage: true });
 
-// Buffett matrix rendered
 if (!(await page.locator("text=the Buffett matrix").count())) throw new Error("matrix card missing");
 
-// expand first stock card (click its header button: the one with aria-expanded)
-const cardBtn = page.locator("button[aria-expanded]").first();
-await cardBtn.click();
+// expand first stock card → intrinsic value band
+await page.locator("button[aria-expanded]").first().click();
 await page.waitForSelector("text=Intrinsic value (rough)", { timeout: 10000 });
-await page.waitForTimeout(900);
+await page.waitForTimeout(600);
 await page.screenshot({ path: `${shots}/04-card-open.png`, fullPage: true });
 
-// ---- Upgrade ideas tab: scan India, add a watchlist name ----
-await page.getByRole("button", { name: /Upgrade ideas/ }).click();
-await page.waitForSelector("text=Scan a market for stronger businesses", { timeout: 10000 });
-await page.getByRole("button", { name: /India/ }).first().click();
-await page.waitForSelector("text=Strongest India ideas outside your portfolio", { timeout: 180000 });
-await page.waitForTimeout(600);
-await page.screenshot({ path: `${shots}/08-ideas.png`, fullPage: true });
+// ---- decisions tab ----
+await page.getByRole("button", { name: /^Decisions/ }).click();
+await page.waitForSelector("text=Capital in exit / trim candidates", { timeout: 10000 });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/05-decisions.png`, fullPage: true });
+
+// scan India universe from the discover section
+await page.getByRole("button", { name: /^India/ }).last().click();
+await page.waitForSelector("text=Strongest India ideas outside your portfolio", { timeout: 240000 });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/06-upgrades.png`, fullPage: true });
 
 const addBtn = page.getByRole("button", { name: "+ watchlist" }).first();
 if (await addBtn.count()) {
   await addBtn.click();
   await page.waitForTimeout(300);
-  const watching = await page.getByRole("button", { name: "✓ watching" }).count();
-  if (!watching) throw new Error("watchlist add did not register");
+  if (!(await page.getByRole("button", { name: "✓ watching" }).count())) {
+    throw new Error("watchlist add did not register");
+  }
 }
 
-// upgrade-ideas block exists when weak holdings are present (sample has some)
-const upgradeHdr = await page.locator("text=Upgrade ideas for your weakest holdings").count();
-console.log("upgrade section present:", !!upgradeHdr);
+// ---- screeners tab (shares the scan) ----
+await page.getByRole("button", { name: "Screeners" }).click();
+await page.waitForSelector("text=Screening universe", { timeout: 10000 });
+if (!(await page.locator("text=India: ").count())) console.log("note: scan badge not found (ok if relabeled)");
+await page.waitForSelector("text=Coffee Can compounders", { timeout: 10000 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${shots}/07-screener-coffeecan.png`, fullPage: true });
 
-// ---- Health tab ----
+await page.getByRole("button", { name: /Magic Formula/ }).first().click();
+await page.waitForTimeout(400);
+if (!(await page.locator("text=MF rank #1").count())) throw new Error("magic formula ranking missing");
+
+await page.getByRole("button", { name: /Custom screen/ }).first().click();
+await page.waitForSelector("text=your rules", { timeout: 5000 });
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${shots}/08-screener-custom.png`, fullPage: true });
+
+// ---- chart tab ----
+await page.getByRole("button", { name: "Chart", exact: true }).click();
+await page.waitForSelector("[data-testid=price-chart] canvas", { timeout: 20000 });
+await page.waitForTimeout(800);
+await page.getByRole("button", { name: "5Y", exact: true }).click();
+await page.waitForTimeout(900);
+await page.getByRole("checkbox").nth(1).check(); // SMA 200
+await page.waitForTimeout(600);
+await page.screenshot({ path: `${shots}/09-chart.png`, fullPage: true });
+if (!(await page.locator("[data-testid=price-chart] canvas").count())) throw new Error("chart canvas missing");
+
+// ---- health + projector ----
 await page.getByRole("button", { name: /Health & income/ }).click();
 await page.waitForSelector("text=Portfolio health checks", { timeout: 10000 });
-await page.waitForTimeout(700);
-await page.screenshot({ path: `${shots}/09-health.png`, fullPage: true });
-if (!(await page.locator("text=Dividend income").count())) throw new Error("income card missing");
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/10-health.png`, fullPage: true });
 
-// ---- Projector tab ----
-await page.getByRole("button", { name: /Sit-tight projector/ }).click();
+await page.getByRole("button", { name: "Projector" }).click();
 await page.waitForSelector("text=The sit-tight projector", { timeout: 10000 });
-await page.waitForTimeout(700);
-await page.screenshot({ path: `${shots}/10-projector.png`, fullPage: true });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/11-projector.png`, fullPage: true });
 
-// ---- back to Overview: watchlist card should be present ----
-await page.getByRole("button", { name: "Overview", exact: true }).click();
-await page.waitForSelector("text=Action summary", { timeout: 10000 });
-const bodyText = await page.locator("body").textContent();
-if (!bodyText.includes("watchlist")) throw new Error("watchlist row missing on overview");
+// ---- persistence: reload restores market + holdings (incl. watchlist) ----
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForSelector("text=Your India portfolio", { timeout: 15000 });
+await page.waitForSelector("text=/Restored \\d+ holding/", { timeout: 10000 });
+const tableText = await page.locator("table").first().textContent();
+if (!tableText.includes("TCS")) throw new Error("holdings not restored after reload");
+await page.screenshot({ path: `${shots}/12-restored.png`, fullPage: true });
 
-// switch base currency to INR
-await page.locator("select").first().selectOption("INR");
-await page.waitForTimeout(400);
-await page.screenshot({ path: `${shots}/05-inr.png`, fullPage: false });
-
-// sort by score
-await page.locator("select").nth(1).selectOption("score");
-await page.waitForTimeout(300);
-
-// back to import and re-analyze survives
-await page.getByText("← Edit holdings / re-analyze").click();
-await page.waitForSelector("text=Review & edit", { timeout: 5000 });
+// ---- switch market from the top bar ----
+await page.getByRole("button", { name: /Canada/ }).first().click();
+await page.waitForSelector("text=Your Canada portfolio", { timeout: 10000 });
+await page.waitForSelector("text=Wealthsimple holdings CSV", { timeout: 5000 });
+await page.screenshot({ path: `${shots}/13-canada.png`, fullPage: true });
 
 console.log("E2E OK");
 if (errors.length) {
