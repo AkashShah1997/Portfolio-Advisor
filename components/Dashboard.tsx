@@ -18,7 +18,7 @@ import { benchmarkCompare, portfolioSeries, summarize, toBase, VERDICT_META } fr
 import { describeSnowflake, portfolioSnowflake } from "@/lib/snowflake";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
-import { MARKET_META, type Market } from "@/lib/store";
+import { loadUiMode, MARKET_META, saveUiMode, type Market, type UiMode } from "@/lib/store";
 import { candidatesFor, parseCustomSymbols, type CandidateStock, type UniverseCountry } from "@/lib/universe";
 import { toMetricRow, type MetricRow } from "@/lib/screens";
 import {
@@ -33,6 +33,7 @@ import { compactMoney, HBars, StackedSplit } from "./charts";
 import { Snowflake } from "./Snowflake";
 import { StockCard } from "./StockCard";
 import { EtfPanel } from "./EtfPanel";
+import { PlanCard } from "./PlanCard";
 import { isEtfHolding } from "@/lib/etf";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
@@ -73,6 +74,9 @@ const TABS = [
   { id: "future", label: "Projector" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
+
+/** Simple mode shows only the three tabs that answer "what should I do?" */
+const SIMPLE_TABS: readonly TabId[] = ["overview", "decisions", "etfs"];
 
 function SeriesTip({
   active,
@@ -145,6 +149,13 @@ export function Dashboard({
 
   const [sortBy, setSortBy] = useState<"weight" | "score" | "verdict">("verdict");
   const [tab, setTab] = useState<TabId>("overview");
+  const [uiMode, setUiModeState] = useState<UiMode>(() => loadUiMode());
+  const setUiMode = (m: UiMode) => {
+    setUiModeState(m);
+    saveUiMode(m);
+    if (m === "simple" && !SIMPLE_TABS.includes(tab)) setTab("overview");
+  };
+  const visibleTabs = uiMode === "simple" ? TABS.filter((t) => SIMPLE_TABS.includes(t.id)) : TABS;
   const [portfolioAi, setPortfolioAi] = useState<{ loading: boolean; text?: string; error?: string }>({
     loading: false,
   });
@@ -646,9 +657,10 @@ export function Dashboard({
         </div>
       </Card>
 
-      {/* tab bar */}
-      <div className="flex gap-1 bg-surface hairline rounded-xl p-1 w-fit max-w-full overflow-x-auto no-print elev-1 sticky top-[66px] z-30">
-        {TABS.map((t) => (
+      {/* tab bar + simple/all toggle */}
+      <div className="flex items-center gap-2 sticky top-[66px] z-30 no-print max-w-full">
+      <div className="flex gap-1 bg-surface hairline rounded-xl p-1 w-fit max-w-full overflow-x-auto elev-1">
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -690,10 +702,30 @@ export function Dashboard({
           </button>
         ))}
       </div>
+      <button
+        onClick={() => setUiMode(uiMode === "simple" ? "all" : "simple")}
+        className="shrink-0 bg-surface hairline rounded-xl px-3 py-1.5 text-[12px] font-medium text-ink-2 hover:text-ink elev-1"
+        title={
+          uiMode === "simple"
+            ? "Show every tool: screeners, smart money, charting, health, projector"
+            : "Back to the simple three-tab view"
+        }
+      >
+        {uiMode === "simple" ? "All tools ▸" : "◂ Simple"}
+      </button>
+      </div>
 
       <Switcher id={tab}>
         {tab === "overview" && (
           <div className="space-y-5">
+            {/* the plan, in plain words */}
+            <PlanCard
+              rows={rows}
+              market={market}
+              fx={fx}
+              onGo={(t) => setTab(t)}
+            />
+
             {/* verdict summary */}
             <Card className="p-4">
               <SectionTitle sub="What the value-investing scorecard suggests, at a glance. 5-year+ horizon.">
@@ -741,13 +773,15 @@ export function Dashboard({
               </div>
             </Card>
 
-            {/* the Buffett matrix */}
-            <Card className="p-4">
-              <SectionTitle sub="Every holding placed by business quality + growth (up) vs valuation margin of safety (right). Bubble = weight. The masters live top-right. Watchlist names appear translucent.">
-                Quality vs price — the Buffett matrix
-              </SectionTitle>
-              <Matrix rows={rows} fx={fx} base={base} />
-            </Card>
+            {/* the Buffett matrix (full toolbench only) */}
+            {uiMode === "all" && (
+              <Card className="p-4">
+                <SectionTitle sub="Every holding placed by business quality + growth (up) vs valuation margin of safety (right). Bubble = weight. The masters live top-right. Watchlist names appear translucent.">
+                  Quality vs price — the Buffett matrix
+                </SectionTitle>
+                <Matrix rows={rows} fx={fx} base={base} />
+              </Card>
+            )}
 
             {/* allocation */}
             <div className="grid lg:grid-cols-2 gap-4">
@@ -767,11 +801,11 @@ export function Dashboard({
               </div>
             </div>
 
-            {/* AI prompt generator */}
-            <PromptGenerator rows={rows} summary={summary} fx={fx} baseCurrency={base} />
+            {/* AI prompt generator (full toolbench only) */}
+            {uiMode === "all" && <PromptGenerator rows={rows} summary={summary} fx={fx} baseCurrency={base} />}
 
             {/* portfolio AI */}
-            {aiKey && (
+            {uiMode === "all" && aiKey && (
               <Card className="p-4">
                 <SectionTitle sub="Claude reviews allocation, concentration and the verdict mix through the three masters' lens.">
                   AI portfolio review

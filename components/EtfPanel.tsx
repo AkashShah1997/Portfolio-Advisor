@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AnalyzedHolding, Currency, FxRates } from "@/lib/types";
 import { MARKET_META, type Market } from "@/lib/store";
-import { isEtfHolding, type EtfData } from "@/lib/etf";
-import { ETF_CATALOG, MER_ASOF } from "@/lib/etfcatalog";
+import { enrichEtfData, fallbackEtfData, isEtfHolding, type EtfData } from "@/lib/etf";
+import { catalogMer, ETF_CATALOG, MER_ASOF } from "@/lib/etfcatalog";
 import {
   assessAll,
   assessEtf,
@@ -147,12 +147,31 @@ export function EtfPanel({
     })();
   }, [wanted, funds]);
 
-  // held funds with loaded data, valued in base currency
+  // Held funds, valued in base currency. When Yahoo's fund feed fails (or
+  // returns a shell), we still analyze: identity/price from the quote we
+  // already fetched, returns from its own price history, MER from the curated
+  // table — labeled "limited data", never a dead card.
   const held = useMemo<{ input: HeldEtfInput; row: AnalyzedHolding }[]>(() => {
     const out: { input: HeldEtfInput; row: AnalyzedHolding }[] = [];
     for (const r of etfRows) {
-      const f = funds[r.holding.yahooSymbol.toUpperCase()];
-      if (!f || typeof f === "string") continue;
+      const sym = r.holding.yahooSymbol;
+      const st = funds[sym.toUpperCase()];
+      const fromRow = {
+        name: r.data?.quote.name ?? r.holding.name,
+        price: r.data?.quote.price,
+        currency: (r.data?.quote.currency as string | undefined) ?? r.holding.currency,
+        prices: r.data?.prices,
+      };
+      let f: EtfData | undefined;
+      if (st && typeof st !== "string") {
+        f = enrichEtfData(st, fromRow);
+      } else if (st === "error" || st === "throttled") {
+        // fall back if there is anything to stand on
+        if (catalogMer(sym) || (r.data?.prices?.length ?? 0) > 12) {
+          f = fallbackEtfData({ symbol: sym, ...fromRow });
+        }
+      }
+      if (!f) continue;
       const value = toBase(r.currentValue ?? r.invested, r.holding.currency as Currency, fx);
       out.push({ input: { etf: f, value }, row: r });
     }
@@ -174,8 +193,13 @@ export function EtfPanel({
     () =>
       extras
         .map((s) => {
-          const f = funds[s];
-          if (!f || typeof f === "string") return undefined;
+          const st = funds[s];
+          let f: EtfData | undefined;
+          if (st && typeof st !== "string") f = st;
+          else if ((st === "error" || st === "throttled") && catalogMer(s)) {
+            f = fallbackEtfData({ symbol: s, name: catalogMer(s)?.name });
+          }
+          if (!f) return undefined;
           return {
             etf: f,
             a: assessEtf({ etf: f, value: 0 }, { market, portfolioTotal, heldByCategory: new Map() }),
@@ -266,6 +290,11 @@ export function EtfPanel({
                   {f.family && <Badge tone="neutral">{f.family}</Badge>}
                   {a.category && <Badge tone="muted">{a.category.label}</Badge>}
                   {f.mock && <Badge tone="muted">demo data</Badge>}
+                  {f.degraded && (
+                    <Badge tone="warning" icon="◔">
+                      limited data
+                    </Badge>
+                  )}
                 </div>
                 <div className="text-[12.5px] text-ink-2 mt-0.5 tnum">
                   {fmtMoney(h.input.value, base, true)}
@@ -377,6 +406,14 @@ export function EtfPanel({
               </div>
             )}
 
+            {f.degraded && (
+              <p className="text-[11px] text-muted italic mt-2">
+                Yahoo&apos;s fund feed had little for this listing — fee from the curated table (approx, as of{" "}
+                {MER_ASOF}), returns computed from its own price history (dividends excluded). The verdict logic
+                is unchanged.
+              </p>
+            )}
+
             {/* what's inside */}
             {(f.sectors.length > 0 || f.top.length > 0) && (
               <p className="text-[11.5px] text-muted mt-2.5">
@@ -391,11 +428,16 @@ export function EtfPanel({
         );
       })}
 
-      {/* fetch states for held ETFs */}
+      {/* fetch states for held ETFs that have no card yet (loading, or nothing to fall back on) */}
       {etfRows
         .filter((r) => {
-          const st = funds[r.holding.yahooSymbol.toUpperCase()];
-          return st === "loading" || st === "error" || st === "throttled";
+          const s = r.holding.yahooSymbol;
+          const st = funds[s.toUpperCase()];
+          if (st === undefined || st === "loading") return true;
+          if (st === "error" || st === "throttled") {
+            return !catalogMer(s) && (r.data?.prices?.length ?? 0) <= 12; // fallback impossible
+          }
+          return false;
         })
         .map((r) => {
           const s = r.holding.yahooSymbol;
@@ -404,13 +446,15 @@ export function EtfPanel({
             <Card key={s} className="p-4">
               <div className="flex items-center gap-3 text-[13px]">
                 <span className="font-semibold">{r.data?.quote.name ?? s}</span>
-                {st === "loading" ? (
+                {st === undefined || st === "loading" ? (
                   <span className="text-ink-2">
                     <Spinner /> fetching fund data…
                   </span>
                 ) : (
                   <span className="text-[#8a6100]">
-                    {st === "throttled" ? "Yahoo rate-limited this lookup — retry in a minute." : "Fund data unavailable from Yahoo for this symbol."}
+                    {st === "throttled"
+                      ? "Yahoo rate-limited this lookup — switch tabs and back in a minute to retry."
+                      : "No fund data from Yahoo and this symbol isn't in the curated table — check it on the AMC's page."}
                   </span>
                 )}
               </div>
@@ -514,7 +558,7 @@ export function EtfPanel({
             <Spinner /> fetching…
           </p>
         )}
-        {extras.some((s) => funds[s] === "error" || funds[s] === "throttled") && (
+        {extras.some((s) => (funds[s] === "error" || funds[s] === "throttled") && !catalogMer(s)) && (
           <p className="text-[12px] text-[#8a6100] mt-2">
             Some lookups failed — check the symbol (funds need the exchange suffix, e.g. .NS / .TO) or retry in a
             minute.

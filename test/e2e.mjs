@@ -29,14 +29,15 @@ await page.screenshot({ path: `${shots}/02-import.png`, fullPage: true });
 
 await page.getByRole("button", { name: /Analyze India portfolio/ }).click();
 await page.waitForSelector("text=Action summary", { timeout: 90000 });
-// scroll through once so view-triggered entrances have fired, then capture
-await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-await page.waitForTimeout(800);
-await page.evaluate(() => window.scrollTo(0, 0));
-await page.waitForTimeout(500);
-await page.screenshot({ path: `${shots}/03-overview.png`, fullPage: true });
 
-if (!(await page.locator("text=the Buffett matrix").count())) throw new Error("matrix card missing");
+// ---- SIMPLE MODE (default): plain-words action plan, three tabs ----
+await page.waitForSelector("text=Your action plan", { timeout: 10000 });
+const planText = await page.locator("body").textContent();
+if (!/worth acting on|Nothing needs action/.test(planText)) throw new Error("plan summary missing");
+if (!/sitting tight IS the strategy/.test(planText)) throw new Error("plan hold line missing");
+if (!/insurance, not the engine|same exposure costs less/.test(planText)) throw new Error("plan ETF line missing");
+if (await page.locator("text=the Buffett matrix").count()) throw new Error("matrix should be hidden in simple mode");
+if (!(await page.getByRole("button", { name: "Screeners" }).count() === 0)) throw new Error("screeners tab should be hidden in simple mode");
 
 // ---- portfolio snowflake in the action summary ----
 await page.waitForSelector("text=Portfolio snowflake", { timeout: 10000 });
@@ -44,6 +45,18 @@ if (!(await page.locator("[data-testid=snowflake]").count())) throw new Error("p
 
 // ---- ETF holdings are routed to the ETFs tab ----
 await page.waitForSelector("text=see the ETFs tab", { timeout: 10000 });
+
+// scroll through once so view-triggered entrances have fired, then capture the simple overview
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(800);
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/03-overview.png`, fullPage: true });
+
+// ---- switch to the full toolbench ----
+await page.getByRole("button", { name: /All tools/ }).click();
+await page.waitForSelector("text=the Buffett matrix", { timeout: 10000 });
+await page.waitForSelector("text=Screeners", { timeout: 5000 });
 
 // ---- hero chart: benchmark toggle (indexed vs NIFTY 50) ----
 await page.getByRole("button", { name: /vs NIFTY 50/ }).click();
@@ -136,11 +149,12 @@ await page.waitForSelector("text=Junior BeES", { timeout: 15000 });
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/19-etfs.png`, fullPage: true });
 
-// ---- smart money tab ----
+// ---- smart money tab (progressive per-investor loading) ----
 await page.getByRole("button", { name: "Smart money" }).click();
 await page.waitForSelector("text=Superinvestor conviction moves", { timeout: 15000 });
 await page.waitForSelector("text=Berkshire Hathaway", { timeout: 15000 });
-if (!(await page.locator("text=Bought/added by ≥2 of the bench").count())) throw new Error("consensus strip missing");
+await page.waitForSelector("text=Pershing Square", { timeout: 20000 }); // non-curated filer card rendered too
+await page.waitForSelector("text=Bought/added by ≥2 of the bench", { timeout: 20000 });
 await page.locator("text=Berkshire Hathaway").first().click(); // expand the card
 await page.waitForSelector("text=New buys this quarter", { timeout: 5000 });
 await page.waitForSelector("text=Who owns your stock", { timeout: 5000 });

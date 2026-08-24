@@ -237,6 +237,7 @@ export interface InvestorMoves {
   trims: Move[];
   exits: Move[];
   error?: string;
+  mock?: boolean;
 }
 
 export interface SmartMovesPayload {

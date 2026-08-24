@@ -11,7 +11,7 @@ import {
   type Move,
   type SmartMovesPayload,
 } from "./thirteenf";
-import { MOCK_ENABLED, mockSmartMoves } from "./mock";
+import { MOCK_ENABLED, mockInvestorMoves, mockSmartMoves } from "./mock";
 export type { InvestorMoves, SmartMovesPayload } from "./thirteenf";
 
 /**
@@ -68,15 +68,24 @@ async function secText(url: string): Promise<string> {
 
 // ---- company_tickers.json → issuer-name → ticker map ----
 let tickerMapCache: { at: number; map: Map<string, string> } | null = null;
+let tickerMapInFlight: Promise<Map<string, string>> | null = null;
 
 async function getTickerMap(): Promise<Map<string, string>> {
   if (tickerMapCache && Date.now() - tickerMapCache.at < 24 * 3600 * 1000) return tickerMapCache.map;
-  const json = await politely(() =>
-    secJson<Record<string, CompanyTickerEntry>>("https://www.sec.gov/files/company_tickers.json")
-  );
-  const map = buildTickerMap(Object.values(json));
-  tickerMapCache = { at: Date.now(), map };
-  return map;
+  if (tickerMapInFlight) return tickerMapInFlight; // dedupe concurrent per-investor requests
+  tickerMapInFlight = (async () => {
+    try {
+      const json = await politely(() =>
+        secJson<Record<string, CompanyTickerEntry>>("https://www.sec.gov/files/company_tickers.json")
+      );
+      const map = buildTickerMap(Object.values(json));
+      tickerMapCache = { at: Date.now(), map };
+      return map;
+    } finally {
+      tickerMapInFlight = null;
+    }
+  })();
+  return tickerMapInFlight;
 }
 
 // ---- 13F fetching ----
@@ -134,49 +143,66 @@ async function fetchPositions(cik: string, ref: FilingRef): Promise<F13Position[
   return positions;
 }
 
-let movesCache: { at: number; payload: SmartMovesPayload } | null = null;
 const MOVES_TTL = 6 * 3600 * 1000;
+const invCache = new Map<string, { at: number; inv: InvestorMoves }>();
 
+/** Read one filer's latest two 13Fs and diff them. Errors come back INSIDE the object. */
+async function fetchInvestor(inv: (typeof SUPERINVESTORS)[number]): Promise<InvestorMoves> {
+  const empty = { top: [], newBuys: [], adds: [], trims: [], exits: [] };
+  try {
+    const tickerMap = await getTickerMap().catch(() => new Map<string, string>());
+    const withTickers = (moves: Move[]): Move[] =>
+      moves.map((m) => ({ ...m, ticker: m.ticker ?? tickerFor(m.issuer, tickerMap) }));
+
+    const sub = await politely(() =>
+      secJson<{ filings: { recent: SubmissionsRecent } }>(`https://data.sec.gov/submissions/CIK${inv.cik}.json`)
+    );
+    const refs = pickLatestFilings(sub.filings.recent, 2);
+    if (!refs.length) return { ...inv, ...empty, error: "no 13F filings found" };
+    const curr = await fetchPositions(inv.cik, refs[0]);
+    const prev = refs[1] ? await fetchPositions(inv.cik, refs[1]).catch(() => []) : [];
+    const diff = diffFilings(curr, prev);
+    return {
+      ...inv,
+      quarter: refs[0].report,
+      prevQuarter: refs[1]?.report,
+      filedAt: refs[0].filed,
+      aumUsd: diff.aumUsd,
+      positionsCount: diff.positionsCount,
+      top: withTickers(diff.top),
+      newBuys: withTickers(diff.newBuys),
+      adds: withTickers(diff.adds),
+      trims: withTickers(diff.trims),
+      exits: withTickers(diff.exits),
+    };
+  } catch (e) {
+    return { ...inv, ...empty, error: (e as Error).message.slice(0, 120) };
+  }
+}
+
+async function fetchInvestorCached(inv: (typeof SUPERINVESTORS)[number]): Promise<InvestorMoves> {
+  const hit = invCache.get(inv.cik);
+  if (hit && Date.now() - hit.at < MOVES_TTL) return hit.inv;
+  const result = await fetchInvestor(inv);
+  if (!result.error) invCache.set(inv.cik, { at: Date.now(), inv: result });
+  return result;
+}
+
+/**
+ * One investor at a time — this is what the UI calls, so each card loads (and
+ * fails, and retries) independently instead of the whole bench waiting on the
+ * slowest SEC response. Returns null for a CIK not on the bench.
+ */
+export async function getInvestorMoves(cik: string): Promise<InvestorMoves | null> {
+  const inv = SUPERINVESTORS.find((s) => s.cik === cik);
+  if (!inv) return null;
+  if (MOCK_ENABLED) return mockInvestorMoves(cik);
+  return fetchInvestorCached(inv);
+}
+
+/** Whole-bench payload (kept for compatibility; shares the per-investor cache). */
 export async function getSmartMoves(): Promise<SmartMovesPayload> {
   if (MOCK_ENABLED) return { investors: mockSmartMoves(), fetchedAt: new Date().toISOString(), mock: true };
-  if (movesCache && Date.now() - movesCache.at < MOVES_TTL) return movesCache.payload;
-
-  const tickerMap = await getTickerMap().catch(() => new Map<string, string>());
-  const withTickers = (moves: Move[]): Move[] =>
-    moves.map((m) => ({ ...m, ticker: m.ticker ?? tickerFor(m.issuer, tickerMap) }));
-
-  const investors = await Promise.all(
-    SUPERINVESTORS.map(async (inv): Promise<InvestorMoves> => {
-      const empty = { top: [], newBuys: [], adds: [], trims: [], exits: [] };
-      try {
-        const sub = await politely(() =>
-          secJson<{ filings: { recent: SubmissionsRecent } }>(`https://data.sec.gov/submissions/CIK${inv.cik}.json`)
-        );
-        const refs = pickLatestFilings(sub.filings.recent, 2);
-        if (!refs.length) return { ...inv, ...empty, error: "no 13F filings found" };
-        const curr = await fetchPositions(inv.cik, refs[0]);
-        const prev = refs[1] ? await fetchPositions(inv.cik, refs[1]).catch(() => []) : [];
-        const diff = diffFilings(curr, prev);
-        return {
-          ...inv,
-          quarter: refs[0].report,
-          prevQuarter: refs[1]?.report,
-          filedAt: refs[0].filed,
-          aumUsd: diff.aumUsd,
-          positionsCount: diff.positionsCount,
-          top: withTickers(diff.top),
-          newBuys: withTickers(diff.newBuys),
-          adds: withTickers(diff.adds),
-          trims: withTickers(diff.trims),
-          exits: withTickers(diff.exits),
-        };
-      } catch (e) {
-        return { ...inv, ...empty, error: (e as Error).message.slice(0, 120) };
-      }
-    })
-  );
-
-  const payload: SmartMovesPayload = { investors, fetchedAt: new Date().toISOString() };
-  if (investors.some((i) => !i.error)) movesCache = { at: Date.now(), payload };
-  return payload;
+  const investors = await Promise.all(SUPERINVESTORS.map((inv) => fetchInvestorCached(inv)));
+  return { investors, fetchedAt: new Date().toISOString() };
 }

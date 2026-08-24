@@ -27,6 +27,15 @@ Every holding gets ~5 fiscal years of statements + 5 years of prices and is scor
 Financials get sector-appropriate checks (ROA, leverage, P/B). Every check names its investor and
 shows its evidence. ETFs and new listings get an honest "insufficient data" verdict.
 
+## Simple by default
+
+The dashboard opens with just **three tabs — Overview, Decisions, ETFs** — and the Overview leads
+with **"Your action plan"**: the whole analysis compressed into a few plain sentences (what to sell,
+what to stop adding to, which ETF fee to fix, where new money belongs, and what just needs
+patience), each line linking to the tab that holds the evidence. One click on **"All tools"**
+reveals the full bench — screeners, smart money, charting, health, projector, the Buffett matrix
+and the AI prompt generator — and the choice is remembered on-device.
+
 ## The tabs
 
 **Every ratio explains itself.** Hover (or keyboard-focus) the **ⓘ** beside any metric — screener
@@ -86,7 +95,9 @@ midcap, gold, bank, S&P 500, TSX, all-in-one, NASDAQ, dividend, bond categories 
 showing exactly what the switch saves per year and per decade, with the capital-gains-tax caveat
 stated. Overweight commodity/thematic positions get flagged against the classic 5–10% cap. An
 **"inspect any ETF"** box runs the same analysis on any symbol before you buy it. ETF rows on the
-Overview link here instead of pretending the stock scorecard applies.
+Overview link here instead of pretending the stock scorecard applies. When Yahoo's fund feed has
+nothing for a listing (common for NSE ETFs), the tab **falls back** to the curated fee table plus
+returns computed from the fund's own price history — labeled "limited data", never silently blank.
 
 **Smart money** — two honest lenses on what serious long-horizon capital is doing. (1)
 **Superinvestor conviction moves**: a hand-picked bench of nine managers with decades-long public
@@ -94,7 +105,9 @@ records (Buffett's Berkshire, Terry Smith's Fundsmith, Akre, Li Lu's Himalaya, C
 Ackman's Pershing Square, Klarman's Baupost, Gayner's Markel, Rochon's Giverny), read straight from
 their official **SEC EDGAR 13F filings** (free, no key): new buys, ≥20% adds/trims, exits and top-10
 weights, quarter over quarter, plus a consensus strip for names bought by ≥2 of the bench —
-with the 45-day-lag and US-longs-only caveats stated, not hidden. (2) **Who owns your stock**: top
+with the 45-day-lag and US-longs-only caveats stated, not hidden. Each manager's card **loads
+independently with per-card retry**, so one slow SEC response never blanks the tab — the consensus
+strip fills in as filings arrive. (2) **Who owns your stock**: top
 mutual funds/ETFs and institutions holding any symbol (full for US/Canada, partial for NSE, where
 promoter stakes appear under "insiders"). One click adds any smart-money name to your watchlist,
 where **your own scorecard** judges it.
@@ -173,7 +186,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # fundamentals fallbacks, journey, scan cache, OHLC history,
                                      # portfolio series, health, projection, FX, metric glossary,
                                      # snowflake axes, strengths/risks, benchmark indexing, ETF
-                                     # detection/catalog/fee-math/verdicts (240+ checks)
+                                     # detection/catalog/fee-math/verdicts, ETF fallbacks,
+                                     # the plain-words action plan (260+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

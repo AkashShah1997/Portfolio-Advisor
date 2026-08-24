@@ -17,10 +17,13 @@ import { incomeAxis, portfolioSnowflake, snowflakeOf, SNOWFLAKE_AXES } from "../
 import { strengthsAndRisks } from "../lib/insights";
 import { benchmarkCompare, monthlyCloses } from "../lib/portfolio";
 import type { Journey } from "../lib/journey";
-import { isEtfHolding, mapFundSummary, fundDataEmpty } from "../lib/etf";
+import { enrichEtfData, fallbackEtfData, isEtfHolding, mapFundSummary, fundDataEmpty, trailingFromPrices } from "../lib/etf";
 import { catalogMer, categoryOf, ETF_CATALOG } from "../lib/etfcatalog";
 import { assessAll, feeDrag, merBandOf } from "../lib/etfscore";
 import { mockEtfData } from "../lib/mocketf";
+import { mockInvestorMoves } from "../lib/mock";
+import { buildPlan } from "../lib/plan";
+import { loadUiMode } from "../lib/store";
 import { mapStatementHistory, parseTimeseries } from "../lib/fundamentals";
 import {
   buildTickerMap,
@@ -1243,6 +1246,87 @@ console.log("\n== ETF mapper & mocks ==");
   check("mock ETF data is deterministic", JSON.stringify({ ...m1, fetchedAt: 0 }) === JSON.stringify({ ...mockEtfData("NIFTYBEES.NS"), fetchedAt: 0 }));
   check("mock NIFTYBEES mirrors the real fund (0.04%, huge AUM)", m1.mer === 0.0004 && (m1.aum ?? 0) > 1e11 && m1.top.length === 10);
   check("mock generic fund exists for unknown symbols", mockEtfData("RANDOMX.NS").mer !== undefined);
+}
+
+console.log("\n== ETF fallback (when Yahoo's fund feed fails) ==");
+{
+  // monthly closes doubling over exactly 5 years → y5 ≈ 14.87%/yr
+  const months: { date: string; close: number }[] = [];
+  for (let i = 0; i <= 60; i++) {
+    const d = new Date(Date.UTC(2021, 6 + i, 1));
+    months.push({ date: d.toISOString().slice(0, 10), close: 100 * Math.pow(2, i / 60) });
+  }
+  const t = trailingFromPrices(months);
+  check("price-derived 5y return ≈ 14.9%/yr", t.y5 !== undefined && Math.abs(t.y5 - (Math.pow(2, 1 / 5) - 1)) < 0.002, String(t.y5));
+  check("price-derived 1y and 3y returns exist and are positive", (t.y1 ?? 0) > 0.1 && (t.y3 ?? 0) > 0.1);
+  check("too-short history → no fake returns", Object.values(trailingFromPrices(months.slice(0, 8))).every((v) => v === undefined));
+
+  const fb = fallbackEtfData({ symbol: "GOLDBEES.NS", name: "Nippon India ETF Gold BeES", price: 66, currency: "INR", prices: months });
+  check("fallback EtfData is marked degraded with identity + returns", fb.degraded === true && !!fb.name?.includes("Gold") && fb.trailing.y5 !== undefined);
+
+  // fallback + catalog MER → full verdict path still works with ZERO fund-feed data
+  const out = assessAll([{ etf: fb, value: 72600 }], { market: "india", portfolioTotal: 585000 });
+  check("degraded gold ETF still gets a real verdict (REDUCE) with alternatives", out[0].verdict === "REDUCE" && out[0].alternatives.length > 0 && out[0].merSource === "catalog");
+
+  const enriched = enrichEtfData(
+    { symbol: "X.NS", trailing: {}, annual: [], top: [], sectors: [], split: {}, fetchedAt: "t", mer: 0.001 },
+    { name: "X Fund", price: 10, currency: "INR", prices: months }
+  );
+  check("enrichment fills identity + price-derived returns, keeps live MER", enriched.name === "X Fund" && enriched.mer === 0.001 && enriched.trailing.y5 !== undefined && enriched.degraded === true);
+}
+
+console.log("\n== Per-investor smart-money mocks ==");
+{
+  const brk = mockInvestorMoves("0001067983");
+  check("curated CIK returns the curated card (Berkshire), flagged mock", brk.name === "Berkshire Hathaway" && brk.mock === true && brk.newBuys.length > 0);
+  const pershing = SUPERINVESTORS.find((s) => s.name === "Pershing Square")!;
+  const p1 = mockInvestorMoves(pershing.cik);
+  check("non-curated CIK gets a deterministic generic filing", p1.name === "Pershing Square" && p1.top.length === 4 && (p1.newBuys.length > 0 || p1.adds.length > 0));
+  check("generic mock is deterministic", JSON.stringify(p1) === JSON.stringify(mockInvestorMoves(pershing.cik)));
+  check("every bench CIK yields a card", SUPERINVESTORS.every((s) => mockInvestorMoves(s.cik).name === s.name));
+}
+
+console.log("\n== The action plan (plain words) ==");
+{
+  const mkStock = (sym: string, qty: number, avg: number): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    const sc = buildScorecard(data);
+    const price = data.quote.price ?? avg;
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: qty, avgCost: avg, currency: "INR" },
+      data,
+      scorecard: sc,
+      invested: qty * avg,
+      currentValue: qty * price,
+      pnl: qty * (price - avg),
+      pnlPct: (price - avg) / avg,
+    };
+  };
+  const fxInr: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const rows = [
+    mkStock("TCS.NS", 25, 3600),
+    mkStock("HDFCBANK.NS", 60, 1520),
+    mkStock("NIFTYBEES.NS", 120, 232),
+    mkStock("GOLDBEES.NS", 1100, 54),
+  ];
+  const plan = buildPlan(rows, "india", fxInr);
+  check("plan has items and a one-line summary", plan.items.length >= 2 && plan.summary.length > 10);
+  check(
+    "overweight gold ETF surfaces as a warning in plain words",
+    plan.items.some((i) => i.tone === "warning" && i.symbols.includes("GOLDBEES.NS") && /insurance|cheaper|costs less/i.test(i.text))
+  );
+  check("every line is one sentence-ish (no walls of text)", plan.items.every((i) => i.text.length < 260));
+  check("plan items link to the tab with the evidence", plan.items.every((i) => i.goTo === null || i.goTo === "decisions" || i.goTo === "etfs"));
+  check("actionCount counts only critical/warning lines", plan.actionCount === plan.items.filter((i) => i.tone === "critical" || i.tone === "warning").length);
+
+  const empty = buildPlan([], "india", fxInr);
+  check("empty portfolio → gentle summary, no items", empty.items.length === 0 && /import/i.test(empty.summary));
+
+  // a pure-quality portfolio → quiet plan
+  const calm = buildPlan([mkStock("TCS.NS", 25, 3600)], "india", fxInr);
+  check("calm portfolio says so out loud", /patience|Nothing needs action/.test(calm.summary));
+
+  check("uiMode store is server-safe (defaults to simple)", loadUiMode() === "simple");
 }
 
 console.log("\n== Analyst context fields (mock determinism) ==");

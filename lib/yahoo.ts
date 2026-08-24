@@ -420,23 +420,21 @@ export async function getOwnership(symbol: string): Promise<OwnershipPayload> {
  */
 export async function getEtfData(symbol: string): Promise<EtfData> {
   if (MOCK_ENABLED) return mockEtfData(symbol);
-  const qs = await politely(() =>
-    yf.quoteSummary(
-      symbol,
-      {
-        modules: [
-          "price",
-          "fundProfile",
-          "topHoldings",
-          "fundPerformance",
-          "defaultKeyStatistics",
-          "summaryDetail",
-        ],
-      },
-      NO_VALIDATE
-    )
-  );
+  const FULL = ["price", "fundProfile", "topHoldings", "fundPerformance", "defaultKeyStatistics", "summaryDetail"];
+  let qs: unknown;
+  let note: string | undefined;
+  try {
+    qs = await politely(() => yf.quoteSummary(symbol, { modules: FULL as never }, NO_VALIDATE));
+  } catch (e) {
+    // Many NSE listings reject the fund modules wholesale — fall back to basics
+    // so the client can still merge in the curated fee table + price history.
+    note = `Fund modules unavailable (${(e as Error).message.slice(0, 60)}) — basic data only.`;
+    qs = await politely(() =>
+      yf.quoteSummary(symbol, { modules: ["price", "defaultKeyStatistics", "summaryDetail"] as never }, NO_VALIDATE)
+    );
+  }
   const out = mapFundSummary(symbol, qs ?? {});
+  if (note) out.errors = [...(out.errors ?? []), note];
   // quoteType sanity: if Yahoo says it's not a fund, still return what we have
   // (the caller decides) but note it.
   if (out.quoteType && out.quoteType !== "ETF" && out.quoteType !== "MUTUALFUND") {

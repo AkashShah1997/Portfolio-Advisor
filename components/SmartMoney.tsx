@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AnalyzedHolding, Currency } from "@/lib/types";
 import type { Market } from "@/lib/store";
-import type { InvestorMoves, Move, SmartMovesPayload } from "@/lib/thirteenf";
+import { SUPERINVESTORS, type InvestorMoves, type Move } from "@/lib/thirteenf";
 import type { OwnershipPayload } from "@/lib/ownership";
 import { currencyForSymbol, fmtPct } from "@/lib/symbols";
 import { compactMoney } from "./charts";
@@ -202,9 +202,9 @@ export function SmartMoney({
   market: Market;
   onAddWatch: (symbol: string) => Promise<boolean>;
 }) {
-  const [moves, setMoves] = useState<{ loading: boolean; error?: string; payload?: SmartMovesPayload }>({
-    loading: true,
-  });
+  // one entry per filer — each card loads, fails and retries on its own
+  const [invs, setInvs] = useState<Record<string, InvestorMoves | "loading" | "error">>({});
+  const invInFlight = useRef<Set<string>>(new Set());
   const [busyWatch, setBusyWatch] = useState<string | null>(null);
   const symbols = useMemo(() => rows.map((r) => r.holding.yahooSymbol), [rows]);
   const [holdersSym, setHoldersSym] = useState<string>(symbols[0] ?? "");
@@ -218,26 +218,54 @@ export function SmartMoney({
     [rows]
   );
 
-  // fetch superinvestor moves once per mount
+  // fetch each filer independently, 3 at a time — cards appear as they arrive
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await Promise.resolve();
-      if (cancelled) return;
-      try {
-        const res = await fetch("/api/smart/moves");
-        const j = (await res.json()) as SmartMovesPayload & { error?: string };
-        if (cancelled) return;
-        if (!res.ok || !j.investors) throw new Error(j.error ?? `HTTP ${res.status}`);
-        setMoves({ loading: false, payload: j });
-      } catch (e) {
-        if (!cancelled) setMoves({ loading: false, error: (e as Error).message });
-      }
+    const missing = SUPERINVESTORS.filter(
+      (s) => invs[s.cik] === undefined && !invInFlight.current.has(s.cik)
+    ).slice(0, 3);
+    if (!missing.length) return;
+    for (const s of missing) invInFlight.current.add(s.cik);
+    void (async () => {
+      await Promise.resolve(); // defer past render commit
+      setInvs((prev) => {
+        const next = { ...prev };
+        for (const s of missing) if (next[s.cik] === undefined) next[s.cik] = "loading";
+        return next;
+      });
+      await Promise.all(
+        missing.map(async (s) => {
+          try {
+            const res = await fetch(`/api/smart/investor/${s.cik}`);
+            const j = (await res.json()) as InvestorMoves & { error?: string };
+            setInvs((prev) => ({ ...prev, [s.cik]: res.ok && !j.error ? j : "error" }));
+          } catch {
+            setInvs((prev) => ({ ...prev, [s.cik]: "error" }));
+          } finally {
+            invInFlight.current.delete(s.cik);
+          }
+        })
+      );
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [invs]);
+
+  const retryInvestor = (cik: string) => {
+    setInvs((prev) => {
+      const next = { ...prev };
+      delete next[cik];
+      return next;
+    });
+  };
+
+  const loaded = useMemo(
+    () =>
+      SUPERINVESTORS.map((s) => invs[s.cik]).filter(
+        (v): v is InvestorMoves => v !== undefined && typeof v !== "string"
+      ),
+    [invs]
+  );
+  const loadingCount = SUPERINVESTORS.filter(
+    (s) => invs[s.cik] === undefined || invs[s.cik] === "loading"
+  ).length;
 
   // fetch holders when the selected symbol changes
   useEffect(() => {
@@ -263,9 +291,8 @@ export function SmartMoney({
   }, [holdersSym]);
 
   const consensus = useMemo(() => {
-    const invs = moves.payload?.investors ?? [];
     const byKey = new Map<string, { label: string; ticker?: string; investors: string[] }>();
-    for (const inv of invs) {
+    for (const inv of loaded) {
       if (inv.error) continue;
       for (const m of [...inv.newBuys, ...inv.adds]) {
         const key = (m.ticker ?? m.issuer).toUpperCase();
@@ -275,7 +302,7 @@ export function SmartMoney({
       }
     }
     return [...byKey.values()].filter((e) => e.investors.length >= 2).sort((a, b) => b.investors.length - a.investors.length);
-  }, [moves.payload]);
+  }, [loaded]);
 
   const doWatch = async (symbol: string) => {
     setBusyWatch(symbol);
@@ -326,20 +353,18 @@ export function SmartMoney({
         <SectionTitle sub="A hand-picked bench of long-horizon managers with decades-long public records, read straight from their official SEC 13F filings. Filings lag by up to 45 days and show US-listed long positions only — clone ideas, then do your own work.">
           Superinvestor conviction moves
         </SectionTitle>
-        {moves.loading && (
+        {loadingCount > 0 && (
           <p className="text-[13px] text-ink-2">
-            <Spinner /> Reading the latest 13F filings from SEC EDGAR — ~20s on first load, then cached…
+            <Spinner /> Reading 13F filings from SEC EDGAR — {loaded.length} of {SUPERINVESTORS.length} in,
+            cards appear as each filing arrives…
           </p>
         )}
-        {moves.error && (
-          <p className="text-[13px] text-status-critical">
-            Couldn&apos;t reach SEC EDGAR: {moves.error}. Try reopening this tab in a minute.
-          </p>
-        )}
-        {moves.payload?.mock && <Badge tone="muted">demo data</Badge>}
+        {loaded.some((i) => i.mock) && <Badge tone="muted">demo data</Badge>}
         {consensus.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 mt-2 mb-1">
-            <span className="text-[12px] font-semibold text-ink-2">Bought/added by ≥2 of the bench:</span>
+            <span className="text-[12px] font-semibold text-ink-2">
+              Bought/added by ≥2 of the bench{loadingCount > 0 ? ` (from ${loaded.length} filings so far)` : ""}:
+            </span>
             {consensus.slice(0, 8).map((cItem) => (
               <span key={cItem.label} className="inline-flex items-center gap-1.5 bg-status-good/8 border border-status-good/30 rounded-full px-2.5 py-[3px] text-[12px]">
                 <strong className="text-success-text">{cItem.label}</strong>
@@ -361,24 +386,65 @@ export function SmartMoney({
         )}
       </Card>
 
-      {moves.payload && (
-        <Stagger mode="mount">
-          <div className="space-y-3">
-            {moves.payload.investors.map((inv) => (
-              <StaggerItem key={inv.cik}>
+      <Stagger mode="mount">
+        <div className="space-y-3">
+          {SUPERINVESTORS.map((s) => {
+            const state = invs[s.cik];
+            if (state === undefined || state === "loading") {
+              return (
+                <StaggerItem key={s.cik}>
+                  <Card className="p-4">
+                    <div className="flex flex-wrap items-center gap-3 text-[13px]">
+                      <span className="font-semibold text-[15px]">{s.name}</span>
+                      <span className="text-[12px] text-ink-2">{s.manager}</span>
+                      <span className="text-ink-2">
+                        <Spinner /> reading filing…
+                      </span>
+                    </div>
+                  </Card>
+                </StaggerItem>
+              );
+            }
+            if (state === "error") {
+              return (
+                <StaggerItem key={s.cik}>
+                  <Card className="p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-[13px]">
+                      <div>
+                        <span className="font-semibold text-[15px]">{s.name}</span>{" "}
+                        <span className="text-[12px] text-ink-2">{s.manager}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <Badge tone="serious" icon="!">
+                          couldn&apos;t read this filing
+                        </Badge>
+                        <button
+                          onClick={() => retryInvestor(s.cik)}
+                          className="text-series-1 text-[12.5px] font-medium hover:underline"
+                        >
+                          ↻ retry
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                </StaggerItem>
+              );
+            }
+            return (
+              <StaggerItem key={s.cik}>
                 <InvestorCard
-                  inv={inv}
+                  inv={state}
                   market={market}
                   watchedSet={watchedSet}
                   busyWatch={busyWatch}
-                  onWatch={(s) => void doWatch(s)}
+                  onWatch={(sym) => void doWatch(sym)}
                 />
               </StaggerItem>
-            ))}
-          </div>
-        </Stagger>
-      )}
-      {moves.payload && market === "india" && (
+            );
+          })}
+        </div>
+      </Stagger>
+      {market === "india" && (
         <p className="text-[11.5px] text-muted italic">
           13F filings cover US listings, so “+watch” lives in the Canada view. India has no free
           equivalent of 13Fs — for your NSE names, use “Who owns your stock” below (and the exchange

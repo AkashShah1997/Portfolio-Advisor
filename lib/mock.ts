@@ -1,6 +1,6 @@
 import type { PricePoint, StockData, YearFinancials } from "./types";
 import type { Candle, HistoryRange } from "./history";
-import type { InvestorMoves, Move } from "./thirteenf";
+import { SUPERINVESTORS, type InvestorMoves, type Move } from "./thirteenf";
 import type { OwnershipPayload } from "./ownership";
 
 /**
@@ -354,6 +354,62 @@ export function mockSmartMoves(): InvestorMoves[] {
       exits: [],
     },
   ];
+}
+
+/** Per-investor mock: curated trio above, deterministic generics for the rest of the bench. */
+export function mockInvestorMoves(cik: string): InvestorMoves {
+  const curated = mockSmartMoves().find((i) => i.cik === cik);
+  if (curated) return { ...curated, mock: true };
+  const inv = SUPERINVESTORS.find((s) => s.cik === cik) ?? {
+    cik,
+    name: `Filer ${cik}`,
+    manager: "",
+    blurb: "",
+    record: "",
+  };
+  const rnd = mulberry(hashSeed(cik));
+  const POOL: [string, string][] = [
+    ["MASTERCARD INC", "MA"],
+    ["VISA INC", "V"],
+    ["ALPHABET INC", "GOOGL"],
+    ["AMAZON COM INC", "AMZN"],
+    ["MOODYS CORP", "MCO"],
+    ["HEICO CORP", "HEI"],
+    ["ORACLE CORP", "ORCL"],
+    ["UNITEDHEALTH GROUP INC", "UNH"],
+    ["INTERCONTINENTAL EXCH INC", "ICE"],
+    ["DANAHER CORP", "DHR"],
+  ];
+  const pick = (n: number, offset: number): Move[] => {
+    const start = Math.floor(rnd() * POOL.length);
+    return Array.from({ length: n }, (_, i) => {
+      const [issuer, ticker] = POOL[(start + offset + i * 3) % POOL.length];
+      const weightPct = 0.03 + rnd() * 0.12;
+      return {
+        issuer,
+        ticker,
+        cusip: (ticker + cik.slice(-3)).padEnd(9, "0"),
+        valueUsd: weightPct * 5e9,
+        weightPct,
+        sharesChangePct: rnd() * 0.5,
+        prevWeightPct: weightPct * (0.7 + rnd() * 0.3),
+      };
+    });
+  };
+  return {
+    ...inv,
+    quarter: "2026-06-30",
+    prevQuarter: "2026-03-31",
+    filedAt: "2026-08-13",
+    aumUsd: 3e9 + rnd() * 30e9,
+    positionsCount: 12 + Math.floor(rnd() * 30),
+    top: pick(4, 0).map((m) => ({ ...m, sharesChangePct: 0 })),
+    newBuys: pick(1 + Math.floor(rnd() * 2), 1),
+    adds: pick(1, 5),
+    trims: pick(1, 7).map((m) => ({ ...m, sharesChangePct: -0.3 })),
+    exits: [],
+    mock: true,
+  };
 }
 
 /** Deterministic fund/institution ownership for offline/demo mode. */

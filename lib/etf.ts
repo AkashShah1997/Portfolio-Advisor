@@ -40,6 +40,8 @@ export interface EtfData {
   fetchedAt: string;
   mock?: boolean;
   errors?: string[];
+  /** true when built locally from the curated table + price history because Yahoo's fund feed gave nothing */
+  degraded?: boolean;
 }
 
 /** Is this holding an ETF/fund? quoteType is authoritative; names/symbols as fallback. */
@@ -180,4 +182,76 @@ export function fundDataEmpty(e: EtfData): boolean {
     !e.top.length &&
     !e.annual.length
   );
+}
+
+// ---------- fallback when Yahoo's fund feed fails (common for NSE ETFs) ----------
+
+/**
+ * Annualized 1/3/5-year returns computed from the ~5y of monthly closes the
+ * stock pipeline already fetched — price-only (distributions excluded), which
+ * for growth-oriented Indian ETFs is close enough to be honest context.
+ */
+export function trailingFromPrices(prices: { date: string; close: number }[]): EtfData["trailing"] {
+  const t: EtfData["trailing"] = {};
+  if (!prices || prices.length < 13) return t;
+  const last = prices[prices.length - 1];
+  const at = (monthsBack: number) => {
+    const idx = prices.length - 1 - monthsBack;
+    return idx >= 0 ? prices[idx] : undefined;
+  };
+  const ann = (p?: { close: number }, years = 1) =>
+    p && p.close > 0 && last.close > 0 ? Math.pow(last.close / p.close, 1 / years) - 1 : undefined;
+  t.y1 = ann(at(12), 1);
+  t.y3 = ann(at(36), 3);
+  t.y5 = ann(at(60), 5) ?? (prices.length >= 49 ? ann(prices[0], (prices.length - 1) / 12) : undefined);
+  return t;
+}
+
+/**
+ * Build a usable EtfData without Yahoo's fund modules: identity + price from
+ * the quote we already have, returns from price history. The MER comes later
+ * from the curated catalog (assessEtf falls back to it automatically).
+ */
+export function fallbackEtfData(args: {
+  symbol: string;
+  name?: string;
+  price?: number;
+  currency?: string;
+  prices?: { date: string; close: number }[];
+}): EtfData {
+  return {
+    symbol: args.symbol,
+    name: args.name,
+    price: args.price,
+    currency: args.currency,
+    quoteType: "ETF",
+    trailing: trailingFromPrices(args.prices ?? []),
+    annual: [],
+    top: [],
+    sectors: [],
+    split: {},
+    fetchedAt: new Date().toISOString(),
+    degraded: true,
+  };
+}
+
+/** Fill gaps in a fetched EtfData from data the stock pipeline already has. */
+export function enrichEtfData(
+  e: EtfData,
+  from: { name?: string; price?: number; currency?: string; prices?: { date: string; close: number }[] }
+): EtfData {
+  const out = { ...e };
+  if (out.name === undefined) out.name = from.name;
+  if (out.price === undefined) out.price = from.price;
+  if (out.currency === undefined) out.currency = from.currency;
+  if (
+    out.trailing.y1 === undefined &&
+    out.trailing.y3 === undefined &&
+    out.trailing.y5 === undefined &&
+    from.prices?.length
+  ) {
+    out.trailing = trailingFromPrices(from.prices);
+    out.degraded = true; // returns are price-derived, say so
+  }
+  return out;
 }
