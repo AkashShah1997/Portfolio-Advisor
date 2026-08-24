@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { AnalyzedHolding, Check, CheckStatus, Currency, Holding } from "@/lib/types";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/symbols";
 import { VERDICT_META } from "@/lib/portfolio";
 import { buildPrompt } from "@/lib/promptgen";
-import { Badge, Card, Meter, Spinner } from "./ui";
+import { buildValuation } from "@/lib/valuation";
+import { buildJourney } from "@/lib/journey";
+import { strengthsAndRisks } from "@/lib/insights";
+import { describeSnowflake, snowflakeOf } from "@/lib/snowflake";
+import { Badge, Card, InfoTip, Meter, Spinner } from "./ui";
+import { Snowflake } from "./Snowflake";
 import { EpsBars, PriceLine, RevenueEarnings } from "./charts";
 import { ValuationBlock } from "./ValuationBlock";
 import { Journey } from "./Journey";
@@ -61,17 +66,17 @@ function RatioTable({ h }: { h: AnalyzedHolding }) {
   const rows = h.scorecard?.ratios ?? [];
   if (!rows.length) return null;
   const cur = (h.data?.quote.currency ?? h.holding.currency) as Currency;
-  const cols: { key: string; label: string; fmt: (r: (typeof rows)[number]) => string }[] = [
-    { key: "revenue", label: "Revenue", fmt: (r) => (r.revenue !== undefined ? compact(r.revenue, cur) : "—") },
-    { key: "netIncome", label: "Net income", fmt: (r) => (r.netIncome !== undefined ? compact(r.netIncome, cur) : "—") },
-    { key: "eps", label: "EPS", fmt: (r) => fmtNum(r.eps) },
-    { key: "roe", label: "ROE", fmt: (r) => fmtPct(r.roe) },
-    { key: "roce", label: "ROCE", fmt: (r) => fmtPct(r.roce) },
-    { key: "netMargin", label: "Net margin", fmt: (r) => fmtPct(r.netMargin) },
-    { key: "debtToEquity", label: "D/E", fmt: (r) => fmtNum(r.debtToEquity) },
-    { key: "interestCoverage", label: "Int. cover", fmt: (r) => (r.interestCoverage !== undefined ? `${r.interestCoverage.toFixed(1)}x` : "—") },
-    { key: "fcf", label: "FCF", fmt: (r) => (r.fcf !== undefined ? compact(r.fcf, cur) : "—") },
-    { key: "approxPE", label: "P/E (yr-end)", fmt: (r) => fmtNum(r.approxPE, 1) },
+  const cols: { key: string; label: string; g: string; fmt: (r: (typeof rows)[number]) => string }[] = [
+    { key: "revenue", label: "Revenue", g: "revenue", fmt: (r) => (r.revenue !== undefined ? compact(r.revenue, cur) : "—") },
+    { key: "netIncome", label: "Net income", g: "netIncome", fmt: (r) => (r.netIncome !== undefined ? compact(r.netIncome, cur) : "—") },
+    { key: "eps", label: "EPS", g: "eps", fmt: (r) => fmtNum(r.eps) },
+    { key: "roe", label: "ROE", g: "roe", fmt: (r) => fmtPct(r.roe) },
+    { key: "roce", label: "ROCE", g: "roce", fmt: (r) => fmtPct(r.roce) },
+    { key: "netMargin", label: "Net margin", g: "netMargin", fmt: (r) => fmtPct(r.netMargin) },
+    { key: "debtToEquity", label: "D/E", g: "d2e", fmt: (r) => fmtNum(r.debtToEquity) },
+    { key: "interestCoverage", label: "Int. cover", g: "icr", fmt: (r) => (r.interestCoverage !== undefined ? `${r.interestCoverage.toFixed(1)}x` : "—") },
+    { key: "fcf", label: "FCF", g: "fcf", fmt: (r) => (r.fcf !== undefined ? compact(r.fcf, cur) : "—") },
+    { key: "approxPE", label: "P/E (yr-end)", g: "approxPE", fmt: (r) => fmtNum(r.approxPE, 1) },
   ];
   return (
     <div className="overflow-x-auto">
@@ -89,7 +94,9 @@ function RatioTable({ h }: { h: AnalyzedHolding }) {
         <tbody>
           {cols.map((c) => (
             <tr key={c.key} className="border-b border-grid/50">
-              <td className="py-1 pr-3 text-ink-2">{c.label}</td>
+              <td className="py-1 pr-3 text-ink-2 whitespace-nowrap">
+                {c.label} <InfoTip k={c.g} />
+              </td>
               {rows.map((r) => (
                 <td key={r.year} className="py-1 pr-3 tnum text-right text-ink">
                   {c.fmt(r)}
@@ -106,6 +113,21 @@ function RatioTable({ h }: { h: AnalyzedHolding }) {
 function compact(v: number, currency: Currency): string {
   return fmtMoney(v, currency, true);
 }
+
+const PILLAR_G: Record<string, string> = {
+  quality: "pillarQuality",
+  fortress: "pillarFortress",
+  growth: "pillarGrowth",
+  valuation: "pillarValuation",
+};
+
+const RECO_LABEL: Record<string, string> = {
+  strong_buy: "strong buy",
+  buy: "buy",
+  hold: "hold",
+  underperform: "underperform",
+  sell: "sell",
+};
 
 export function StockCard({
   row,
@@ -126,6 +148,21 @@ export function StockCard({
   const { holding, data, scorecard } = row;
   const cur = (data?.quote.currency ?? holding.currency) as Currency;
   const isWatch = !!holding.watch;
+
+  // derived analysis (pure, memoized; guarded so hooks run before any early return)
+  const valuation = useMemo(
+    () => (data && scorecard ? buildValuation(data, scorecard) : undefined),
+    [data, scorecard]
+  );
+  const journey = useMemo(() => (isWatch ? undefined : buildJourney(row)), [row, isWatch]);
+  const insights = useMemo(
+    () =>
+      scorecard && scorecard.verdict !== "INSUFFICIENT_DATA"
+        ? strengthsAndRisks(scorecard, valuation, journey)
+        : undefined,
+    [scorecard, valuation, journey]
+  );
+  const flake = useMemo(() => (scorecard ? snowflakeOf(scorecard, data) : null), [scorecard, data]);
 
   const copyPrompt = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -261,7 +298,7 @@ export function StockCard({
 
       {/* verdict line */}
       <p className="text-[12.5px] text-ink-2 mt-2">{scorecard.verdictText}</p>
-      {scorecard.redFlags.length > 0 && (
+      {!open && scorecard.redFlags.length > 0 && (
         <ul className="mt-1.5 space-y-0.5">
           {scorecard.redFlags.map((f, i) => (
             <li key={i} className="text-[12px] text-status-critical flex gap-1.5">
@@ -294,47 +331,124 @@ export function StockCard({
 
       <Collapse open={open}>
         <div className="mt-4 space-y-5">
-          {/* pillars */}
-          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-            {scorecard.pillars
-              .filter((p) => p.applicable)
-              .map((p) => (
-                <div key={p.pillar}>
-                  <div className="flex justify-between text-[12px] mb-1">
-                    <span className="text-ink-2">{p.label}</span>
-                    <span className="font-medium tnum">{p.score}</span>
-                  </div>
-                  <Meter value={p.score} />
+          {/* strengths & risks — every bullet restates a check the engine ran */}
+          {insights && (insights.strengths.length > 0 || insights.risks.length > 0) && (
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
+              <div>
+                <div className="text-[11.5px] font-semibold text-success-text uppercase tracking-wide mb-1">
+                  ✦ Strengths
                 </div>
-              ))}
+                {insights.strengths.length ? (
+                  <ul className="space-y-1">
+                    {insights.strengths.map((s, i) => (
+                      <li key={i} className="text-[12.5px] text-ink-2 leading-snug flex gap-1.5">
+                        <span className="text-success-text font-bold shrink-0" aria-hidden>
+                          +
+                        </span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[12px] text-muted">Nothing stands out on the upside right now.</p>
+                )}
+              </div>
+              <div>
+                <div className="text-[11.5px] font-semibold text-status-critical uppercase tracking-wide mb-1">
+                  ⚑ Risks
+                </div>
+                {insights.risks.length ? (
+                  <ul className="space-y-1">
+                    {insights.risks.map((s, i) => (
+                      <li key={i} className="text-[12.5px] text-ink-2 leading-snug flex gap-1.5">
+                        <span className="text-status-critical font-bold shrink-0" aria-hidden>
+                          −
+                        </span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[12px] text-muted">No material risks flagged by the checks.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* snowflake + pillars */}
+          <div className={`grid ${flake ? "md:grid-cols-[230px_1fr]" : ""} gap-x-7 gap-y-3 items-center`}>
+            {flake && (
+              <div className="max-w-[260px] mx-auto md:mx-0 w-full">
+                <Snowflake axes={flake} size="sm" title={`${holding.yahooSymbol} snowflake`} />
+                <p className="text-[11px] text-muted text-center leading-snug">
+                  The snowflake <InfoTip k="snowflake" /> — {describeSnowflake(flake)}
+                </p>
+              </div>
+            )}
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+              {scorecard.pillars
+                .filter((p) => p.applicable)
+                .map((p) => (
+                  <div key={p.pillar}>
+                    <div className="flex justify-between text-[12px] mb-1 gap-2">
+                      <span className="text-ink-2">
+                        {p.label} <InfoTip k={PILLAR_G[p.pillar]} />
+                      </span>
+                      <span className="font-medium tnum">{p.score}</span>
+                    </div>
+                    <Meter value={p.score} />
+                  </div>
+                ))}
+            </div>
           </div>
 
           {/* valuation snapshot */}
-          <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-ink-2 tnum">
-            <span>
-              P/E <strong className="text-ink">{fmtNum(q.trailingPE, 1)}</strong>
-              {scorecard.avgPE && (
-                <>
-                  {" "}
-                  vs 5y avg <strong className="text-ink">{fmtNum(scorecard.avgPE, 1)}</strong>
-                </>
+          <div>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-ink-2 tnum">
+              <span>
+                P/E <InfoTip k="pe" /> <strong className="text-ink">{fmtNum(q.trailingPE, 1)}</strong>
+                {scorecard.avgPE && (
+                  <>
+                    {" "}
+                    vs 5y avg <InfoTip k="avgPE" /> <strong className="text-ink">{fmtNum(scorecard.avgPE, 1)}</strong>
+                  </>
+                )}
+              </span>
+              <span>
+                P/B <InfoTip k="pb" /> <strong className="text-ink">{fmtNum(q.priceToBook, 1)}</strong>
+              </span>
+              <span>
+                Div yield <InfoTip k="divYield" /> <strong className="text-ink">{fmtPct(q.dividendYield)}</strong>
+              </span>
+              <span>
+                Rev CAGR <InfoTip k="revCagr" /> <strong className="text-ink">{fmtPct(scorecard.cagr.revenue)}</strong>
+              </span>
+              <span>
+                EPS CAGR <InfoTip k="epsCagr" /> <strong className="text-ink">{fmtPct(scorecard.cagr.eps)}</strong>
+              </span>
+              <span>
+                52w <InfoTip k="week52" /> {fmtMoney(q.fiftyTwoWeekLow, cur, true)}–{fmtMoney(q.fiftyTwoWeekHigh, cur, true)}
+              </span>
+            </div>
+            {q.targetMeanPrice !== undefined &&
+              q.price !== undefined &&
+              (q.numberOfAnalystOpinions ?? 0) > 0 && (
+                <p className="text-[12px] text-muted mt-1.5 tnum">
+                  Analysts ({q.numberOfAnalystOpinions}) <InfoTip k="analyst" /> — 12-mo target{" "}
+                  <strong className="text-ink-2">{fmtMoney(q.targetMeanPrice, cur)}</strong>{" "}
+                  <span className={q.targetMeanPrice >= q.price ? "text-success-text" : "text-status-critical"}>
+                    ({q.targetMeanPrice >= q.price ? "+" : ""}
+                    {fmtPct(q.targetMeanPrice / q.price - 1)})
+                  </span>
+                  {q.recommendationKey && RECO_LABEL[q.recommendationKey] && (
+                    <>
+                      {" "}
+                      · lean “{RECO_LABEL[q.recommendationKey]}”
+                    </>
+                  )}{" "}
+                  <span className="italic">— context only; their horizon is 1 year, yours is 5.</span>
+                </p>
               )}
-            </span>
-            <span>
-              P/B <strong className="text-ink">{fmtNum(q.priceToBook, 1)}</strong>
-            </span>
-            <span>
-              Div yield <strong className="text-ink">{fmtPct(q.dividendYield)}</strong>
-            </span>
-            <span>
-              Rev CAGR <strong className="text-ink">{fmtPct(scorecard.cagr.revenue)}</strong>
-            </span>
-            <span>
-              EPS CAGR <strong className="text-ink">{fmtPct(scorecard.cagr.eps)}</strong>
-            </span>
-            <span>
-              52w {fmtMoney(q.fiftyTwoWeekLow, cur, true)}–{fmtMoney(q.fiftyTwoWeekHigh, cur, true)}
-            </span>
           </div>
 
           {/* intrinsic value strip */}

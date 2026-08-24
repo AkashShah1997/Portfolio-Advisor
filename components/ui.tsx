@@ -1,7 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "motion/react";
+import { METRIC_INFO } from "@/lib/glossary";
 
 export function Card({
   children,
@@ -89,6 +91,73 @@ export function Spinner() {
       className="inline-block w-3.5 h-3.5 border-2 border-baseline border-t-series-1 rounded-full animate-spin align-middle"
       aria-label="loading"
     />
+  );
+}
+
+/**
+ * InfoTip — the ⓘ beside a metric. Hover or keyboard-focus opens a small card
+ * explaining what the ratio means and which direction is better (from
+ * lib/glossary). Rendered through a portal with fixed positioning so it never
+ * gets clipped by scrollable tables or card overflow. Fully accessible: the
+ * trigger is focusable and carries the whole explanation as its aria-label.
+ */
+export function InfoTip({ k, className = "" }: { k: string; className?: string }) {
+  const info = METRIC_INFO[k];
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; below: boolean } | null>(null);
+
+  if (!info) return null;
+
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = r.top < 190; // not enough room above → open downward
+    const half = 138;
+    setPos({
+      x: Math.min(Math.max(r.left + r.width / 2, half + 8), window.innerWidth - half - 8),
+      y: below ? r.bottom + 8 : r.top - 8,
+      below,
+    });
+  };
+  const hide = () => setPos(null);
+
+  return (
+    <>
+      <span
+        ref={ref}
+        tabIndex={0}
+        role="note"
+        aria-label={`${info.name}. ${info.what} ${info.better}`}
+        data-infotip={k}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        className={`inline-flex items-center justify-center w-[15px] h-[15px] rounded-full text-[10px] leading-none font-semibold normal-case tracking-normal align-[1px] cursor-help select-none text-muted hover:text-series-1 hover:bg-series-1/10 focus:text-series-1 focus:bg-series-1/10 focus:outline-none border border-current/40 no-print ${className}`}
+      >
+        i
+      </span>
+      {pos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="tooltip"
+            className="fixed z-[95] w-[276px] bg-surface hairline rounded-xl elev-2 p-3 text-left normal-case tracking-normal pointer-events-none"
+            style={{
+              left: pos.x,
+              top: pos.y,
+              transform: `translate(-50%, ${pos.below ? "0" : "-100%"})`,
+            }}
+          >
+            <div className="text-[12px] font-semibold text-ink leading-snug">{info.name}</div>
+            <p className="text-[11.5px] text-ink-2 leading-snug mt-1 whitespace-normal font-normal">{info.what}</p>
+            <p className="text-[11.5px] leading-snug mt-1.5 whitespace-normal font-medium text-success-text">
+              {info.better}
+            </p>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 

@@ -92,6 +92,62 @@ export function portfolioSeries(rows: AnalyzedHolding[], fx: FxRates): { date: s
   return out;
 }
 
+// ---------- benchmark comparison (indexed to 100) ----------
+
+export interface BenchPoint {
+  date: string; // YYYY-MM-01
+  you?: number; // indexed, 100 at the common start
+  bench?: number;
+}
+
+export interface BenchComparison {
+  points: BenchPoint[];
+  youCagr?: number; // annualized over the common window
+  benchCagr?: number;
+  years?: number;
+}
+
+/** Collapse candles/points of any cadence to last-close-per-month. */
+export function monthlyCloses(points: { date?: string; time?: string; close?: number; value?: number }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const p of points) {
+    const d = p.date ?? p.time;
+    const v = p.close ?? p.value;
+    if (!d || v === undefined || !Number.isFinite(v) || v <= 0) continue;
+    m.set(d.slice(0, 7), v); // ascending input → last write per month wins
+  }
+  return m;
+}
+
+/**
+ * Index the portfolio series and a benchmark price series to 100 at their
+ * first common month, so "did my picks beat the index?" is answerable at a
+ * glance. Pure and unit-free: FX and absolute levels cancel out.
+ */
+export function benchmarkCompare(
+  series: { date: string; value: number }[],
+  benchCandles: { time: string; close: number }[]
+): BenchComparison {
+  const you = monthlyCloses(series);
+  const bench = monthlyCloses(benchCandles);
+  const months = [...you.keys()].filter((m) => bench.has(m)).sort();
+  if (months.length < 2) return { points: [] };
+  const m0 = months[0];
+  const y0 = you.get(m0)!;
+  const b0 = bench.get(m0)!;
+  const points: BenchPoint[] = months.map((mo) => ({
+    date: `${mo}-01`,
+    you: (you.get(mo)! / y0) * 100,
+    bench: (bench.get(mo)! / b0) * 100,
+  }));
+  const last = points[points.length - 1];
+  const years =
+    (new Date(last.date).getTime() - new Date(points[0].date).getTime()) / (365.25 * 24 * 3600 * 1000);
+  const cagr = (endIdx?: number) =>
+    endIdx !== undefined && years > 0.75 ? Math.pow(endIdx / 100, 1 / years) - 1 : undefined;
+  return { points, youCagr: cagr(last.you), benchCagr: cagr(last.bench), years };
+}
+
 export const VERDICT_META: Record<
   Verdict,
   { label: string; icon: string; tone: "good" | "neutral" | "warning" | "serious" | "critical" | "muted" }

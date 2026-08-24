@@ -11,7 +11,7 @@ import { buildPrompt } from "@/lib/promptgen";
 import { VALUATION_STATUS_META } from "@/lib/valuation";
 import type { ScanMode, ScanState } from "@/lib/scancache";
 import type { Hydrated } from "./Dashboard";
-import { Badge, Card, SectionTitle, Spinner } from "./ui";
+import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 import { EASE } from "./anim";
 
 /**
@@ -263,27 +263,27 @@ export function ScreenerPanel({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 mb-3 text-[12.5px]">
               {(
                 [
-                  ["Min score /100", "minScore", 1],
-                  ["Min ROCE %", "minRoce", 100],
-                  ["Min revenue CAGR %", "minRevCagr", 100],
-                  ["Min EPS CAGR %", "minEpsCagr", 100],
-                  ["P/E at least ×", "minPE", 1],
-                  ["P/E at most ×", "maxPE", 1],
-                  ["Max PEG ×", "maxPEG", 1],
-                  ["Max P/B ×", "maxPB", 1],
-                  ["Max D/E ×", "maxD2E", 1],
-                  ["Min interest cover ×", "minIcr", 1],
-                  ["Min dividend yield %", "minDivYield", 100],
-                  ["Max payout %", "maxPayout", 100],
-                  ["Min FCF yield %", "minFcfYield", 100],
-                  ["Min market cap (B)", "minMarketCapB", 1],
-                  ["Max red flags", "maxRedFlags", 1],
-                ] as [string, keyof CustomFilter, number][]
-              ).map(([label, key, scale]) => {
+                  ["Min score /100", "minScore", 1, "score"],
+                  ["Min ROCE %", "minRoce", 100, "roce"],
+                  ["Min revenue CAGR %", "minRevCagr", 100, "revCagr"],
+                  ["Min EPS CAGR %", "minEpsCagr", 100, "epsCagr"],
+                  ["P/E at least ×", "minPE", 1, "pe"],
+                  ["P/E at most ×", "maxPE", 1, "pe"],
+                  ["Max PEG ×", "maxPEG", 1, "peg"],
+                  ["Max P/B ×", "maxPB", 1, "pb"],
+                  ["Max D/E ×", "maxD2E", 1, "d2e"],
+                  ["Min interest cover ×", "minIcr", 1, "icr"],
+                  ["Min dividend yield %", "minDivYield", 100, "divYield"],
+                  ["Max payout %", "maxPayout", 100, "payout"],
+                  ["Min FCF yield %", "minFcfYield", 100, "fcfYield"],
+                  ["Min market cap (B)", "minMarketCapB", 1, "marketCap"],
+                  ["Max red flags", "maxRedFlags", 1, "flags"],
+                ] as [string, keyof CustomFilter, number, string][]
+              ).map(([label, key, scale, gkey]) => {
                 const v = custom[key];
                 return (
-                  <label key={key} className="text-ink-2">
-                    {label}
+                  <label key={`${key}-${label}`} className="text-ink-2">
+                    {label} <InfoTip k={gkey} />
                     <input
                       type="number"
                       step="any"
@@ -301,7 +301,7 @@ export function ScreenerPanel({
                   onChange={(e) => setCustom((c) => ({ ...c, noLossYears: e.target.checked }))}
                   className="accent-[#2a78d6]"
                 />
-                no loss years (5y)
+                no loss years (5y) <InfoTip k="lossYears" />
               </label>
               <label className="text-ink-2 inline-flex items-end gap-1.5 pb-1.5">
                 <input
@@ -310,7 +310,7 @@ export function ScreenerPanel({
                   onChange={(e) => setCustom((c) => ({ ...c, onlyBuyZone: e.target.checked }))}
                   className="accent-[#2a78d6]"
                 />
-                in the buy zone only
+                in the buy zone only <InfoTip k="buyZone" />
               </label>
               <label className="text-ink-2 inline-flex items-end gap-1.5 pb-1.5">
                 <input
@@ -346,15 +346,33 @@ export function ScreenerPanel({
                   <tr className="text-left text-[11px] text-muted border-b border-grid uppercase tracking-wide">
                     <th className="py-1.5 pr-2 font-medium">#</th>
                     <th className="py-1.5 pr-3 font-medium">Company</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">Score</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">ROCE</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">EPS CAGR</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">P/E</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">PEG</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">Yield</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">Flags</th>
-                    <th className="py-1.5 pr-3 font-medium text-right">vs fair value</th>
-                    <th className="py-1.5 pr-2 font-medium">Verdict</th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      Score <InfoTip k="score" />
+                    </th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      ROCE <InfoTip k="roce" />
+                    </th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      EPS CAGR <InfoTip k="epsCagr" />
+                    </th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      P/E <InfoTip k="pe" />
+                    </th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      PEG <InfoTip k="peg" />
+                    </th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      Yield <InfoTip k="divYield" />
+                    </th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      Flags <InfoTip k="flags" />
+                    </th>
+                    <th className="py-1.5 pr-3 font-medium text-right whitespace-nowrap">
+                      vs fair value <InfoTip k="mos" />
+                    </th>
+                    <th className="py-1.5 pr-2 font-medium whitespace-nowrap">
+                      Verdict <InfoTip k="verdict" />
+                    </th>
                     <th className="py-1.5 font-medium"></th>
                   </tr>
                 </thead>

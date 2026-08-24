@@ -22,6 +22,8 @@ export const MARKET_META: Record<
     countries: UniverseCountry[];
     exchanges: string;
     csvHint: string;
+    /** market index used for the hero-chart benchmark comparison */
+    benchmark: { symbol: string; label: string };
   }
 > = {
   india: {
@@ -33,6 +35,7 @@ export const MARKET_META: Record<
     countries: ["India"],
     exchanges: "NSE · BSE",
     csvHint: "Console → Portfolio → Holdings → Download CSV",
+    benchmark: { symbol: "^NSEI", label: "NIFTY 50" },
   },
   canada: {
     label: "Canada",
@@ -43,6 +46,7 @@ export const MARKET_META: Record<
     countries: ["Canada", "United States"],
     exchanges: "TSX · US listings",
     csvHint: "Export holdings as CSV (Symbol, Quantity, Avg cost / Book cost, Currency)",
+    benchmark: { symbol: "^GSPTSE", label: "TSX Composite" },
   },
 };
 

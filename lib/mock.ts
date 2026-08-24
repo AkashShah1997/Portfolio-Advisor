@@ -199,6 +199,10 @@ export function mockStockData(symbol: string): StockData {
       debtToEquityNow: p.debtToEquity,
       // payout ≈ DPS/EPS = dividendYield × P/E, capped at a plausible level
       payoutRatio: p.divYield ? Math.min(0.85, p.divYield * p.pe) : 0,
+      // deterministic sell-side context: target tracks quality, count tracks size
+      targetMeanPrice: price * (p.roe >= 0.15 ? 1.12 : 0.97),
+      recommendationKey: p.roe >= 0.15 ? "buy" : "hold",
+      numberOfAnalystOpinions: 8 + (hashSeed(symbol) % 25),
     },
     years,
     prices,

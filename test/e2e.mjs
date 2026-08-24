@@ -38,9 +38,28 @@ await page.screenshot({ path: `${shots}/03-overview.png`, fullPage: true });
 
 if (!(await page.locator("text=the Buffett matrix").count())) throw new Error("matrix card missing");
 
-// expand first stock card → intrinsic value band
+// ---- portfolio snowflake in the action summary ----
+await page.waitForSelector("text=Portfolio snowflake", { timeout: 10000 });
+if (!(await page.locator("[data-testid=snowflake]").count())) throw new Error("portfolio snowflake missing");
+
+// ---- hero chart: benchmark toggle (indexed vs NIFTY 50) ----
+await page.getByRole("button", { name: /vs NIFTY 50/ }).click();
+await page.waitForSelector("text=Your holdings", { timeout: 20000 });
+await page.waitForSelector("text=/\\/yr vs NIFTY 50/", { timeout: 20000 });
+await page.waitForSelector("text=both indexed to 100", { timeout: 5000 });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/17-benchmark.png`, fullPage: false });
+await page.getByRole("button", { name: "Value", exact: true }).click();
+await page.waitForTimeout(300);
+
+// expand first stock card → intrinsic value band + strengths/risks + snowflake + analyst line
 await page.locator("button[aria-expanded]").first().click();
 await page.waitForSelector("text=Intrinsic value (rough)", { timeout: 10000 });
+await page.waitForSelector("text=✦ Strengths", { timeout: 10000 });
+await page.waitForSelector("text=⚑ Risks", { timeout: 10000 });
+await page.waitForSelector("text=12-mo target", { timeout: 10000 });
+if ((await page.locator("[data-testid=snowflake]").count()) < 2) throw new Error("stock-card snowflake missing");
+if (!(await page.locator("[data-infotip=pe]").count())) throw new Error("info tooltips not wired in stock card");
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${shots}/04-card-open.png`, fullPage: true });
 
@@ -74,6 +93,21 @@ await page.screenshot({ path: `${shots}/07-screener-coffeecan.png`, fullPage: tr
 await page.getByRole("button", { name: /Magic Formula/ }).first().click();
 await page.waitForTimeout(400);
 if (!(await page.locator("text=MF rank #1").count())) throw new Error("magic formula ranking missing");
+
+// ---- info tooltips on screener headers: hover ⓘ → glossary card ----
+const scoreTip = page.locator("th [data-infotip=score]").first();
+if (!(await scoreTip.count())) throw new Error("screener header info icon missing");
+await scoreTip.hover();
+await page.waitForSelector("[role=tooltip]", { timeout: 5000 });
+const tipText = await page.locator("[role=tooltip]").textContent();
+if (!/Quality score/.test(tipText) || !/Higher is better/.test(tipText)) {
+  throw new Error(`tooltip content wrong: ${tipText}`);
+}
+await page.screenshot({ path: `${shots}/18-infotip.png`, fullPage: false });
+await page.mouse.move(0, 0); // close the tooltip
+// accessibility: the trigger carries the full explanation as aria-label
+const ariaLen = await scoreTip.evaluate((el) => (el.getAttribute("aria-label") ?? "").length);
+if (ariaLen < 60) throw new Error("info icon aria-label missing/too short");
 
 await page.getByRole("button", { name: /Custom screen/ }).first().click();
 await page.waitForSelector("text=raw fundamentals, your thresholds", { timeout: 5000 });

@@ -11,7 +11,12 @@ import { buildPrompt } from "../lib/promptgen";
 import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
 import { runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
 import { sma } from "../lib/history";
-import { loadHoldings, saveHoldings } from "../lib/store";
+import { loadHoldings, MARKET_META, saveHoldings } from "../lib/store";
+import { METRIC_INFO } from "../lib/glossary";
+import { incomeAxis, portfolioSnowflake, snowflakeOf, SNOWFLAKE_AXES } from "../lib/snowflake";
+import { strengthsAndRisks } from "../lib/insights";
+import { benchmarkCompare, monthlyCloses } from "../lib/portfolio";
+import type { Journey } from "../lib/journey";
 import { mapStatementHistory, parseTimeseries } from "../lib/fundamentals";
 import {
   buildTickerMap,
@@ -915,6 +920,188 @@ console.log("\n== Local store (server-side safety) ==");
     threw = true;
   }
   check("saveHoldings never throws server-side", !threw);
+}
+
+console.log("\n== Metric glossary (info tooltips) ==");
+{
+  // every key the UI wires an InfoTip to must exist, with all three fields filled
+  const wired = [
+    // screener table headers + custom filter labels
+    "score", "roce", "epsCagr", "pe", "peg", "divYield", "flags", "mos", "verdict",
+    "revCagr", "pb", "d2e", "icr", "payout", "fcfYield", "marketCap", "lossYears", "buyZone",
+    // stock card: ratio table + snapshot + pillars + extras
+    "revenue", "netIncome", "eps", "roe", "netMargin", "fcf", "approxPE", "avgPE", "week52",
+    "pillarQuality", "pillarFortress", "pillarGrowth", "pillarValuation",
+    "analyst", "snowflake", "vsBench",
+  ];
+  const missing = wired.filter((k) => !METRIC_INFO[k]);
+  check("every wired InfoTip key has a glossary entry", missing.length === 0, missing.join(","));
+  const incomplete = Object.entries(METRIC_INFO).filter(
+    ([, v]) => !v.name.trim() || v.what.trim().length < 20 || v.better.trim().length < 15
+  );
+  check("every glossary entry has name + substantive what/better", incomplete.length === 0, incomplete.map(([k]) => k).join(","));
+  check("glossary states direction for P/E and ROCE", /lower/i.test(METRIC_INFO.pe.better) && /higher/i.test(METRIC_INFO.roce.better));
+}
+
+console.log("\n== Snowflake (5-axis radar) ==");
+{
+  check("income axis: non-payer scores 0", incomeAxis({}) === 0 && incomeAxis({ dividendYield: 0 }) === 0);
+  check(
+    "income axis: 4% yield, low payout, all-FCF years → 100",
+    incomeAxis({ dividendYield: 0.04, payoutRatio: 0.3, fcfPosShare: 1 }) === 100
+  );
+  check(
+    "income axis: 2% yield with unknown payout/FCF → half-ish credit",
+    incomeAxis({ dividendYield: 0.02 }) === 50
+  );
+  check(
+    "income axis: unsustainable payout (≥110%) earns no sustainability credit",
+    incomeAxis({ dividendYield: 0.04, payoutRatio: 1.2, fcfPosShare: 1 }) === 75
+  );
+
+  const tcs = mockStockData("TCS.NS");
+  const scTcs = buildScorecard(tcs);
+  const flake = snowflakeOf(scTcs, tcs);
+  check("snowflake exists for a scored stock", !!flake);
+  check(
+    "snowflake axes all within 0–100",
+    !!flake && SNOWFLAKE_AXES.every((a) => flake[a.key] >= 0 && flake[a.key] <= 100)
+  );
+  check("TCS (quality profile) scores high on the quality axis", !!flake && flake.quality >= 60, String(flake?.quality));
+  check(
+    "snowflake axes mirror the pillar scores",
+    !!flake && flake.quality === scTcs.pillars.find((p) => p.pillar === "quality")?.score
+  );
+
+  const thin: StockData = { ...tcs, years: tcs.years.slice(0, 1) };
+  const scThin = buildScorecard(thin);
+  check("insufficient data → no snowflake (never a fake shape)", scThin.verdict === "INSUFFICIENT_DATA" && snowflakeOf(scThin, thin) === null);
+
+  // portfolio snowflake is value-weighted: heavier holding pulls the average
+  const itc = mockStockData("ITC.NS");
+  const scItc = buildScorecard(itc);
+  const mkRow = (sym: string, data: StockData, sc: ReturnType<typeof buildScorecard>, value: number): AnalyzedHolding => ({
+    holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 1, avgCost: value, currency: "INR" },
+    data,
+    scorecard: sc,
+    invested: value,
+    currentValue: value,
+  });
+  const fxInr: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const heavyTcs = portfolioSnowflake([mkRow("TCS.NS", tcs, scTcs, 900), mkRow("ITC.NS", itc, scItc, 100)], fxInr);
+  const heavyItc = portfolioSnowflake([mkRow("TCS.NS", tcs, scTcs, 100), mkRow("ITC.NS", itc, scItc, 900)], fxInr);
+  const fTcs = snowflakeOf(scTcs, tcs)!;
+  const fItc = snowflakeOf(scItc, itc)!;
+  check("portfolio snowflake covers both holdings", heavyTcs?.covered === 2 && heavyTcs.total === 2);
+  check(
+    "portfolio snowflake is value-weighted (tilts toward the heavier holding)",
+    !!heavyTcs && !!heavyItc &&
+      Math.abs(heavyTcs.axes.income - fTcs.income) <= Math.abs(heavyTcs.axes.income - fItc.income) &&
+      Math.abs(heavyItc.axes.income - fItc.income) <= Math.abs(heavyItc.axes.income - fTcs.income)
+  );
+  check("watch rows carry no weight in the portfolio snowflake", (() => {
+    const w = mkRow("ITC.NS", itc, scItc, 9000);
+    w.holding.watch = true;
+    const p = portfolioSnowflake([mkRow("TCS.NS", tcs, scTcs, 100), w], fxInr);
+    return !!p && p.covered === 1 && p.axes.quality === fTcs.quality;
+  })());
+}
+
+console.log("\n== Strengths & risks bullets ==");
+{
+  const tcs = mockStockData("TCS.NS");
+  const sc = buildScorecard(tcs);
+  const val = buildValuation(tcs, sc);
+  const ins = strengthsAndRisks(sc, val);
+  check("quality profile yields 1–4 strengths", ins.strengths.length >= 1 && ins.strengths.length <= 4, String(ins.strengths.length));
+  check("bullet lists are capped at 4", ins.risks.length <= 4);
+  check("bullets carry evidence in parentheses", ins.strengths.some((s) => /\(/.test(s)));
+
+  // PRICEY valuation surfaces as a risk
+  const pricey = strengthsAndRisks(sc, { ...val, status: "PRICEY", marginOfSafety: -0.3 });
+  check("priced above fair value becomes a risk bullet", pricey.risks.some((r) => /above the rough fair-value/.test(r)));
+  const cheap = strengthsAndRisks(sc, { ...val, status: "BUY_ZONE", marginOfSafety: 0.25 });
+  check("buy-zone pricing becomes the lead strength", /below the rough fair-value/.test(cheap.strengths[0] ?? ""));
+
+  // journey tones flow through
+  const coiled = { verdict: { tone: "good", line: "" }, priceCagrSince: 0.01 } as unknown as Journey;
+  check(
+    "coiled spring journey adds a strength",
+    strengthsAndRisks(sc, val, coiled).strengths.some((s) => /coiled spring/.test(s))
+  );
+  const deteriorating = { verdict: { tone: "critical", line: "" }, priceCagrSince: -0.02 } as unknown as Journey;
+  check(
+    "deteriorating journey adds a risk",
+    strengthsAndRisks(sc, val, deteriorating).risks.some((r) => /worsened since you bought/.test(r))
+  );
+
+  // red flags always surface (TATAMOTORS has a loss year in the curated mocks)
+  const tm = mockStockData("TATAMOTORS.NS");
+  const scTm = buildScorecard(tm);
+  if (scTm.redFlags.length) {
+    const insTm = strengthsAndRisks(scTm, buildValuation(tm, scTm));
+    check("red flags appear among the risks", insTm.risks.length >= 1);
+  } else {
+    check("red flags appear among the risks (skipped: no flags on this profile)", true);
+  }
+}
+
+console.log("\n== Benchmark comparison (indexed to 100) ==");
+{
+  check(
+    "both markets declare a benchmark index",
+    MARKET_META.india.benchmark.symbol === "^NSEI" && MARKET_META.canada.benchmark.symbol === "^GSPTSE"
+  );
+
+  const m = monthlyCloses([
+    { time: "2024-01-03", close: 10 },
+    { time: "2024-01-28", close: 12 }, // later in same month wins
+    { time: "2024-02-10", close: 15 },
+  ]);
+  check("monthlyCloses keeps the last close per month", m.get("2024-01") === 12 && m.get("2024-02") === 15);
+
+  // 4 years: you double (×2), bench +50% (×1.5)
+  const months: string[] = [];
+  for (let y = 2021; y <= 2025; y++) for (let mo = 1; mo <= 12; mo++) {
+    if (y === 2025 && mo > 1) break;
+    months.push(`${y}-${String(mo).padStart(2, "0")}-01`);
+  }
+  const N = months.length - 1;
+  const series = months.map((d, i) => ({ date: d, value: 1000 * Math.pow(2, i / N) }));
+  const bench = months.map((d, i) => ({ time: d, close: 20000 * Math.pow(1.5, i / N) }));
+  const cmp = benchmarkCompare(series, bench);
+  const first = cmp.points[0];
+  const last = cmp.points[cmp.points.length - 1];
+  check("both series start indexed at 100", !!first && Math.round(first.you!) === 100 && Math.round(first.bench!) === 100);
+  check("indexing preserves total growth (you ≈200, bench ≈150)", !!last && Math.abs(last.you! - 200) < 1 && Math.abs(last.bench! - 150) < 1);
+  check(
+    "CAGRs annualize correctly (≈18.9% vs ≈10.7%)",
+    cmp.youCagr !== undefined && cmp.benchCagr !== undefined &&
+      Math.abs(cmp.youCagr - (Math.pow(2, 1 / 4) - 1)) < 0.005 &&
+      Math.abs(cmp.benchCagr - (Math.pow(1.5, 1 / 4) - 1)) < 0.005,
+    `${cmp.youCagr} ${cmp.benchCagr}`
+  );
+  check("FX/level-free: scaling the portfolio 1000× changes nothing", (() => {
+    const scaled = benchmarkCompare(series.map((p) => ({ ...p, value: p.value * 1000 })), bench);
+    return Math.abs((scaled.points.at(-1)?.you ?? 0) - last.you!) < 1e-9;
+  })());
+  check("no overlapping months → empty comparison", benchmarkCompare(series, [{ time: "1999-01-01", close: 5 }]).points.length === 0);
+
+  // the mock history endpoint serves any symbol, so the bench toggle works offline
+  const nifty = mockHistory("^NSEI", "5y");
+  check("mock history covers benchmark symbols for offline/e2e use", nifty.length > 100);
+}
+
+console.log("\n== Analyst context fields (mock determinism) ==");
+{
+  const q = mockStockData("TCS.NS").quote;
+  check("mock quote carries a 12-mo target above 0", (q.targetMeanPrice ?? 0) > 0);
+  check("quality mock leans buy with target above price", q.recommendationKey === "buy" && (q.targetMeanPrice ?? 0) > (q.price ?? 0));
+  check("analyst count is plausible (8–32)", (q.numberOfAnalystOpinions ?? 0) >= 8 && (q.numberOfAnalystOpinions ?? 0) <= 32);
+  check(
+    "analyst fields are deterministic",
+    JSON.stringify(q) === JSON.stringify(mockStockData("TCS.NS").quote)
+  );
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL CHECKS PASSED");

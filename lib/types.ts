@@ -92,6 +92,10 @@ export interface QuoteInfo {
   currentRatioNow?: number;
   debtToEquityNow?: number; // ratio (x), NOT percent
   payoutRatio?: number;
+  // sell-side context (12-month view — shown as context only, never the thesis)
+  targetMeanPrice?: number; // analyst consensus 12-mo price target
+  recommendationKey?: string; // e.g. "strong_buy" | "buy" | "hold" | "underperform" | "sell"
+  numberOfAnalystOpinions?: number;
 }
 
 export interface PricePoint {

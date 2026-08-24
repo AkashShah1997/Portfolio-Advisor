@@ -84,6 +84,9 @@ interface YFQuoteSummary {
     totalCash?: number;
     currentRatio?: number;
     debtToEquity?: number;
+    targetMeanPrice?: number;
+    recommendationKey?: string;
+    numberOfAnalystOpinions?: number;
   };
   defaultKeyStatistics?: { pegRatio?: number; priceToBook?: number };
   summaryDetail?: {
@@ -249,6 +252,9 @@ export async function getStockData(symbol: string): Promise<StockData> {
     quote.totalDebtNow = qs.financialData?.totalDebt ?? undefined;
     quote.totalCashNow = qs.financialData?.totalCash ?? undefined;
     quote.currentRatioNow = qs.financialData?.currentRatio ?? undefined;
+    quote.targetMeanPrice = qs.financialData?.targetMeanPrice ?? undefined;
+    quote.recommendationKey = qs.financialData?.recommendationKey ?? undefined;
+    quote.numberOfAnalystOpinions = qs.financialData?.numberOfAnalystOpinions ?? undefined;
     const d2ePct = qs.financialData?.debtToEquity;
     quote.debtToEquityNow = typeof d2ePct === "number" ? d2ePct / 100 : undefined;
     quote.pegRatio = qs.defaultKeyStatistics?.pegRatio ?? undefined;

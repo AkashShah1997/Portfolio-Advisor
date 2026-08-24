@@ -1,18 +1,21 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { AnalyzedHolding, Currency, FxRates, Holding, Scorecard, StockData, Verdict } from "@/lib/types";
-import { portfolioSeries, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
+import { benchmarkCompare, portfolioSeries, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
+import { describeSnowflake, portfolioSnowflake } from "@/lib/snowflake";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
 import { MARKET_META, type Market } from "@/lib/store";
@@ -25,8 +28,9 @@ import {
   type ScanMode,
   type ScanState,
 } from "@/lib/scancache";
-import { Badge, Card, SectionTitle, Spinner } from "./ui";
+import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 import { compactMoney, HBars, StackedSplit } from "./charts";
+import { Snowflake } from "./Snowflake";
 import { StockCard } from "./StockCard";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
@@ -88,6 +92,33 @@ function SeriesTip({
   );
 }
 
+function BenchTip({
+  active,
+  payload,
+  label,
+  benchLabel,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string | number; value?: number | string }>;
+  label?: string | number;
+  benchLabel: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const val = (k: string) => {
+    const v = payload.find((p) => p.dataKey === k)?.value;
+    return typeof v === "number" ? v.toFixed(0) : "—";
+  };
+  return (
+    <div className="bg-surface hairline rounded-lg px-3 py-2 shadow-sm text-[12px]">
+      <div className="text-ink-2 mb-0.5">{String(label ?? "").slice(0, 7)}</div>
+      <div className="tnum">
+        <span className="font-semibold text-series-1">You {val("you")}</span>
+        <span className="text-muted"> · {benchLabel} {val("bench")}</span>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard({
   market,
   rows,
@@ -143,6 +174,45 @@ export function Dashboard({
   const watchRows = useMemo(() => rows.filter((r) => r.holding.watch), [rows]);
   const summary = useMemo(() => summarize(invRows, fx), [invRows, fx]);
   const series = useMemo(() => portfolioSeries(invRows, fx), [invRows, fx]);
+  const pfFlake = useMemo(() => portfolioSnowflake(invRows, fx), [invRows, fx]);
+
+  // ---- hero chart: value vs benchmark (indexed to 100) ----
+  const [heroView, setHeroView] = useState<"value" | "bench">("value");
+  const [benchRaw, setBenchRaw] = useState<
+    Record<string, { time: string; close: number }[] | "error">
+  >({});
+  const benchSym = meta.benchmark.symbol;
+  useEffect(() => {
+    if (heroView !== "bench" || benchRaw[benchSym] !== undefined) return;
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve(); // defer past render commit (react-compiler-safe)
+      try {
+        const res = await fetch(`/api/history/${encodeURIComponent(benchSym)}?range=5y`);
+        const j = (await res.json()) as { candles?: { time: string; close: number }[] };
+        if (!cancelled)
+          setBenchRaw((prev) => ({
+            ...prev,
+            [benchSym]: Array.isArray(j.candles) && j.candles.length ? j.candles : "error",
+          }));
+      } catch {
+        if (!cancelled) setBenchRaw((prev) => ({ ...prev, [benchSym]: "error" }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [heroView, benchSym, benchRaw]);
+
+  const benchCmp = useMemo(() => {
+    const raw = benchRaw[benchSym];
+    if (!raw || raw === "error" || series.length < 2) return null;
+    return benchmarkCompare(series, raw);
+  }, [benchRaw, benchSym, series]);
+  const benchDelta =
+    benchCmp?.youCagr !== undefined && benchCmp?.benchCagr !== undefined
+      ? benchCmp.youCagr - benchCmp.benchCagr
+      : undefined;
 
   const ok = useMemo(() => invRows.filter((r) => r.scorecard && r.data), [invRows]);
   const failed = useMemo(() => invRows.filter((r) => r.error || !r.data), [invRows]);
@@ -429,7 +499,7 @@ export function Dashboard({
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3.5 text-[12.5px] text-ink-2">
               <span>
-                Quality score{" "}
+                Quality score <InfoTip k="score" />{" "}
                 <strong className="text-ink tnum">
                   <AnimatedNumber value={summary.weightedScore} format={(v) => `${Math.round(v)}`} />
                   /100
@@ -445,36 +515,122 @@ export function Dashboard({
           </div>
           {series.length > 1 && (
             <div className="p-3 pl-1 min-h-[190px]">
-              <div className="text-[11px] text-muted text-right pr-3 pt-1">
-                your current holdings, valued over the last {Math.round(series.length / 12)}y — not account history
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pl-6 pr-3 pt-1">
+                <div className="inline-flex items-center gap-1.5 no-print">
+                  <div className="inline-flex bg-page hairline rounded-lg p-0.5 text-[11.5px] font-medium">
+                    <button
+                      onClick={() => setHeroView("value")}
+                      className={`px-2 py-0.5 rounded-md transition-colors ${heroView === "value" ? "bg-series-1 text-white" : "text-ink-2 hover:text-ink"}`}
+                      aria-pressed={heroView === "value"}
+                    >
+                      Value
+                    </button>
+                    <button
+                      onClick={() => setHeroView("bench")}
+                      className={`px-2 py-0.5 rounded-md transition-colors ${heroView === "bench" ? "bg-series-1 text-white" : "text-ink-2 hover:text-ink"}`}
+                      aria-pressed={heroView === "bench"}
+                    >
+                      vs {meta.benchmark.label}
+                    </button>
+                  </div>
+                  <InfoTip k="vsBench" />
+                </div>
+                <div className="text-[11px] text-muted text-right">
+                  {heroView === "value"
+                    ? `your current holdings, valued over the last ${Math.round(series.length / 12)}y — not account history`
+                    : `both indexed to 100 at the common start · price only, dividends excluded on both sides`}
+                </div>
               </div>
-              <ResponsiveContainer width="100%" height={165}>
-                <AreaChart data={series} margin={{ top: 6, right: 14, bottom: 0, left: 6 }}>
-                  <defs>
-                    <linearGradient id="pfv" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#2a78d6" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#2a78d6" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="#efeee9" strokeWidth={1} vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(v: string) => v.slice(0, 4)}
-                    tickLine={false}
-                    axisLine={{ stroke: "#e1e0d9" }}
-                    minTickGap={110}
-                  />
-                  <YAxis
-                    width={58}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v: number) => compactMoney(v, base)}
-                    domain={["auto", "auto"]}
-                  />
-                  <Tooltip content={<SeriesTip base={base} />} cursor={{ stroke: "#c3c2b7", strokeWidth: 1 }} />
-                  <Area type="monotone" dataKey="value" stroke="#2a78d6" strokeWidth={2} fill="url(#pfv)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              {heroView === "value" ? (
+                <ResponsiveContainer width="100%" height={158}>
+                  <AreaChart data={series} margin={{ top: 6, right: 14, bottom: 0, left: 6 }}>
+                    <defs>
+                      <linearGradient id="pfv" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2a78d6" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#2a78d6" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#efeee9" strokeWidth={1} vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v: string) => v.slice(0, 4)}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e1e0d9" }}
+                      minTickGap={110}
+                    />
+                    <YAxis
+                      width={58}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v: number) => compactMoney(v, base)}
+                      domain={["auto", "auto"]}
+                    />
+                    <Tooltip content={<SeriesTip base={base} />} cursor={{ stroke: "#c3c2b7", strokeWidth: 1 }} />
+                    <Area type="monotone" dataKey="value" stroke="#2a78d6" strokeWidth={2} fill="url(#pfv)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : benchCmp && benchCmp.points.length > 1 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={138}>
+                    <LineChart data={benchCmp.points} margin={{ top: 6, right: 14, bottom: 0, left: 6 }}>
+                      <CartesianGrid stroke="#efeee9" strokeWidth={1} vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={(v: string) => v.slice(0, 4)}
+                        tickLine={false}
+                        axisLine={{ stroke: "#e1e0d9" }}
+                        minTickGap={110}
+                      />
+                      <YAxis
+                        width={44}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: number) => `${Math.round(v)}`}
+                        domain={["auto", "auto"]}
+                      />
+                      <Tooltip
+                        content={<BenchTip benchLabel={meta.benchmark.label} />}
+                        cursor={{ stroke: "#c3c2b7", strokeWidth: 1 }}
+                      />
+                      <Line type="monotone" dataKey="you" stroke="#2a78d6" strokeWidth={2.2} dot={false} />
+                      <Line
+                        type="monotone"
+                        dataKey="bench"
+                        stroke="#6f6e66"
+                        strokeWidth={1.5}
+                        strokeDasharray="5 4"
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pl-6 pr-3 text-[11px] text-muted">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-4 h-[2.5px] bg-series-1 inline-block rounded-full" aria-hidden />
+                      Your holdings
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-4 border-t-[2px] border-dashed border-[#6f6e66] inline-block" aria-hidden />
+                      {meta.benchmark.label}
+                    </span>
+                    {benchDelta !== undefined && (
+                      <Badge tone={benchDelta >= 0 ? "good" : "warning"}>
+                        {benchDelta >= 0 ? "+" : ""}
+                        {fmtPct(benchDelta)} /yr vs {meta.benchmark.label}
+                        {benchCmp.years ? ` over ${benchCmp.years.toFixed(1)}y` : ""}
+                      </Badge>
+                    )}
+                  </div>
+                </>
+              ) : benchRaw[benchSym] === "error" ? (
+                <p className="text-[12px] text-muted px-6 py-10">
+                  Couldn&apos;t fetch {meta.benchmark.label} history right now (often Yahoo throttling) — try again
+                  in a minute.
+                </p>
+              ) : (
+                <p className="text-[12.5px] text-ink-2 px-6 py-10">
+                  <Spinner /> Fetching {meta.benchmark.label}…
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -523,34 +679,45 @@ export function Dashboard({
               <SectionTitle sub="What the value-investing scorecard suggests, at a glance. 5-year+ horizon.">
                 Action summary
               </SectionTitle>
-              <div className="space-y-1.5">
-                {actions.map(({ verdict, items }) => {
-                  const vm = VERDICT_META[verdict];
-                  return (
-                    <div key={verdict} className="flex flex-wrap items-center gap-2 text-[13px]">
-                      <Badge tone={vm.tone} icon={vm.icon}>
-                        {vm.label}
+              <div className={`grid ${pfFlake ? "md:grid-cols-[1fr_250px]" : ""} gap-x-6 gap-y-3 items-center`}>
+                <div className="space-y-1.5">
+                  {actions.map(({ verdict, items }) => {
+                    const vm = VERDICT_META[verdict];
+                    return (
+                      <div key={verdict} className="flex flex-wrap items-center gap-2 text-[13px]">
+                        <Badge tone={vm.tone} icon={vm.icon}>
+                          {vm.label}
+                        </Badge>
+                        <span className="text-ink-2">{items.join(", ")}</span>
+                      </div>
+                    );
+                  })}
+                  {failed.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                      <Badge tone="serious" icon="!">
+                        No data
                       </Badge>
-                      <span className="text-ink-2">{items.join(", ")}</span>
+                      <span className="text-ink-2">
+                        {failed.map((r) => r.holding.yahooSymbol).join(", ")} — often Yahoo throttling; go back
+                        and re-analyze in a minute.
+                      </span>
                     </div>
-                  );
-                })}
-                {failed.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                    <Badge tone="serious" icon="!">
-                      No data
-                    </Badge>
-                    <span className="text-ink-2">
-                      {failed.map((r) => r.holding.yahooSymbol).join(", ")} — often Yahoo throttling; go back
-                      and re-analyze in a minute.
-                    </span>
+                  )}
+                  <p className="text-[12px] text-ink-2 pt-1">
+                    <button onClick={() => setTab("decisions")} className="text-series-1 hover:underline no-print">
+                      → Open the full decision board: what to sell, what to accumulate, with every reason
+                    </button>
+                  </p>
+                </div>
+                {pfFlake && (
+                  <div className="w-full max-w-[260px] mx-auto md:mx-0">
+                    <Snowflake axes={pfFlake.axes} size="sm" title="portfolio snowflake" />
+                    <p className="text-[11px] text-muted text-center leading-snug">
+                      Portfolio snowflake <InfoTip k="snowflake" /> — value-weighted across {pfFlake.covered} scored
+                      holding{pfFlake.covered === 1 ? "" : "s"}. {describeSnowflake(pfFlake.axes)}
+                    </p>
                   </div>
                 )}
-                <p className="text-[12px] text-ink-2 pt-1">
-                  <button onClick={() => setTab("decisions")} className="text-series-1 hover:underline no-print">
-                    → Open the full decision board: what to sell, what to accumulate, with every reason
-                  </button>
-                </p>
               </div>
             </Card>
 

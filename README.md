@@ -29,13 +29,23 @@ shows its evidence. ETFs and new listings get an honest "insufficient data" verd
 
 ## The tabs
 
-**Overview** — hero band with your current value and a **5-year chart of today's holdings**, action
-summary, the **Buffett matrix** (quality+growth vs valuation, bubble = weight), allocation /
-geography / sector splits, and deep-dive cards per stock: pillar meters, every check with evidence,
-an **intrinsic-value band** (Graham Number, Graham growth formula, 10-y owner-earnings DCF,
-own-history P/E anchor, justified P/B for financials → buy-below price that demands 20/30/40% margin
-of safety by quality), the **since-you-bought fundamentals journey** (below), 5-year charts and
-ratio tables.
+**Every ratio explains itself.** Hover (or keyboard-focus) the **ⓘ** beside any metric — screener
+headers, custom-filter fields, pillar meters, ratio tables, the valuation snapshot — for a plain-words
+card: what the ratio means, how it's computed, and **which direction the value school considers
+better** (with the masters' thresholds).
+
+**Overview** — hero band with your current value and a **5-year chart of today's holdings** that
+flips to **"vs NIFTY 50" / "vs TSX Composite"**: both lines indexed to 100 at the common start, your
+±%/yr gap badged — the honest test every hand-picked portfolio must pass. The action summary carries
+the **portfolio snowflake** (five axes from the same scorecard: Quality · Growth · Fortress · Value ·
+Income, value-weighted — fuller and rounder is better), then the **Buffett matrix** (quality+growth
+vs valuation, bubble = weight), allocation / geography / sector splits, and deep-dive cards per
+stock: **strengths & risks bullets** (each one restates a check the engine actually ran, evidence in
+brackets), a per-stock **snowflake**, pillar meters, every check with evidence, an
+**intrinsic-value band** (Graham Number, Graham growth formula, 10-y owner-earnings DCF, own-history
+P/E anchor, justified P/B for financials → buy-below price that demands 20/30/40% margin of safety
+by quality), the **analyst 12-month consensus as labelled context** (their horizon is 1 year, yours
+is 5), the **since-you-bought fundamentals journey** (below), 5-year charts and ratio tables.
 
 **Since you bought (fundamentals journey)** — every held stock gets a then-vs-now table: revenue,
 net income, EPS, ROE/ROCE, margins, leverage, interest cover and FCF **in the fiscal year you
@@ -148,7 +158,8 @@ or click **"load a sample portfolio"** inside either market.
 ```sh
 MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, decisions, screeners,
                                      # fundamentals fallbacks, journey, scan cache, OHLC history,
-                                     # portfolio series, health, projection, FX (150+ checks)
+                                     # portfolio series, health, projection, FX, metric glossary,
+                                     # snowflake axes, strengths/risks, benchmark indexing (200+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,
