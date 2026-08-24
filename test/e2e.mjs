@@ -106,6 +106,14 @@ await page.waitForSelector("text=Coffee Can compounders", { timeout: 10000 });
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${shots}/07-screener-coffeecan.png`, fullPage: true });
 
+// ---- consensus: the names almost every buy-list agrees on ----
+await page.getByRole("button", { name: /Consensus picks/ }).first().click();
+await page.waitForSelector("text=ranked by how many agree", { timeout: 5000 });
+await page.waitForTimeout(400);
+const consBody = await page.locator("body").textContent();
+if (!/screens agree:|Nothing passes/.test(consBody)) throw new Error("consensus results/empty-state missing");
+await page.screenshot({ path: `${shots}/20-consensus.png`, fullPage: false });
+
 await page.getByRole("button", { name: /Magic Formula/ }).first().click();
 await page.waitForTimeout(400);
 if (!(await page.locator("text=MF rank #1").count())) throw new Error("magic formula ranking missing");

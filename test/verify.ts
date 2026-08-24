@@ -9,7 +9,8 @@ import { buildScorecard, computeRatios } from "../lib/scorecard";
 import { portfolioSeries, summarize } from "../lib/portfolio";
 import { buildPrompt } from "../lib/promptgen";
 import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
-import { runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
+import { CONSENSUS_MIN, consensusOf, runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
+import { normalizeSecurityType } from "../lib/parse";
 import { sma } from "../lib/history";
 import { loadHoldings, MARKET_META, saveHoldings } from "../lib/store";
 import { METRIC_INFO } from "../lib/glossary";
@@ -82,18 +83,29 @@ console.log("\n== Zerodha auto-detect (no hint) ==");
   check("broker detected as zerodha", res.detectedBroker === "zerodha", res.detectedBroker);
 }
 
-console.log("\n== Wealthsimple CSV parsing (Book Cost = total) ==");
+console.log("\n== Wealthsimple CSV parsing (multi-account · Security Type · cash rows) ==");
 {
   const csv = readFileSync("public/samples/wealthsimple-holdings-sample.csv", "utf8");
   const res = parseBrokerCsv(csv, "wealthsimple");
-  check("6 holdings parsed (incl. XEQT)", res.holdings.length === 6, `got ${res.holdings.length}`);
-  check(
-    "XEQT → XEQT.TO via CAD hint",
-    res.holdings.find((h) => h.rawSymbol === "XEQT")?.yahooSymbol === "XEQT.TO"
-  );
+  check("10 rows → 6 holdings (2 merges, 2 cash rows out)", res.holdings.length === 6, `got ${res.holdings.length}`);
+  check("cash rows are excluded, with a warning", !res.holdings.some((h) => /^(CAD|USD)$/.test(h.rawSymbol)) && res.warnings.some((w) => /cash row/i.test(w)));
+
   const shop = res.holdings.find((h) => h.rawSymbol === "SHOP");
   check("SHOP → SHOP.TO via CAD hint", shop?.yahooSymbol === "SHOP.TO", shop?.yahooSymbol ?? "missing");
-  check("SHOP avg = 1425/15 = 95", Math.abs((shop?.avgCost ?? 0) - 95) < 1e-9, String(shop?.avgCost));
+  check("SHOP merged across TFSA + RRSP: 25 sh", shop?.quantity === 25, String(shop?.quantity));
+  check(
+    "SHOP weighted avg = (1425+1080)/25 = 100.20",
+    Math.abs((shop?.avgCost ?? 0) - 100.2) < 1e-9,
+    String(shop?.avgCost)
+  );
+  check("SHOP remembers both accounts", shop?.account === "TFSA + RRSP", shop?.account);
+  check("merge is reported in warnings", res.warnings.some((w) => /SHOP: merged 2 rows/.test(w)));
+
+  const xeqt = res.holdings.find((h) => h.rawSymbol === "XEQT");
+  check("XEQT → XEQT.TO, merged to 180 sh @ 24", xeqt?.yahooSymbol === "XEQT.TO" && xeqt?.quantity === 180 && Math.abs((xeqt?.avgCost ?? 0) - 24) < 1e-9);
+  check("Security Type: EXCHANGE_TRADED_FUND → ETF on the holding", xeqt?.securityType === "ETF");
+  check("Security Type: EQUITY carried through", shop?.securityType === "EQUITY");
+
   const aapl = res.holdings.find((h) => h.rawSymbol === "AAPL");
   check("AAPL stays US (USD hint)", aapl?.yahooSymbol === "AAPL", aapl?.yahooSymbol ?? "missing");
   check("AAPL avg = 175", Math.abs((aapl?.avgCost ?? 0) - 175) < 1e-9, String(aapl?.avgCost));
@@ -1246,6 +1258,55 @@ console.log("\n== ETF mapper & mocks ==");
   check("mock ETF data is deterministic", JSON.stringify({ ...m1, fetchedAt: 0 }) === JSON.stringify({ ...mockEtfData("NIFTYBEES.NS"), fetchedAt: 0 }));
   check("mock NIFTYBEES mirrors the real fund (0.04%, huge AUM)", m1.mer === 0.0004 && (m1.aum ?? 0) > 1e11 && m1.top.length === 10);
   check("mock generic fund exists for unknown symbols", mockEtfData("RANDOMX.NS").mer !== undefined);
+}
+
+console.log("\n== Security-type priority (broker > Yahoo > heuristics) ==");
+{
+  check(
+    "normalizer maps broker vocab",
+    normalizeSecurityType("EXCHANGE_TRADED_FUND") === "ETF" &&
+      normalizeSecurityType("Equity") === "EQUITY" &&
+      normalizeSecurityType("currency") === "CURRENCY" &&
+      normalizeSecurityType("Mutual Fund") === "FUND" &&
+      normalizeSecurityType("") === undefined
+  );
+  check(
+    "broker says EQUITY → never an ETF, even with a fund-sounding name",
+    !isEtfHolding("GLXY.TO", "Global X ETF Holdings Inc", "ETF", "EQUITY")
+  );
+  check("broker says ETF → always an ETF, whatever the name", isEtfHolding("XEQT.TO", "iShares Core Equity", "EQUITY", "ETF"));
+  check("Yahoo EQUITY is now trusted (name heuristics can't override)", !isEtfHolding("SOMECO.TO", "Someco Exchange Traded Partners Inc", "EQUITY"));
+  check("…except unambiguous NSE fund suffixes (BEES/IETF)", isEtfHolding("NIFTYBEES.NS", undefined, "EQUITY"));
+  check("with everything silent, name heuristics still catch funds", isEtfHolding("XYZ.TO", "XYZ Index Fund ETF"));
+}
+
+console.log("\n== Buy-list consensus (screeners) ==");
+{
+  const strong: MetricRow = {
+    symbol: "STRONG.NS", name: "Strong Co", sector: "Industrials", owned: false, watch: false,
+    score: 82, verdict: "ADD_MORE", pe: 15, avgPE: 18, peg: 0.9, pb: 3, divYield: 0.02, payout: 0.3,
+    marketCap: 5e11, roeAvg: 0.22, roceAvg: 0.25, d2e: 0.1, icr: 12, revCagr: 0.12, epsCagr: 0.15,
+    fcfPosShare: 1, earningsYield: 1 / 15, fcfYield: 0.05, mos: 0.1, valStatus: "BUY_ZONE",
+    coffeeCan: 0.8, isFin: false, redFlags: 0, lossYears: 0, pillarQuality: 80, pillarGrowth: 70,
+  };
+  const weak: MetricRow = {
+    ...strong, symbol: "WEAK.NS", name: "Weak Co", score: 30, verdict: "REVIEW_EXIT", pe: 40, peg: 4,
+    divYield: 0, roceAvg: 0.05, icr: 1.5, epsCagr: 0.01, revCagr: 0.01, fcfPosShare: 0.2,
+    earningsYield: 0.025, fcfYield: 0, mos: -0.4, valStatus: "PRICEY", coffeeCan: 0, redFlags: 2,
+    lossYears: 1, pillarQuality: 25, pillarGrowth: 20,
+  };
+  const c = consensusOf([strong, weak]);
+  const cs = c.get("STRONG.NS");
+  const cw = c.get("WEAK.NS");
+  check("a genuinely strong name passes nearly every screen", (cs?.count ?? 0) >= 7, String(cs?.count));
+  check("a weak name passes almost none", (cw?.count ?? 0) <= 1, String(cw?.count));
+
+  const consensusScreen = SCREENS.find((s) => s.id === "consensus")!;
+  const picks = consensusScreen.apply([strong, weak]);
+  check("consensus screen shortlists only broad agreement (≥3 screens)", picks.length === 1 && picks[0].symbol === "STRONG.NS");
+  check("shortlist explains itself (N/8 screens agree: …)", /\d\/8 screens agree: /.test(picks[0].rankNote ?? ""), picks[0].rankNote);
+  check("CONSENSUS_MIN is the documented bar", CONSENSUS_MIN === 3);
+  check("Magic Formula counts only as a top-10 pass (no free +1 for merely existing)", (cw?.screens ?? []).every((s) => s !== "Magic Formula") || (cw?.count ?? 0) <= 1);
 }
 
 console.log("\n== ETF fallback (when Yahoo's fund feed fails) ==");

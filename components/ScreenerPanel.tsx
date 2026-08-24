@@ -3,7 +3,15 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import type { AnalyzedHolding, Currency } from "@/lib/types";
-import { runCustom, SCREENS, toMetricRow, type CustomFilter, type MetricRow } from "@/lib/screens";
+import {
+  CONSENSUS_MIN,
+  consensusOf,
+  runCustom,
+  SCREENS,
+  toMetricRow,
+  type CustomFilter,
+  type MetricRow,
+} from "@/lib/screens";
 import { UNIVERSES, type UniverseCountry } from "@/lib/universe";
 import { VERDICT_META } from "@/lib/portfolio";
 import { currencyForSymbol, fmtNum, fmtPct } from "@/lib/symbols";
@@ -75,6 +83,17 @@ export function ScreenerPanel({
     if (active === "custom") return runCustom(dataset, custom);
     return screen ? screen.apply(dataset) : [];
   }, [dataset, active, custom, screen]);
+
+  // the "almost every buy list" strip — top names by screen agreement
+  const topConsensus = useMemo(() => {
+    if (!dataset.length) return [];
+    const c = consensusOf(dataset);
+    return [...c.entries()]
+      .filter(([, e]) => e.count >= CONSENSUS_MIN)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 6)
+      .map(([sym, e]) => ({ sym, ...e }));
+  }, [dataset]);
 
   const addWatch = async (r: MetricRow) => {
     setBusy(`w:${r.symbol}`);
@@ -192,6 +211,27 @@ export function ScreenerPanel({
                   ↻ Retry {k}
                 </button>
               ))}
+          </div>
+        )}
+
+        {/* buy-list consensus strip */}
+        {topConsensus.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-3">
+            <span className="text-[12px] font-semibold text-ink-2">Almost every buy-list agrees on:</span>
+            {topConsensus.map((t) => (
+              <button
+                key={t.sym}
+                onClick={() => setActive("consensus")}
+                className="inline-flex items-center gap-1.5 bg-status-good/8 border border-status-good/30 rounded-full px-2.5 py-[3px] text-[12px] hover:-translate-y-[1px] transition-transform"
+                title={`${t.count} of 8 screens: ${t.screens.join(", ")}`}
+              >
+                <strong className="text-success-text">{t.sym.replace(/\.(NS|BO|TO|V)$/i, "")}</strong>
+                <span className="text-ink-2 tnum">×{t.count}</span>
+              </button>
+            ))}
+            <button onClick={() => setActive("consensus")} className="text-[12px] text-series-1 hover:underline">
+              see the shortlist →
+            </button>
           </div>
         )}
 

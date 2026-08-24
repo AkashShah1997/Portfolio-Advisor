@@ -99,7 +99,12 @@ export function EtfPanel({
       rows.filter(
         (r) =>
           !r.holding.watch &&
-          isEtfHolding(r.holding.yahooSymbol, r.data?.quote.name ?? r.holding.name, r.data?.quote.quoteType)
+          isEtfHolding(
+            r.holding.yahooSymbol,
+            r.data?.quote.name ?? r.holding.name,
+            r.data?.quote.quoteType,
+            r.holding.securityType
+          )
       ),
     [rows]
   );
@@ -300,6 +305,7 @@ export function EtfPanel({
                   {fmtMoney(h.input.value, base, true)}
                   {a.weightPct !== undefined && ` · ${fmtPct(a.weightPct, 1)} of portfolio`}
                   {f.fundYield !== undefined && ` · yield ${fmtPct(f.fundYield)}`}
+                  {h.row.holding.account && <span className="text-muted"> · {h.row.holding.account}</span>}
                 </div>
               </div>
               <Badge tone={vm.tone} icon={vm.icon}>

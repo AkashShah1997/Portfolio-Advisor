@@ -39,7 +39,12 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
   const base = fx.base;
   const inv = rows.filter((r) => !r.holding.watch && r.holding.quantity > 0);
   const isEtf = (r: AnalyzedHolding) =>
-    isEtfHolding(r.holding.yahooSymbol, r.data?.quote.name ?? r.holding.name, r.data?.quote.quoteType);
+    isEtfHolding(
+      r.holding.yahooSymbol,
+      r.data?.quote.name ?? r.holding.name,
+      r.data?.quote.quoteType,
+      r.holding.securityType
+    );
   const stockRows = inv.filter((r) => !isEtf(r));
   const etfRows = inv.filter(isEtf);
 

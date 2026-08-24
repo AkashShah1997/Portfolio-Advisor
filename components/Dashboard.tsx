@@ -233,7 +233,12 @@ export function Dashboard({
   const etfCount = useMemo(
     () =>
       invRows.filter((r) =>
-        isEtfHolding(r.holding.yahooSymbol, r.data?.quote.name ?? r.holding.name, r.data?.quote.quoteType)
+        isEtfHolding(
+          r.holding.yahooSymbol,
+          r.data?.quote.name ?? r.holding.name,
+          r.data?.quote.quoteType,
+          r.holding.securityType
+        )
       ).length,
     [invRows]
   );

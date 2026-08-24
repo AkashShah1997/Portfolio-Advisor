@@ -198,7 +198,7 @@ export function StockCard({
 
   const vm = VERDICT_META[scorecard.verdict];
   const q = data.quote;
-  const isEtf = isEtfHolding(holding.yahooSymbol, q.name ?? holding.name, q.quoteType);
+  const isEtf = isEtfHolding(holding.yahooSymbol, q.name ?? holding.name, q.quoteType, holding.securityType);
 
   const runAi = async () => {
     if (!aiKey) return;
@@ -275,6 +275,7 @@ export function StockCard({
                 <>
                   {" "}
                   · {holding.quantity} sh · avg {fmtMoney(holding.avgCost, cur)}
+                  {holding.account && <span className="text-muted"> · {holding.account}</span>}
                   {row.pnlPct !== undefined && (
                     <span className={`ml-2 font-medium ${(row.pnl ?? 0) >= 0 ? "text-success-text" : "text-status-critical"}`}>
                       {(row.pnl ?? 0) >= 0 ? "+" : ""}

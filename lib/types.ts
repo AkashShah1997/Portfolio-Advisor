@@ -2,6 +2,9 @@
 
 export type Broker = "zerodha" | "wealthsimple" | "manual";
 
+/** Broker-declared instrument type, normalized (EXCHANGE_TRADED_FUND → "ETF" etc.). */
+export type SecurityType = "EQUITY" | "ETF" | "FUND" | "CURRENCY" | "OTHER";
+
 export interface Holding {
   id: string;
   broker: Broker;
@@ -14,6 +17,10 @@ export interface Holding {
   validated?: boolean;
   watch?: boolean; // watchlist row — analyzed and scored, but carries no capital
   buyDate?: string; // YYYY-MM — when the position was (roughly) built; user-set, else estimated
+  /** from the CSV's "Security Type" column when present — the authoritative ETF/stock flag */
+  securityType?: SecurityType;
+  /** account(s) the position sits in, e.g. "TFSA + RRSP" after a multi-account merge */
+  account?: string;
 }
 
 export type Currency = "INR" | "CAD" | "USD";

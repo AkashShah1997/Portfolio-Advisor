@@ -122,7 +122,7 @@ export interface ScreenDef {
 
 const ok = (v: number | undefined, f: (x: number) => boolean) => v !== undefined && f(v);
 
-export const SCREENS: ScreenDef[] = [
+const BASE_SCREENS: ScreenDef[] = [
   {
     id: "two-year",
     name: "Two-year keepers",
@@ -242,6 +242,69 @@ export const SCREENS: ScreenDef[] = [
         .sort((a, b) => (b.mos ?? 0) - (a.mos ?? 0)),
   },
 ];
+
+// ---------------- consensus across the classic screens ----------------
+
+const SHORT_SCREEN_NAME: Record<string, string> = {
+  "two-year": "2-yr keepers",
+  "coffee-can": "Coffee Can",
+  "magic-formula": "Magic Formula",
+  qglp: "QGLP",
+  dividend: "Dividend",
+  fortress: "Fortress",
+  garp: "GARP",
+  "buy-zone": "Buy zone",
+};
+
+/**
+ * How many of the classic screens each name passes right now — the "almost
+ * every buy list agrees" view. The Magic Formula is a pure ranking (it always
+ * returns every usable name), so only its TOP 10 counts as a "pass".
+ */
+export function consensusOf(rows: MetricRow[]): Map<string, { count: number; screens: string[] }> {
+  const out = new Map<string, { count: number; screens: string[] }>();
+  for (const s of BASE_SCREENS) {
+    const passed = s.id === "magic-formula" ? s.apply(rows).slice(0, 10) : s.apply(rows);
+    for (const r of passed) {
+      const k = r.symbol.toUpperCase();
+      const e = out.get(k) ?? { count: 0, screens: [] };
+      e.count++;
+      e.screens.push(SHORT_SCREEN_NAME[s.id] ?? s.name);
+      out.set(k, e);
+    }
+  }
+  return out;
+}
+
+export const CONSENSUS_MIN = 3;
+
+const CONSENSUS_SCREEN: ScreenDef = {
+  id: "consensus",
+  name: "Consensus picks",
+  master: "all 8 screens, one shortlist",
+  blurb: "The names most of the classic buy-lists agree on at today's numbers — quality AND price AND balance sheet at once.",
+  criteria: `Passes ≥${CONSENSUS_MIN} of the 8 screens (Magic Formula counts its top 10) — ranked by how many agree`,
+  apply: (rows) => {
+    const c = consensusOf(rows);
+    return rows
+      .filter((r) => (c.get(r.symbol.toUpperCase())?.count ?? 0) >= CONSENSUS_MIN)
+      .sort((a, b) => {
+        const ca = c.get(a.symbol.toUpperCase())!.count;
+        const cb = c.get(b.symbol.toUpperCase())!.count;
+        return cb - ca || b.score - a.score;
+      })
+      .map((r) => {
+        const e = c.get(r.symbol.toUpperCase())!;
+        const listed = e.screens.slice(0, 3).join(", ");
+        return {
+          ...r,
+          rankNote: `${e.count}/8 screens agree: ${listed}${e.screens.length > 3 ? ` +${e.screens.length - 3}` : ""}`,
+        };
+      });
+  },
+};
+
+export const SCREENS: ScreenDef[] = [...BASE_SCREENS, CONSENSUS_SCREEN];
 
 export interface CustomFilter {
   minScore?: number;

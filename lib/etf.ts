@@ -44,12 +44,31 @@ export interface EtfData {
   degraded?: boolean;
 }
 
-/** Is this holding an ETF/fund? quoteType is authoritative; names/symbols as fallback. */
-export function isEtfHolding(symbol: string, name?: string, quoteType?: string): boolean {
-  if (quoteType === "ETF" || quoteType === "MUTUALFUND") return true;
-  if (quoteType && quoteType !== "EQUITY") return false; // e.g. INDEX, CRYPTO — not fund units
+/**
+ * Is this holding an ETF/fund? Trust order:
+ *   1. the broker's own Security Type column (EXCHANGE_TRADED_FUND / EQUITY / …)
+ *   2. Yahoo's quoteType — including EQUITY meaning "definitely a stock"
+ *   3. unambiguous NSE fund-family suffixes (…BEES / …IETF exist only on funds)
+ *   4. name heuristics, only when everything above is silent
+ * An equity must never land in the ETF section just because its name is fancy.
+ */
+export function isEtfHolding(
+  symbol: string,
+  name?: string,
+  quoteType?: string,
+  securityType?: string
+): boolean {
+  if (securityType === "ETF" || securityType === "FUND") return true;
+  if (securityType === "EQUITY" || securityType === "CURRENCY" || securityType === "OTHER") return false;
+
   const base = symbol.split(".")[0].toUpperCase();
-  if (/BEES$/.test(base) || /IETF$/.test(base) || /^MON\d/.test(base) || /ETF$/.test(base)) return true;
+  const nseFundFamily = /BEES$/.test(base) || /IETF$/.test(base) || /^MON\d/.test(base);
+
+  if (quoteType === "ETF" || quoteType === "MUTUALFUND") return true;
+  if (quoteType === "EQUITY") return nseFundFamily; // trust Yahoo, except the unambiguous fund suffixes
+  if (quoteType) return false; // INDEX, CRYPTO, FUTURE… — not fund units
+
+  if (nseFundFamily || /ETF$/.test(base)) return true;
   return name
     ? /\betf\b|exchange.?traded|\bbees\b|index fund|fund of fund|etf portfolio/i.test(name)
     : false;

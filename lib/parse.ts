@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import type { Broker, Holding } from "./types";
+import type { Broker, Holding, SecurityType } from "./types";
 import { currencyForSymbol, guessYahooSymbol } from "./symbols";
 
 /**
@@ -29,6 +29,20 @@ const NAME_RE = /^name$|company|description|security name/i;
 const CURRENCY_RE = /currency|ccy/i;
 const ISIN_RE = /isin/i;
 const SECTOR_RE = /sector/i;
+const SECTYPE_RE = /security\s*type|instrument\s*type|asset\s*(type|class)|^type$/i;
+const ACCOUNT_RE = /account/i;
+
+/** Normalize a broker's "Security Type" cell (EXCHANGE_TRADED_FUND, Equity, Cash…). */
+export function normalizeSecurityType(raw: string | undefined): SecurityType | undefined {
+  if (!raw) return undefined;
+  const s = raw.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (!s) return undefined;
+  if (/EXCHANGE_TRADED|^ETF$|^ETP$/.test(s)) return "ETF";
+  if (/^EQUIT|COMMON_STOCK|^STOCK$|^SHARE/.test(s)) return "EQUITY";
+  if (/CURRENCY|^CASH$|^FX$|MONEY_MARKET/.test(s)) return "CURRENCY";
+  if (/MUTUAL_FUND|^FUND$|INDEX_FUND/.test(s)) return "FUND";
+  return "OTHER";
+}
 
 export interface ParseResult {
   holdings: Holding[];
@@ -66,7 +80,7 @@ export function parseBrokerCsv(csvText: string, brokerHint?: Broker): ParseResul
   for (let i = 0; i < Math.min(rows.length, 25); i++) {
     const row = rows[i].map((c) => String(c ?? "").trim());
     let s = row.findIndex((c) => SYMBOL_RE.test(c));
-    if (s === -1) s = row.findIndex((c) => SYMBOL_LOOSE_RE.test(c) && c.length < 40);
+    if (s === -1) s = row.findIndex((c) => SYMBOL_LOOSE_RE.test(c) && !/type/i.test(c) && c.length < 40);
     let q = row.findIndex((c) => QTY_RE.test(c));
     if (q === -1) q = row.findIndex((c) => QTY_LOOSE_RE.test(c) && !/pledged|discrepant|long term/i.test(c));
     if (s !== -1 && q !== -1) {
@@ -103,8 +117,10 @@ export function parseBrokerCsv(csvText: string, brokerHint?: Broker): ParseResul
   const avgCol = header.findIndex((c) => AVG_RE.test(c) && !/unreali[sz]ed|market|total|book/i.test(c));
   // Wealthsimple-style TOTAL cost columns ("Book Cost") → divide by qty later.
   const totalCostCol = header.findIndex((c) => TOTAL_COST_RE.test(c) && !/unreali[sz]ed|market/i.test(c));
-  const nameCol = header.findIndex((c) => NAME_RE.test(c) && !SYMBOL_LOOSE_RE.test(c));
-  const ccyCol = header.findIndex((c) => CURRENCY_RE.test(c));
+  const nameCol = header.findIndex((c) => NAME_RE.test(c) && !SYMBOL_LOOSE_RE.test(c) && !ACCOUNT_RE.test(c));
+  const ccyCol = header.findIndex((c) => CURRENCY_RE.test(c) && !SECTYPE_RE.test(c));
+  const secTypeCol = header.findIndex((c) => SECTYPE_RE.test(c));
+  const accountCol = header.findIndex((c) => ACCOUNT_RE.test(c) && !NAME_RE.test(c));
   const isinCol = header.findIndex((c) => ISIN_RE.test(c));
   const sectorCol = header.findIndex((c) => SECTOR_RE.test(c));
   void isinCol;
@@ -116,13 +132,21 @@ export function parseBrokerCsv(csvText: string, brokerHint?: Broker): ParseResul
     );
   }
 
-  const holdings: Holding[] = [];
+  const rawHoldings: Holding[] = [];
+  let cashRows = 0;
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i];
     const raw = String(row[symCol] ?? "").trim();
     if (!raw) continue;
     // skip totals/footer rows
     if (/^total|^grand total|^\d+ items?/i.test(raw)) continue;
+
+    const secType = secTypeCol !== -1 ? normalizeSecurityType(String(row[secTypeCol] ?? "")) : undefined;
+    // cash balances (Security Type = CURRENCY, or bare CAD/USD/INR symbols) are money, not holdings
+    if (secType === "CURRENCY" || (secTypeCol === -1 && /^(CAD|USD|INR)$/i.test(raw))) {
+      cashRows++;
+      continue;
+    }
 
     const qty = toNumber(row[qtyCol]);
     if (qty === undefined || qty === 0) continue;
@@ -135,7 +159,7 @@ export function parseBrokerCsv(csvText: string, brokerHint?: Broker): ParseResul
     const ccyHint = ccyCol !== -1 ? String(row[ccyCol] ?? "") : undefined;
     const yahooSymbol = guessYahooSymbol(raw, broker === "manual" ? "wealthsimple" : broker, ccyHint);
 
-    holdings.push({
+    rawHoldings.push({
       id: nextId(),
       broker,
       rawSymbol: raw,
@@ -144,9 +168,54 @@ export function parseBrokerCsv(csvText: string, brokerHint?: Broker): ParseResul
       quantity: qty,
       avgCost: avg ?? 0,
       currency: currencyForSymbol(yahooSymbol),
+      securityType: secType,
+      account: accountCol !== -1 ? String(row[accountCol] ?? "").trim() || undefined : undefined,
     });
   }
 
+  // ---- merge the same symbol across accounts (multi-account exports) ----
+  // Quantities add; average cost is the cost-weighted blend (rows without a
+  // known avg contribute shares but no cost, and we say so).
+  const bySymbol = new Map<string, Holding[]>();
+  for (const h of rawHoldings) {
+    const k = h.yahooSymbol.toUpperCase();
+    bySymbol.set(k, [...(bySymbol.get(k) ?? []), h]);
+  }
+  const holdings: Holding[] = [];
+  const mergeNotes: string[] = [];
+  for (const group of bySymbol.values()) {
+    if (group.length === 1) {
+      holdings.push(group[0]);
+      continue;
+    }
+    const qty = group.reduce((a, h) => a + h.quantity, 0);
+    const costed = group.filter((h) => h.avgCost > 0);
+    const costQty = costed.reduce((a, h) => a + h.quantity, 0);
+    const avg = costQty > 0 ? costed.reduce((a, h) => a + h.quantity * h.avgCost, 0) / costQty : 0;
+    const accounts = [...new Set(group.map((h) => h.account).filter((a): a is string => !!a))];
+    const first = group[0];
+    holdings.push({
+      ...first,
+      quantity: qty,
+      avgCost: avg,
+      securityType: group.map((h) => h.securityType).find((t) => t !== undefined),
+      account: accounts.length ? accounts.join(" + ") : first.account,
+    });
+    mergeNotes.push(
+      `${first.rawSymbol}: merged ${group.length} rows${accounts.length > 1 ? ` (${accounts.join(", ")})` : ""} → ${qty} sh @ weighted avg ${avg ? avg.toFixed(2) : "n/a"}`
+    );
+    if (costed.length && costed.length < group.length) {
+      mergeNotes.push(`${first.rawSymbol}: ${group.length - costed.length} merged row(s) had no cost — average uses the rows that did.`);
+    }
+  }
+
+  if (cashRows) {
+    warnings.push(`${cashRows} cash row${cashRows === 1 ? "" : "s"} (Security Type: currency) excluded — balances aren't analyzable holdings.`);
+  }
+  if (mergeNotes.length) {
+    warnings.push(...mergeNotes.slice(0, 5));
+    if (mergeNotes.length > 5) warnings.push(`…and ${mergeNotes.length - 5} more merges.`);
+  }
   if (!holdings.length) {
     warnings.push("Header row found, but no holdings rows could be read beneath it.");
   }

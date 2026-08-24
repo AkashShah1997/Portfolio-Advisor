@@ -78,7 +78,10 @@ Canada / ~135 US widely-traded names**, editable), any **pasted custom list** (�
 your own holdings — entirely client-side: **Two-year keepers** (quality + zero red flags + sane
 price for a 2-year-minimum hold), **Coffee Can** (Mukherjea), **Magic Formula** (Greenblatt),
 **QGLP** (Agrawal), **Dividend compounders**, **Fortress balance sheets**, **GARP / PEG ≤ 1**
-(Lynch), **Quality in the buy zone** (Damani/Graham) — plus a **raw-fundamentals custom builder**:
+(Lynch), **Quality in the buy zone** (Damani/Graham) — and **Consensus picks**: the names that pass
+**≥3 of the 8 screens at once** (Magic Formula counts only its top 10), ranked by how many agree,
+with the agreeing screens listed per row. The screening-universe card surfaces the same thing as an
+"almost every buy-list agrees on" strip. Plus a **raw-fundamentals custom builder**:
 min/max P/E ("P/E at least…" included), PEG, P/B, D/E, interest cover, ROCE, revenue/EPS CAGR,
 dividend yield, payout, FCF yield, market cap, red flags, no-loss-years, buy-zone-only,
 exclude-owned. Scan results are **cached on-device for 24h** and refresh incrementally, so screens
@@ -176,6 +179,11 @@ or click **"load a sample portfolio"** inside either market.
   auto-detected; symbols get `.NS` (series suffixes like `-BE` stripped).
 - **Wealthsimple** — any CSV with Symbol / Quantity / (Average cost **or** total Book Cost) /
   Currency. CAD rows get `.TO`; USD rows stay US; book-cost totals convert to per-share.
+  **Multi-account exports are handled**: the same symbol across TFSA/RRSP/personal accounts is
+  merged into one position (quantities added, cost-weighted average, accounts remembered and shown
+  on the card); a **Security Type** column (EQUITY / EXCHANGE_TRADED_FUND / CURRENCY) is read as the
+  authoritative stock-vs-ETF flag — broker's word beats Yahoo's label beats name guessing — and
+  **cash rows are excluded** with a note instead of being "analyzed" as stocks.
 - Anything the auto-guess gets wrong is editable inline (validate against Yahoo search with
   **check**). Imports replace positions but keep your watchlist.
 
@@ -187,7 +195,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # portfolio series, health, projection, FX, metric glossary,
                                      # snowflake axes, strengths/risks, benchmark indexing, ETF
                                      # detection/catalog/fee-math/verdicts, ETF fallbacks,
-                                     # the plain-words action plan (260+ checks)
+                                     # multi-account merging, security-type priority,
+                                     # buy-list consensus, the action plan (280 checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,
