@@ -25,6 +25,8 @@ interface Profile {
   lossYear?: number; // index (0..4) of a loss-making year, if any
   divYield?: number;
   shares?: number; // shares outstanding, for realistic per-share numbers
+  px?: number; // fixed quote price override (used for ETF units)
+  etf?: boolean; // marks an exchange-traded fund (quoteType ETF)
 }
 
 const CURATED: Record<string, Profile> = {
@@ -40,10 +42,16 @@ const CURATED: Record<string, Profile> = {
   "CNR.TO": { name: "Canadian National Railway", sector: "Industrials", industry: "Railroads", currency: "CAD", baseRevenue: 17.5e9, revGrowth: 0.05, netMargin: 0.31, roe: 0.27, debtToEquity: 0.95, pe: 19, growthNoise: 0.04, divYield: 0.022, shares: 0.63e9 },
   AAPL: { name: "Apple Inc", sector: "Technology", industry: "Consumer Electronics", currency: "USD", baseRevenue: 405e9, revGrowth: 0.05, netMargin: 0.25, roe: 1.4, debtToEquity: 1.6, pe: 32, growthNoise: 0.04, divYield: 0.005, shares: 15.0e9 },
   MSFT: { name: "Microsoft Corp", sector: "Technology", industry: "Software — Infrastructure", currency: "USD", baseRevenue: 280e9, revGrowth: 0.14, netMargin: 0.35, roe: 0.36, debtToEquity: 0.3, pe: 35, growthNoise: 0.03, divYield: 0.007, shares: 7.43e9 },
+  // ETF units — the stock pipeline only needs a name/price (the scorecard says
+  // "insufficient data" by design); real fund analysis lives in mocketf.ts.
+  "NIFTYBEES.NS": { name: "Nippon India ETF Nifty 50 BeES", sector: "ETF", industry: "Index ETF — Nifty 50", currency: "INR", baseRevenue: 1e9, revGrowth: 0.1, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 20, growthNoise: 0.02, divYield: 0.01, px: 285, etf: true },
+  "GOLDBEES.NS": { name: "Nippon India ETF Gold BeES", sector: "ETF", industry: "Commodity ETF — Gold", currency: "INR", baseRevenue: 1e9, revGrowth: 0.08, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 20, growthNoise: 0.02, px: 66, etf: true },
+  "XEQT.TO": { name: "iShares Core Equity ETF Portfolio", sector: "ETF", industry: "All-Equity Portfolio ETF", currency: "CAD", baseRevenue: 1e9, revGrowth: 0.09, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 18, growthNoise: 0.02, divYield: 0.017, px: 29, etf: true },
+  "VFV.TO": { name: "Vanguard S&P 500 Index ETF", sector: "ETF", industry: "Index ETF — S&P 500", currency: "CAD", baseRevenue: 1e9, revGrowth: 0.11, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 22, growthNoise: 0.02, divYield: 0.011, px: 148, etf: true },
 };
 
 /** Small deterministic PRNG so unknown symbols still get stable, plausible data. */
-function hashSeed(s: string): number {
+export function hashSeed(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -51,7 +59,7 @@ function hashSeed(s: string): number {
   }
   return h >>> 0;
 }
-function mulberry(seed: number) {
+export function mulberry(seed: number) {
   let a = seed;
   return () => {
     a |= 0;
@@ -146,7 +154,7 @@ export function mockStockData(symbol: string): StockData {
 
   const latest = years[years.length - 1];
   const eps = latest.dilutedEPS ?? 1;
-  const price = Math.max(1, eps * p.pe);
+  const price = p.px ?? Math.max(1, eps * p.pe);
 
   // 5y monthly price path ending at `price`.
   const prices: PricePoint[] = [];
@@ -175,6 +183,7 @@ export function mockStockData(symbol: string): StockData {
       name: p.name,
       price,
       currency: p.currency,
+      quoteType: p.etf ? "ETF" : "EQUITY",
       exchange: symbol.endsWith(".NS") ? "NSE" : symbol.endsWith(".TO") ? "Toronto" : "NasdaqGS",
       marketCap: price * (latest.shares ?? 1e9),
       trailingPE: p.pe,
@@ -200,11 +209,12 @@ export function mockStockData(symbol: string): StockData {
       // payout ≈ DPS/EPS = dividendYield × P/E, capped at a plausible level
       payoutRatio: p.divYield ? Math.min(0.85, p.divYield * p.pe) : 0,
       // deterministic sell-side context: target tracks quality, count tracks size
-      targetMeanPrice: price * (p.roe >= 0.15 ? 1.12 : 0.97),
-      recommendationKey: p.roe >= 0.15 ? "buy" : "hold",
-      numberOfAnalystOpinions: 8 + (hashSeed(symbol) % 25),
+      targetMeanPrice: p.etf ? undefined : price * (p.roe >= 0.15 ? 1.12 : 0.97),
+      recommendationKey: p.etf ? undefined : p.roe >= 0.15 ? "buy" : "hold",
+      numberOfAnalystOpinions: p.etf ? undefined : 8 + (hashSeed(symbol) % 25),
     },
-    years,
+    // fund units carry no company statements — the ETFs tab judges them instead
+    years: p.etf ? [] : years,
     prices,
     fetchedAt: new Date().toISOString(),
     mock: true,

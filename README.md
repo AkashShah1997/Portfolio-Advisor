@@ -75,6 +75,19 @@ dividend yield, payout, FCF yield, market cap, red flags, no-loss-years, buy-zon
 exclude-owned. Scan results are **cached on-device for 24h** and refresh incrementally, so screens
 stay populated between sessions; failed names are listed with one-click retry.
 
+**ETFs** — fund units can't be judged on stock pillars, so they get the **Bogle lens instead of the
+Buffett lens**: every held ETF is analyzed on what actually decides passive outcomes — **MER** (live
+from Yahoo when available, else a hand-checked approximate table), what it compounds into (**your
+fees in ₹/$ per year and over 10 years**), AUM/closure risk, top-10 concentration, sector mix,
+trailing returns, and **duplicate exposure** (two funds tracking the same index = two fee meters,
+one exposure). Each fund gets a verdict — **Core add-worthy / Hold / Cheaper twin exists / Reduce**
+— with the evidence written out, plus a **"same exposure, lower fee" table** (Nifty 50, Next 50,
+midcap, gold, bank, S&P 500, TSX, all-in-one, NASDAQ, dividend, bond categories for both markets)
+showing exactly what the switch saves per year and per decade, with the capital-gains-tax caveat
+stated. Overweight commodity/thematic positions get flagged against the classic 5–10% cap. An
+**"inspect any ETF"** box runs the same analysis on any symbol before you buy it. ETF rows on the
+Overview link here instead of pretending the stock scorecard applies.
+
 **Smart money** — two honest lenses on what serious long-horizon capital is doing. (1)
 **Superinvestor conviction moves**: a hand-picked bench of nine managers with decades-long public
 records (Buffett's Berkshire, Terry Smith's Fundsmith, Akre, Li Lu's Himalaya, Chris Hohn's TCI,
@@ -159,7 +172,8 @@ or click **"load a sample portfolio"** inside either market.
 MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, decisions, screeners,
                                      # fundamentals fallbacks, journey, scan cache, OHLC history,
                                      # portfolio series, health, projection, FX, metric glossary,
-                                     # snowflake axes, strengths/risks, benchmark indexing (200+ checks)
+                                     # snowflake axes, strengths/risks, benchmark indexing, ETF
+                                     # detection/catalog/fee-math/verdicts (240+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

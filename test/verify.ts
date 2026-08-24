@@ -17,6 +17,10 @@ import { incomeAxis, portfolioSnowflake, snowflakeOf, SNOWFLAKE_AXES } from "../
 import { strengthsAndRisks } from "../lib/insights";
 import { benchmarkCompare, monthlyCloses } from "../lib/portfolio";
 import type { Journey } from "../lib/journey";
+import { isEtfHolding, mapFundSummary, fundDataEmpty } from "../lib/etf";
+import { catalogMer, categoryOf, ETF_CATALOG } from "../lib/etfcatalog";
+import { assessAll, feeDrag, merBandOf } from "../lib/etfscore";
+import { mockEtfData } from "../lib/mocketf";
 import { mapStatementHistory, parseTimeseries } from "../lib/fundamentals";
 import {
   buildTickerMap,
@@ -52,7 +56,11 @@ console.log("\n== Zerodha CSV parsing ==");
 {
   const csv = readFileSync("public/samples/zerodha-holdings-sample.csv", "utf8");
   const res = parseBrokerCsv(csv, "zerodha");
-  check("5 holdings parsed", res.holdings.length === 5, `got ${res.holdings.length}`);
+  check("7 holdings parsed (incl. 2 ETFs)", res.holdings.length === 7, `got ${res.holdings.length}`);
+  check(
+    "ETF rows map to .NS symbols",
+    res.holdings.find((h) => h.rawSymbol === "NIFTYBEES")?.yahooSymbol === "NIFTYBEES.NS"
+  );
   const rel = res.holdings.find((h) => h.rawSymbol === "RELIANCE");
   check("RELIANCE → RELIANCE.NS", rel?.yahooSymbol === "RELIANCE.NS", rel?.yahooSymbol ?? "missing");
   check("RELIANCE qty=40", rel?.quantity === 40);
@@ -75,7 +83,11 @@ console.log("\n== Wealthsimple CSV parsing (Book Cost = total) ==");
 {
   const csv = readFileSync("public/samples/wealthsimple-holdings-sample.csv", "utf8");
   const res = parseBrokerCsv(csv, "wealthsimple");
-  check("5 holdings parsed", res.holdings.length === 5, `got ${res.holdings.length}`);
+  check("6 holdings parsed (incl. XEQT)", res.holdings.length === 6, `got ${res.holdings.length}`);
+  check(
+    "XEQT → XEQT.TO via CAD hint",
+    res.holdings.find((h) => h.rawSymbol === "XEQT")?.yahooSymbol === "XEQT.TO"
+  );
   const shop = res.holdings.find((h) => h.rawSymbol === "SHOP");
   check("SHOP → SHOP.TO via CAD hint", shop?.yahooSymbol === "SHOP.TO", shop?.yahooSymbol ?? "missing");
   check("SHOP avg = 1425/15 = 95", Math.abs((shop?.avgCost ?? 0) - 95) < 1e-9, String(shop?.avgCost));
@@ -1090,6 +1102,147 @@ console.log("\n== Benchmark comparison (indexed to 100) ==");
   // the mock history endpoint serves any symbol, so the bench toggle works offline
   const nifty = mockHistory("^NSEI", "5y");
   check("mock history covers benchmark symbols for offline/e2e use", nifty.length > 100);
+}
+
+console.log("\n== ETF detection & catalog ==");
+{
+  check(
+    "detects ETFs by quoteType, symbol pattern and name",
+    isEtfHolding("NIFTYBEES.NS") &&
+      isEtfHolding("XEQT.TO", "iShares Core Equity ETF Portfolio") &&
+      isEtfHolding("ANY", undefined, "ETF") &&
+      isEtfHolding("GOLDIETF.NS") &&
+      !isEtfHolding("RELIANCE.NS", "Reliance Industries Ltd", "EQUITY") &&
+      !isEtfHolding("TCS.NS", "Tata Consultancy Services")
+  );
+
+  const syms = ETF_CATALOG.flatMap((c) => c.options.map((o) => o.symbol));
+  check("catalog symbols are unique", new Set(syms).size === syms.length);
+  check(
+    "catalog MERs are sane fractions (0 < mer < 1.5%/yr)",
+    ETF_CATALOG.every((c) => c.options.every((o) => o.mer > 0 && o.mer < 0.015))
+  );
+  check(
+    "catalog symbols carry the right exchange suffix",
+    ETF_CATALOG.every((c) =>
+      c.options.every((o) => (c.market === "india" ? o.symbol.endsWith(".NS") : o.symbol.endsWith(".TO")))
+    )
+  );
+  check(
+    "every category has ≥2 options (else 'alternatives' is meaningless)",
+    ETF_CATALOG.every((c) => c.options.length >= 2)
+  );
+
+  // category matching — narrower before broader
+  check("NIFTYBEES → Nifty 50 trackers", categoryOf("india", "NIFTYBEES.NS", "Nippon India ETF Nifty 50 BeES")?.key === "in-nifty50");
+  check("JUNIORBEES → Next 50 (not Nifty 50)", categoryOf("india", "JUNIORBEES.NS", "Nippon India ETF Nifty Next 50 Junior BeES")?.key === "in-next50");
+  check("BANKBEES → Bank (not Nifty 50)", categoryOf("india", "BANKBEES.NS", "Nippon India ETF Nifty Bank BeES")?.key === "in-bank");
+  check("GOLDBEES → gold", categoryOf("india", "GOLDBEES.NS", "Nippon India ETF Gold BeES")?.key === "in-gold");
+  check("MID150BEES → midcap", categoryOf("india", "MID150BEES.NS", "Nippon India ETF Nifty Midcap 150")?.key === "in-midcap");
+  check("VFV → S&P 500 (CAD)", categoryOf("canada", "VFV.TO", "Vanguard S&P 500 Index ETF")?.key === "ca-sp500");
+  check("XEQT → all-in-one equity", categoryOf("canada", "XEQT.TO", "iShares Core Equity ETF Portfolio")?.key === "ca-allequity");
+  check("XIU → TSX broad (not S&P 500)", categoryOf("canada", "XIU.TO", "iShares S&P/TSX 60 Index ETF")?.key === "ca-tsx");
+  check("XAW → global ex-Canada", categoryOf("canada", "XAW.TO", "iShares Core MSCI All Country World ex Canada Index ETF")?.key === "ca-intl");
+  check("catalogMer finds a held symbol's approximate fee", Math.abs((catalogMer("GOLDBEES.NS")?.mer ?? 0) - 0.0082) < 1e-9);
+}
+
+console.log("\n== ETF fee math & MER bands ==");
+{
+  // ₹1L at 10% growth: 1% fee costs ~₹22.9k over 10y; 0.04% costs ~₹1k
+  const d1 = feeDrag(100000, 0.01, 10);
+  const d004 = feeDrag(100000, 0.0004, 10);
+  check("fee drag: 1%/yr on ₹1L ≈ ₹22–24k over 10y", d1 > 21000 && d1 < 25000, d1.toFixed(0));
+  check("fee drag: 0.04%/yr stays under ₹1.1k", d004 > 800 && d004 < 1100, d004.toFixed(0));
+  check("fee drag grows with fee, value and years", feeDrag(200000, 0.01, 10) > d1 && feeDrag(100000, 0.02, 10) > d1 && feeDrag(100000, 0.01, 20) > d1);
+  check("fee drag is 0 for zero fee/value", feeDrag(0, 0.01, 10) === 0 && feeDrag(100000, 0, 10) === 0);
+
+  check(
+    "MER bands: 0.04% core = excellent, 0.82% commodity = high, 0.82% core = expensive",
+    merBandOf(0.0004, "core") === "excellent" &&
+      merBandOf(0.0082, "commodity") === "high" &&
+      merBandOf(0.0082, "core") === "expensive" &&
+      merBandOf(undefined, "core") === "unknown"
+  );
+}
+
+console.log("\n== ETF verdict engine ==");
+{
+  const nifty = mockEtfData("NIFTYBEES.NS");
+  const gold = mockEtfData("GOLDBEES.NS");
+  const total = 585000;
+
+  // held: cheap core (6%) + overweight expensive commodity (12.4%)
+  const out = assessAll(
+    [
+      { etf: nifty, value: 34200 },
+      { etf: gold, value: 72600 },
+    ],
+    { market: "india", portfolioTotal: total }
+  );
+  const aN = out.find((a) => a.symbol === "NIFTYBEES.NS")!;
+  const aG = out.find((a) => a.symbol === "GOLDBEES.NS")!;
+  check("cheap broad core → INCREASE", aN.verdict === "INCREASE", aN.verdict);
+  check("overweight pricey commodity → REDUCE", aG.verdict === "REDUCE", aG.verdict);
+  check("gold reasons name the overweight AND the cheaper twin", aG.reasons.some((r) => /commodity|insurance/i.test(r)) && aG.alternatives.length > 0);
+  check("gold's cheapest alternative is ICICI (0.50%)", aG.alternatives[0]?.symbol === "GOLDIETF.NS");
+  check(
+    "switch savings math: value × ΔMER",
+    Math.abs((aG.alternatives[0]?.savesPerYear ?? 0) - 72600 * (0.0082 - 0.005)) < 1
+  );
+  check("annual fee = value × MER", Math.abs((aG.annualFee ?? 0) - 72600 * 0.0082) < 1);
+  check("results sorted by weight (gold first)", out[0].symbol === "GOLDBEES.NS");
+
+  // duplication: two Nifty-50 funds — pricier one told to consolidate
+  const sbi = { ...mockEtfData("SETFNIF50.NS"), name: "SBI Nifty 50 ETF", category: "Large-Cap Index (Nifty 50)", mer: 0.0004 };
+  const hdfc = { ...mockEtfData("HDFCNIFTY.NS"), name: "HDFC Nifty 50 ETF", category: "Large-Cap Index (Nifty 50)", mer: 0.0007 };
+  const dup = assessAll(
+    [
+      { etf: sbi, value: 50000 },
+      { etf: hdfc, value: 50000 },
+    ],
+    { market: "india", portfolioTotal: 500000 }
+  );
+  const aH = dup.find((a) => a.symbol === "HDFCNIFTY.NS")!;
+  const aS = dup.find((a) => a.symbol === "SETFNIF50.NS")!;
+  check("duplicate exposure: pricier twin flagged SWITCH", aH.verdict === "SWITCH" && aH.reasons.some((r) => /duplicates/i.test(r)));
+  check("duplicate exposure: cheaper twin keeps a caution, not a switch", aS.verdict !== "SWITCH" && aS.cautions.some((c) => /overlaps/i.test(c)));
+  check("overlap lists the sibling symbol", aH.overlapWith.includes("SETFNIF50.NS"));
+
+  // no data at all → UNKNOWN
+  const empty = assessAll(
+    [{ etf: { symbol: "XYZ.NS", trailing: {}, annual: [], top: [], sectors: [], split: {}, fetchedAt: "t" }, value: 10000 }],
+    { market: "india", portfolioTotal: 100000 }
+  );
+  check("no fund data anywhere → UNKNOWN verdict", empty[0].verdict === "UNKNOWN");
+}
+
+console.log("\n== ETF mapper & mocks ==");
+{
+  // tolerant mapping: plain numbers AND {raw} wrappers
+  const mapped = mapFundSummary("VFV.TO", {
+    price: { longName: "Vanguard S&P 500 Index ETF", regularMarketPrice: { raw: 148.2 }, currency: "CAD", quoteType: "ETF" },
+    fundProfile: { family: "Vanguard", categoryName: "US Equity", feesExpensesInvestment: { annualReportExpenseRatio: { raw: 0.0009 } } },
+    defaultKeyStatistics: { totalAssets: 2.1e10, yield: 0.011 },
+    fundPerformance: {
+      trailingReturns: { oneYear: 0.18, threeYear: { raw: 0.14 }, fiveYear: 0.135 },
+      annualTotalReturns: { returns: [{ year: "2024", annualValue: { raw: 0.22 } }, { year: "2025", annualValue: 0.1 }] },
+    },
+    topHoldings: {
+      holdings: [{ symbol: "AAPL", holdingName: "Apple Inc", holdingPercent: { raw: 0.07 } }],
+      stockPosition: 0.998,
+      sectorWeightings: [{ technology: { raw: 0.32 } }, { financial_services: 0.13 }],
+    },
+  });
+  check("mapper unwraps {raw} and plain values alike", mapped.mer === 0.0009 && mapped.price === 148.2 && mapped.trailing.y3 === 0.14);
+  check("mapper reads AUM, yield, holdings, sectors", mapped.aum === 2.1e10 && mapped.fundYield === 0.011 && mapped.top[0].name === "Apple Inc" && mapped.sectors[0].label === "Technology");
+  check("annual returns sorted ascending by year", mapped.annual[0].year === 2024 && mapped.annual[1].year === 2025);
+  check("fundDataEmpty is false when data exists", !fundDataEmpty(mapped));
+  check("fundDataEmpty is true for a bare payload", fundDataEmpty(mapFundSummary("X", {})));
+
+  const m1 = mockEtfData("NIFTYBEES.NS");
+  check("mock ETF data is deterministic", JSON.stringify({ ...m1, fetchedAt: 0 }) === JSON.stringify({ ...mockEtfData("NIFTYBEES.NS"), fetchedAt: 0 }));
+  check("mock NIFTYBEES mirrors the real fund (0.04%, huge AUM)", m1.mer === 0.0004 && (m1.aum ?? 0) > 1e11 && m1.top.length === 10);
+  check("mock generic fund exists for unknown symbols", mockEtfData("RANDOMX.NS").mer !== undefined);
 }
 
 console.log("\n== Analyst context fields (mock determinism) ==");

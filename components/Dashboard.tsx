@@ -32,6 +32,8 @@ import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 import { compactMoney, HBars, StackedSplit } from "./charts";
 import { Snowflake } from "./Snowflake";
 import { StockCard } from "./StockCard";
+import { EtfPanel } from "./EtfPanel";
+import { isEtfHolding } from "@/lib/etf";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
 import { Matrix } from "./Matrix";
@@ -64,6 +66,7 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "decisions", label: "Decisions" },
   { id: "screeners", label: "Screeners" },
+  { id: "etfs", label: "ETFs" },
   { id: "smart", label: "Smart money" },
   { id: "chart", label: "Chart" },
   { id: "health", label: "Health & income" },
@@ -216,6 +219,13 @@ export function Dashboard({
 
   const ok = useMemo(() => invRows.filter((r) => r.scorecard && r.data), [invRows]);
   const failed = useMemo(() => invRows.filter((r) => r.error || !r.data), [invRows]);
+  const etfCount = useMemo(
+    () =>
+      invRows.filter((r) =>
+        isEtfHolding(r.holding.yahooSymbol, r.data?.quote.name ?? r.holding.name, r.data?.quote.quoteType)
+      ).length,
+    [invRows]
+  );
   const weakCount = ok.filter(
     (r) => r.scorecard!.verdict === "WATCH" || r.scorecard!.verdict === "REVIEW_EXIT"
   ).length;
@@ -666,6 +676,16 @@ export function Dashboard({
                   {weakCount}
                 </span>
               )}
+              {t.id === "etfs" && etfCount > 0 && (
+                <span
+                  className={`ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 py-[1px] ${
+                    tab === t.id ? "bg-white/25 text-white" : "bg-series-1/12 text-series-1"
+                  }`}
+                  title={`${etfCount} ETF(s) held — analyzed on this tab`}
+                >
+                  {etfCount}
+                </span>
+              )}
             </span>
           </button>
         ))}
@@ -825,6 +845,10 @@ export function Dashboard({
             onAddWatch={addWatch}
             hydrate={hydrate}
           />
+        )}
+
+        {tab === "etfs" && (
+          <EtfPanel rows={rows} market={market} fx={fx} portfolioTotal={summary.totalCurrent} />
         )}
 
         {tab === "smart" && <SmartMoney rows={rows} market={market} onAddWatch={(s) => addWatch(s)} />}

@@ -9,6 +9,7 @@ import { buildValuation } from "@/lib/valuation";
 import { buildJourney } from "@/lib/journey";
 import { strengthsAndRisks } from "@/lib/insights";
 import { describeSnowflake, snowflakeOf } from "@/lib/snowflake";
+import { isEtfHolding } from "@/lib/etf";
 import { Badge, Card, InfoTip, Meter, Spinner } from "./ui";
 import { Snowflake } from "./Snowflake";
 import { EpsBars, PriceLine, RevenueEarnings } from "./charts";
@@ -197,6 +198,7 @@ export function StockCard({
 
   const vm = VERDICT_META[scorecard.verdict];
   const q = data.quote;
+  const isEtf = isEtfHolding(holding.yahooSymbol, q.name ?? holding.name, q.quoteType);
 
   const runAi = async () => {
     if (!aiKey) return;
@@ -255,6 +257,11 @@ export function StockCard({
               <span className="font-semibold text-[15px]">{q.name ?? holding.yahooSymbol}</span>
               <span className="text-muted text-[12px] tnum">{holding.yahooSymbol}</span>
               {q.sector && <Badge tone="neutral">{q.sector}</Badge>}
+              {isEtf && (
+                <Badge tone="muted" icon="◫">
+                  ETF → see the ETFs tab
+                </Badge>
+              )}
               {isWatch && (
                 <Badge tone="muted" icon="☆">
                   watchlist
@@ -297,7 +304,11 @@ export function StockCard({
       </button>
 
       {/* verdict line */}
-      <p className="text-[12.5px] text-ink-2 mt-2">{scorecard.verdictText}</p>
+      <p className="text-[12.5px] text-ink-2 mt-2">
+        {isEtf && scorecard.verdict === "INSUFFICIENT_DATA"
+          ? "Fund units aren't judged on the four stock pillars — open the ETFs tab for the fee-first fund analysis (MER, size, duplication, cheaper twins)."
+          : scorecard.verdictText}
+      </p>
       {!open && scorecard.redFlags.length > 0 && (
         <ul className="mt-1.5 space-y-0.5">
           {scorecard.redFlags.map((f, i) => (

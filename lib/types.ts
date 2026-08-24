@@ -69,6 +69,7 @@ export interface QuoteInfo {
   name?: string;
   price?: number;
   currency?: Currency | string;
+  quoteType?: string; // "EQUITY" | "ETF" | "MUTUALFUND" | …
   exchange?: string;
   marketCap?: number;
   trailingPE?: number;

@@ -42,6 +42,9 @@ if (!(await page.locator("text=the Buffett matrix").count())) throw new Error("m
 await page.waitForSelector("text=Portfolio snowflake", { timeout: 10000 });
 if (!(await page.locator("[data-testid=snowflake]").count())) throw new Error("portfolio snowflake missing");
 
+// ---- ETF holdings are routed to the ETFs tab ----
+await page.waitForSelector("text=see the ETFs tab", { timeout: 10000 });
+
 // ---- hero chart: benchmark toggle (indexed vs NIFTY 50) ----
 await page.getByRole("button", { name: /vs NIFTY 50/ }).click();
 await page.waitForSelector("text=Your holdings", { timeout: 20000 });
@@ -113,6 +116,25 @@ await page.getByRole("button", { name: /Custom screen/ }).first().click();
 await page.waitForSelector("text=raw fundamentals, your thresholds", { timeout: 5000 });
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${shots}/08-screener-custom.png`, fullPage: true });
+
+// ---- ETFs tab: fee-first fund analysis ----
+await page.locator("button[aria-pressed]").filter({ hasText: /^ETFs/ }).first().click();
+await page.waitForSelector("text=Your ETFs — cost-first analysis", { timeout: 15000 });
+await page.waitForSelector("text=Nippon India ETF Gold BeES", { timeout: 25000 });
+await page.waitForSelector("text=Nippon India ETF Nifty 50 BeES", { timeout: 25000 });
+await page.waitForSelector("text=Weighted MER", { timeout: 5000 });
+await page.waitForSelector("text=Same exposure, lower fee", { timeout: 10000 });
+if (!(await page.locator("text=Trim this one").count())) throw new Error("gold REDUCE verdict missing");
+if (!(await page.locator("text=add to on autopilot").count())) throw new Error("core INCREASE verdict missing");
+if (!(await page.locator("[data-infotip=mer]").count())) throw new Error("MER info tooltip missing");
+const bodyEtf = await page.locator("body").textContent();
+if (!/GOLDIETF|ICICI Prudential Gold/.test(bodyEtf)) throw new Error("cheaper gold alternative missing");
+// inspect an arbitrary fund by symbol
+await page.getByPlaceholder("JUNIORBEES.NS").fill("JUNIORBEES.NS");
+await page.getByRole("button", { name: "Analyze fund" }).click();
+await page.waitForSelector("text=Junior BeES", { timeout: 15000 });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/19-etfs.png`, fullPage: true });
 
 // ---- smart money tab ----
 await page.getByRole("button", { name: "Smart money" }).click();

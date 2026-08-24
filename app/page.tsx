@@ -32,6 +32,8 @@ const SAMPLES: Record<Market, Array<[string, string, number, number]>> = {
     ["INFY", "INFY.NS", 30, 1450],
     ["TATAMOTORS", "TATAMOTORS.NS", 100, 640],
     ["ITC", "ITC.NS", 200, 415],
+    ["NIFTYBEES", "NIFTYBEES.NS", 120, 232],
+    ["GOLDBEES", "GOLDBEES.NS", 1100, 54],
   ],
   canada: [
     ["SHOP", "SHOP.TO", 15, 95],
@@ -40,6 +42,7 @@ const SAMPLES: Record<Market, Array<[string, string, number, number]>> = {
     ["CNR", "CNR.TO", 12, 155],
     ["AAPL", "AAPL", 10, 175],
     ["MSFT", "MSFT", 6, 330],
+    ["XEQT", "XEQT.TO", 180, 24],
   ],
 };
 

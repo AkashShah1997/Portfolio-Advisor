@@ -201,6 +201,38 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     better: "Higher means more safety in the price. A 90-quality business at a 20-valuation score is a great company being a bad stock.",
   },
 
+  // ---- ETFs ----
+  mer: {
+    name: "MER — total expense ratio",
+    what: "What the fund house skims off every year, taken silently out of the NAV — you never see the bill, only the slightly lower return. (India calls it TER.)",
+    better: "Lower is better, always: it's the one number about the future you know today. Index funds ≤0.2% is the modern bar; ~1% compounds into a double-digit slice of your wealth over decades — Bogle's whole argument.",
+  },
+  aum: {
+    name: "AUM — fund size",
+    what: "Total assets the fund manages. Big funds trade with tight bid-ask spreads and don't get shut down.",
+    better: "Bigger is safer for a passive holder; tiny funds (under ~₹100 Cr / $100M) risk wide spreads, tracking wobble, and closure/merger.",
+  },
+  feeDrag: {
+    name: "Fee drag",
+    what: "What today's fee compounds into: the gap between growing at the market's rate and growing at (market − MER), applied to your actual position over 10 years.",
+    better: "Smaller is better — the point of the number is that a “tiny” 0.8%/yr quietly becomes a five-figure sum over a decade of compounding.",
+  },
+  etfOverlap: {
+    name: "Duplicate exposure",
+    what: "Two funds tracking the same index own the same stocks — you're paying two fee meters for one exposure, and it looks more diversified than it is.",
+    better: "Consolidate into the cheapest, most liquid one. Diversification means different assets, not more tickers.",
+  },
+  trailingReturn: {
+    name: "Trailing returns (annualized)",
+    what: "The fund's compound annual return over the last 1 / 3 / 5 years, distributions included — mostly a mirror of the index it tracks.",
+    better: "For an index fund, judge the fee and the index, not last year's number: chasing the hottest recent return is how most fund investors underperform their own funds.",
+  },
+  topWeight: {
+    name: "Top-10 concentration",
+    what: "The share of the fund sitting in its ten biggest holdings.",
+    better: "Lower is more diversified. Broad indices run ~30–60%; above ~60% the “index fund” is really a bet on a handful of names.",
+  },
+
   // ---- extras ----
   coffeeCan: {
     name: "Coffee Can test",

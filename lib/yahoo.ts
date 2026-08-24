@@ -2,6 +2,8 @@ import "server-only";
 import YahooFinance from "yahoo-finance2";
 import type { PricePoint, QuoteInfo, StockData, YearFinancials } from "./types";
 import { mockHistory, mockOwnership, mockStockData, MOCK_ENABLED } from "./mock";
+import { mockEtfData } from "./mocketf";
+import { mapFundSummary, type EtfData } from "./etf";
 import { mapOwnership, type OwnershipPayload } from "./ownership";
 import {
   hasSubstance,
@@ -51,6 +53,7 @@ interface YFQuote {
   shortName?: string;
   regularMarketPrice?: number;
   currency?: string;
+  quoteType?: string;
   fullExchangeName?: string;
   marketCap?: number;
   trailingPE?: number;
@@ -215,6 +218,7 @@ export async function getStockData(symbol: string): Promise<StockData> {
     quote.name = q.longName ?? q.shortName;
     quote.price = q.regularMarketPrice;
     quote.currency = q.currency;
+    quote.quoteType = q.quoteType;
     quote.exchange = q.fullExchangeName;
     quote.marketCap = q.marketCap;
     quote.trailingPE = q.trailingPE;
@@ -406,6 +410,39 @@ export async function getOwnership(symbol: string): Promise<OwnershipPayload> {
     )
   )) as Parameters<typeof mapOwnership>[1];
   return mapOwnership(symbol, qs ?? {});
+}
+
+/**
+ * Fund-level data for an ETF: expense ratio (MER), AUM, category, trailing &
+ * annual returns, risk stats, top holdings and sector weights. Coverage is
+ * strong for US/Canadian ETFs, partial for NSE ETFs — absent fields stay
+ * undefined and the caller says so honestly.
+ */
+export async function getEtfData(symbol: string): Promise<EtfData> {
+  if (MOCK_ENABLED) return mockEtfData(symbol);
+  const qs = await politely(() =>
+    yf.quoteSummary(
+      symbol,
+      {
+        modules: [
+          "price",
+          "fundProfile",
+          "topHoldings",
+          "fundPerformance",
+          "defaultKeyStatistics",
+          "summaryDetail",
+        ],
+      },
+      NO_VALIDATE
+    )
+  );
+  const out = mapFundSummary(symbol, qs ?? {});
+  // quoteType sanity: if Yahoo says it's not a fund, still return what we have
+  // (the caller decides) but note it.
+  if (out.quoteType && out.quoteType !== "ETF" && out.quoteType !== "MUTUALFUND") {
+    out.errors = [...(out.errors ?? []), `Yahoo classifies ${symbol} as ${out.quoteType}, not an ETF.`];
+  }
+  return out;
 }
 
 /** USD-based FX via Yahoo as a fallback when frankfurter is unreachable. */
