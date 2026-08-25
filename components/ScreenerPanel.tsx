@@ -4,11 +4,14 @@ import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import type { AnalyzedHolding, Currency } from "@/lib/types";
 import {
+  CAP_TIER_META,
+  capTierOf,
   CONSENSUS_MIN,
   consensusOf,
   runCustom,
   SCREENS,
   toMetricRow,
+  type CapTier,
   type CustomFilter,
   type MetricRow,
 } from "@/lib/screens";
@@ -46,6 +49,7 @@ export function ScreenerPanel({
   hydrate: (symbol: string) => Promise<Hydrated | null>;
 }) {
   const [active, setActive] = useState<string>("two-year");
+  const [capFilter, setCapFilter] = useState<"all" | CapTier>("all");
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [customList, setCustomList] = useState("");
@@ -78,11 +82,29 @@ export function ScreenerPanel({
   const anyThrottled = scanKeys.some((k) => scans[k]?.throttled);
 
   const screen = SCREENS.find((s) => s.id === active);
-  const results = useMemo(() => {
+  const allResults = useMemo(() => {
     if (!dataset.length) return [];
     if (active === "custom") return runCustom(dataset, custom);
     return screen ? screen.apply(dataset) : [];
   }, [dataset, active, custom, screen]);
+
+  // size filter applies on top of EVERY screen (presets, custom, consensus)
+  const results = useMemo(
+    () =>
+      capFilter === "all"
+        ? allResults
+        : allResults.filter((r) => capTierOf(r.marketCap, r.symbol) === capFilter),
+    [allResults, capFilter]
+  );
+
+  const tierCounts = useMemo(() => {
+    const c = { large: 0, mid: 0, small: 0 } as Record<CapTier, number>;
+    for (const r of dataset) {
+      const t = capTierOf(r.marketCap, r.symbol);
+      if (t) c[t]++;
+    }
+    return c;
+  }, [dataset]);
 
   // the "almost every buy list" strip — top names by screen agreement
   const topConsensus = useMemo(() => {
@@ -146,11 +168,14 @@ export function ScreenerPanel({
     <div className="space-y-4">
       {/* dataset status */}
       <Card className="p-4">
-        <SectionTitle sub="Screens run over your holdings + the scanned market universe + any pasted list — every name scored by the same 4-pillar engine, cached on this device for 24h.">
+        <SectionTitle sub="Screens run over your holdings + the scanned market universe + any pasted list — every name scored by the same 4-pillar engine, cached on this device for 24h. The ponds now cover the Nifty 500, the full TSX Composite and the S&P 500 + MidCap 400 — a big FIRST scan takes a while (progress saves as it goes; stop and resume freely), and refreshes only fetch what's missing or stale.">
           Screening universe
         </SectionTitle>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={dataset.length ? "neutral" : "warning"}>{dataset.length} scored names available</Badge>
+          <Badge tone={dataset.length ? "neutral" : "warning"}>
+            {dataset.length} scored names
+            {dataset.length > 0 && ` (${tierCounts.large} large · ${tierCounts.mid} mid · ${tierCounts.small} small)`}
+          </Badge>
           {countries.map((cKey) => {
             const s = scans[cKey];
             return (
@@ -369,6 +394,32 @@ export function ScreenerPanel({
           </>
         )}
 
+        {/* size filter — applies to every screen */}
+        {dataset.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-3 text-[12.5px]">
+            <span className="text-ink-2">
+              Company size <InfoTip k="capTier" />
+            </span>
+            <div className="inline-flex bg-page hairline rounded-lg p-0.5 font-medium">
+              {(["all", "large", "mid", "small"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setCapFilter(t)}
+                  className={`px-2.5 py-0.5 rounded-md transition-colors ${capFilter === t ? "bg-series-1 text-white" : "text-ink-2 hover:text-ink"}`}
+                  aria-pressed={capFilter === t}
+                >
+                  {t === "all" ? "All sizes" : CAP_TIER_META[t].label}
+                </button>
+              ))}
+            </div>
+            {capFilter !== "all" && (
+              <span className="text-muted">
+                {results.length} of {allResults.length} pass at this size
+              </span>
+            )}
+          </div>
+        )}
+
         {dataset.length === 0 ? (
           <p className="text-[13px] text-muted">
             Scan a market (or paste a list) above to populate the screens — your own analyzed holdings are
@@ -376,7 +427,9 @@ export function ScreenerPanel({
           </p>
         ) : results.length === 0 ? (
           <p className="text-[13px] text-muted">
-            Nothing passes right now. Damani would call that information, not failure — patience is a position.
+            {capFilter !== "all" && allResults.length > 0
+              ? `Nothing ${capFilter}-cap passes this screen right now — ${allResults.length} name${allResults.length === 1 ? "" : "s"} pass at other sizes.`
+              : "Nothing passes right now. Damani would call that information, not failure — patience is a position."}
           </p>
         ) : (
           <>
@@ -426,7 +479,11 @@ export function ScreenerPanel({
                         <td className="py-2 pr-3">
                           <div className="font-semibold text-[13px]">
                             {r.symbol} {r.owned && <Badge tone="neutral">owned</Badge>}{" "}
-                            {r.watch && <Badge tone="muted">☆ watch</Badge>}
+                            {r.watch && <Badge tone="muted">☆ watch</Badge>}{" "}
+                            {(() => {
+                              const t = capTierOf(r.marketCap, r.symbol);
+                              return t && t !== "large" ? <Badge tone="muted">{CAP_TIER_META[t].short}</Badge> : null;
+                            })()}
                           </div>
                           <div className="text-[11px] text-muted truncate max-w-[220px]">
                             {r.name} · {r.sector}

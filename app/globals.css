@@ -25,6 +25,29 @@
   color-scheme: light;
 }
 
+/* Dark mode — same roles, night values. Every utility reads var(--color-*),
+   so overriding the tokens re-themes the whole app (charts included via the
+   recharts overrides below). Toggled by data-theme on <html>, saved on-device. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-page: #141417;
+  --color-surface: #1c1c21;
+  --color-ink: #f0efe9;
+  --color-ink-2: #b6b5ae;
+  --color-muted: #85847d;
+  --color-grid: #2c2c33;
+  --color-baseline: #4a4952;
+  --color-series-1: #5b9ce6;
+  --color-series-1-track: #1e3a5f;
+  --color-series-2: #f0854f;
+  --color-series-3: #2fc48d;
+  --color-status-good: #3aba3a;
+  --color-status-warning: #e3a81f;
+  --color-status-serious: #ec8a63;
+  --color-status-critical: #e05252;
+  --color-success-text: #5fce5f;
+}
+
 body {
   background: var(--color-page);
   color: var(--color-ink);
@@ -34,6 +57,9 @@ body {
 
 .hairline {
   border: 1px solid rgba(11, 11, 11, 0.09);
+}
+:root[data-theme="dark"] .hairline {
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .tnum {
@@ -56,12 +82,55 @@ body {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
+:root[data-theme="dark"] .glass {
+  background: rgba(22, 22, 26, 0.82);
+}
+:root[data-theme="dark"] .elev-1 {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 1px 1px rgba(0, 0, 0, 0.3);
+}
+:root[data-theme="dark"] .elev-2 {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    0 8px 24px -12px rgba(0, 0, 0, 0.6);
+}
 
 /* soft brand glow behind the header — light, print-safe */
 .page-glow {
   background:
     radial-gradient(900px 320px at 18% -80px, rgba(42, 120, 214, 0.08), transparent 70%),
     radial-gradient(700px 280px at 85% -60px, rgba(27, 175, 122, 0.06), transparent 70%);
+}
+:root[data-theme="dark"] .page-glow {
+  background:
+    radial-gradient(900px 320px at 18% -80px, rgba(91, 156, 230, 0.1), transparent 70%),
+    radial-gradient(700px 280px at 85% -60px, rgba(47, 196, 141, 0.07), transparent 70%);
+}
+
+/* hardcoded amber/rust text utilities used for warning copy — night versions */
+:root[data-theme="dark"] .text-\[\#8a6100\] {
+  color: #e2b04c;
+}
+:root[data-theme="dark"] .text-\[\#9c4a26\] {
+  color: #ef9d76;
+}
+
+/* recharts structural colors follow the theme (series colors stay branded);
+   presentation ATTRIBUTES lose to any CSS rule, so no !important needed */
+:root[data-theme="dark"] .recharts-cartesian-grid line {
+  stroke: var(--color-grid);
+}
+:root[data-theme="dark"] .recharts-cartesian-axis line,
+:root[data-theme="dark"] .recharts-reference-line line {
+  stroke: var(--color-baseline);
+}
+:root[data-theme="dark"] .recharts-polar-grid line,
+:root[data-theme="dark"] .recharts-polar-grid polygon {
+  stroke: var(--color-grid);
+}
+:root[data-theme="dark"] .recharts-text {
+  fill: var(--color-ink-2);
 }
 
 input[type="range"] {
@@ -80,6 +149,26 @@ input[type="range"] {
   }
   body {
     background: #fff;
+  }
+  /* paper is always light — restore the day tokens even in dark mode */
+  :root[data-theme="dark"] {
+    color-scheme: light;
+    --color-page: #f7f7f4;
+    --color-surface: #fcfcfb;
+    --color-ink: #0b0b0b;
+    --color-ink-2: #52514e;
+    --color-muted: #898781;
+    --color-grid: #e1e0d9;
+    --color-baseline: #c3c2b7;
+    --color-series-1: #2a78d6;
+    --color-series-1-track: #cde2fb;
+    --color-series-2: #eb6834;
+    --color-series-3: #1baf7a;
+    --color-status-good: #0ca30c;
+    --color-status-warning: #fab219;
+    --color-status-serious: #ec835a;
+    --color-status-critical: #d03b3b;
+    --color-success-text: #006300;
   }
   /* entrance animations must never hide content on paper */
   * {

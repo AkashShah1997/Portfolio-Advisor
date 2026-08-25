@@ -234,6 +234,11 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
   },
 
   // ---- extras ----
+  capTier: {
+    name: "Company size (market-cap tier)",
+    what: "Banded from live market cap: India — large ≥ ₹1,00,000 Cr, mid ≥ ₹25,000 Cr, small below (SEBI-style). Canada/US — large ≥ $10B, mid ≥ $2B, small below.",
+    better: "No size is 'better': large = stability and liquidity; mid/small = longer growth runways AND more ways to fail — so the mid & small screen applies STRICTER quality bars, not looser ones.",
+  },
   fscore: {
     name: "Piotroski F-Score (0–9)",
     what: "Nine yes/no tests of whether the fundamentals IMPROVED year-over-year: profitable, cash-generative, cash beating book profit, deleveraging, better liquidity, no dilution, rising margins and asset turnover. Hover the number for the per-test breakdown.",

@@ -70,6 +70,22 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [legend, setLegend] = useState<{ t: string; o: number; h: number; l: number; c: number } | null>(null);
+  const [isDark, setIsDark] = useState(false);
+
+  // follow the app theme (set on <html> by the TopBar toggle)
+  useEffect(() => {
+    const read = () => setIsDark(document.documentElement.dataset.theme === "dark");
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (!cancelled) read();
+    })();
+    window.addEventListener("pa-theme", read);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("pa-theme", read);
+    };
+  }, []);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -127,20 +143,23 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const T = isDark
+      ? { bg: "#1c1c21", text: "#b6b5ae", grid: "#26262c", border: "#3a3a42" }
+      : { bg: "#fcfcfb", text: "#52514e", grid: "#efeee9", border: "#e1e0d9" };
     const chart = createChart(el, {
       autoSize: true,
       layout: {
-        background: { type: ColorType.Solid, color: "#fcfcfb" },
-        textColor: "#52514e",
+        background: { type: ColorType.Solid, color: T.bg },
+        textColor: T.text,
         attributionLogo: true,
       },
       grid: {
-        vertLines: { color: "#efeee9" },
-        horzLines: { color: "#efeee9" },
+        vertLines: { color: T.grid },
+        horzLines: { color: T.grid },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: "#e1e0d9" },
-      timeScale: { borderColor: "#e1e0d9" },
+      rightPriceScale: { borderColor: T.border },
+      timeScale: { borderColor: T.border },
     });
     chartRef.current = chart;
 
@@ -182,7 +201,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
       mainRef.current = null;
       allSeriesRef.current = [];
     };
-  }, []);
+  }, [isDark]);
 
   // ---- (re)build series whenever inputs change ----
   useEffect(() => {
@@ -266,7 +285,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
     // trendline drawings
     for (const d of drawings) {
       const s = chart.addSeries(LineSeries, {
-        color: "#0b0b0b",
+        color: isDark ? "#f0efe9" : "#0b0b0b",
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -318,7 +337,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
       fitKeyRef.current = fitKey;
       chart.timeScale().fitContent();
     }
-  }, [payload, kind, sma50, sma200, showVol, showLevels, drawings, row, valuation]);
+  }, [payload, kind, sma50, sma200, showVol, showLevels, drawings, row, valuation, isDark]);
 
   const last = payload?.candles[payload.candles.length - 1];
   const first = payload?.candles[0];

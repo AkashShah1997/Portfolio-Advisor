@@ -81,15 +81,23 @@ refuses to call a growing business an exit just because the price lagged. Below 
 **upgrade scanner**: same-market quality names that currently screen far stronger than your weak
 holdings, one click to watchlist.
 
-**Screeners** — classic long-term screens run over the scanned market universe (**~140 India / ~95
-Canada / ~135 US widely-traded names**, editable), any **pasted custom list** (≤100 symbols), and
+**Screeners** — classic long-term screens run over the scanned market universe (**~520 India — the
+Nifty 500 tiers · ~235 Canada — the full S&P/TSX Composite · ~900 US — the S&P 500 + MidCap 400**,
+merged from official index constituent lists, editable), any **pasted custom list** (≤100 symbols
+per paste, repeatable), and
 your own holdings — entirely client-side: **Two-year keepers** (quality + zero red flags + sane
 price for a 2-year-minimum hold), **Coffee Can** (Mukherjea), **Magic Formula** (Greenblatt),
 **QGLP** (Agrawal), **Dividend compounders**, **Fortress balance sheets**, **GARP / PEG ≤ 1**
 (Lynch), **Quality in the buy zone** (Damani/Graham) — and **Consensus picks**: the names that pass
 **≥3 of the 8 screens at once** (Magic Formula counts only its top 10), ranked by how many agree,
 with the agreeing screens listed per row. The screening-universe card surfaces the same thing as an
-"almost every buy-list agrees on" strip. Plus a **raw-fundamentals custom builder**:
+"almost every buy-list agrees on" strip. **Company size is a first-class dimension**: every name is
+banded live from market cap (India SEBI-style: large ≥ ₹1L Cr, mid ≥ ₹25k Cr; Canada/US: ≥ $10B /
+≥ $2B), an **All / Large / Mid / Small filter applies on top of every screen**, mid/small rows carry
+size badges, and a dedicated **"Mid & small-cap compounders"** screen hunts where tomorrow's large
+caps live — with deliberately STRICTER bars (score ≥ 60, zero red flags, ROCE ≥ 18%, EPS growth
+≥ 12%, not above fair value), because smaller names have more ways to fail. Plus a
+**raw-fundamentals custom builder**:
 min/max P/E ("P/E at least…" included), PEG, P/B, D/E, interest cover, ROCE, revenue/EPS CAGR,
 dividend yield, payout, FCF yield, market cap, red flags, no-loss-years, buy-zone-only,
 exclude-owned. Scan results are **cached on-device for 24h** and refresh incrementally, so screens
@@ -153,7 +161,10 @@ Claude, Gemini, Perplexity. Optionally paste your own Anthropic API key for in-a
 commentary (key lives in tab memory only, never saved).
 
 The UI is animated with [Motion](https://motion.dev) (Framer Motion v12) and typeset in self-hosted
-Inter — reduced-motion is respected, and print always shows full content.
+Inter — reduced-motion is respected, and print always shows full content. **Dark mode** ships too:
+the ☾/☀ toggle in the top bar re-themes everything — cards, charts, the TradingView-style chart —
+via the design-token layer, is saved on-device, applies before first paint (no flash), and printing
+always falls back to the light palette because paper is light.
 
 ---
 
@@ -190,7 +201,11 @@ or click **"load a sample portfolio"** inside either market.
 2. Framework auto-detects as Next.js; set Root Directory if it's a subfolder.
 3. Deploy. No env vars, no database. Stock fetches run as serverless functions
    (`maxDuration: 60`, fine on the free Hobby plan). The app fetches 3 stocks at a time and caches
-   per-symbol for 10 minutes; a first market scan (~32–43 names) takes ~30–60s, then it's instant.
+   per-symbol for 10 minutes. A first FULL market scan is now a big job (the ponds cover whole
+indices — ~520 India / ~235 Canada / ~900 US names) and can take 15–30+ minutes against free
+Yahoo endpoints; progress saves incrementally every few names, failed names retry with one click,
+and the 24-hour on-device cache means you do it roughly once a day at most — refreshes only fetch
+what's missing or stale.
 
 ## Import formats
 
@@ -216,7 +231,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # detection/catalog/fee-math/verdicts, ETF fallbacks,
                                      # multi-account merging, security-type priority,
                                      # buy-list consensus, the action plan, macro regimes,
-                                     # backtest as-of math, Piotroski F-Score (310+ checks)
+                                     # backtest as-of math, Piotroski F-Score, cap tiers,
+                                     # the mid/small screen, theme store (325 checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

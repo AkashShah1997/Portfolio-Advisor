@@ -9,7 +9,8 @@ import { buildScorecard, computeRatios } from "../lib/scorecard";
 import { portfolioSeries, summarize } from "../lib/portfolio";
 import { buildPrompt } from "../lib/promptgen";
 import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
-import { CONSENSUS_MIN, consensusOf, runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
+import { capTierOf, CONSENSUS_MIN, consensusOf, runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
+import { applyTheme, loadTheme } from "../lib/store";
 import { normalizeSecurityType } from "../lib/parse";
 import { sma } from "../lib/history";
 import { loadHoldings, MARKET_META, saveHoldings } from "../lib/store";
@@ -1393,6 +1394,59 @@ console.log("\n== The action plan (plain words) ==");
   check("calm portfolio says so out loud", /patience|Nothing needs action/.test(calm.summary));
 
   check("uiMode store is server-safe (defaults to simple)", loadUiMode() === "simple");
+}
+
+console.log("\n== Cap tiers & the mid/small-cap screen ==");
+{
+  check(
+    "India bands (SEBI-style): ₹2L Cr large · ₹50k Cr mid · ₹10k Cr small",
+    capTierOf(2e12, "TCS.NS") === "large" && capTierOf(5e11, "X.NS") === "mid" && capTierOf(1e11, "X.NS") === "small"
+  );
+  check(
+    "CAD/USD bands: $50B large · $5B mid · $500M small",
+    capTierOf(5e10, "RY.TO") === "large" && capTierOf(5e9, "X.TO") === "mid" && capTierOf(5e8, "X") === "small"
+  );
+  check("boundary values land on the bigger tier (≥)", capTierOf(1e12, "X.NS") === "large" && capTierOf(2.5e11, "X.NS") === "mid" && capTierOf(1e10, "X.TO") === "large");
+  check("unknown market cap → no tier (excluded from size filters, not faked)", capTierOf(undefined, "X.NS") === undefined && capTierOf(0, "X.NS") === undefined);
+
+  const base: MetricRow = {
+    symbol: "MIDQ.NS", name: "Mid Quality", sector: "Industrials", owned: false, watch: false,
+    score: 74, verdict: "ADD_MORE", pe: 22, peg: 1.2, divYield: 0.008, marketCap: 5e11,
+    roeAvg: 0.2, roceAvg: 0.22, d2e: 0.2, icr: 10, revCagr: 0.14, epsCagr: 0.16, fcfPosShare: 1,
+    earningsYield: 0.045, fcfYield: 0.035, mos: 0.05, valStatus: "FAIR", isFin: false,
+    redFlags: 0, lossYears: 0, pillarQuality: 75, pillarGrowth: 70,
+  };
+  const largeTwin: MetricRow = { ...base, symbol: "BIGQ.NS", marketCap: 3e12 };
+  const weakMid: MetricRow = { ...base, symbol: "WEAKM.NS", score: 45, roceAvg: 0.09, epsCagr: 0.04 };
+  const priceyMid: MetricRow = { ...base, symbol: "PRICEYM.NS", valStatus: "PRICEY" };
+  const smallmid = SCREENS.find((s) => s.id === "small-mid")!;
+  const picks = smallmid.apply([base, largeTwin, weakMid, priceyMid]);
+  check("mid/small screen: quality mid passes, identical LARGE twin is excluded", picks.some((r) => r.symbol === "MIDQ.NS") && !picks.some((r) => r.symbol === "BIGQ.NS"));
+  check("…and weak or pricey mids fail the stricter bars", !picks.some((r) => r.symbol === "WEAKM.NS" || r.symbol === "PRICEYM.NS"));
+  check("rows are labeled with their tier", picks[0]?.rankNote === "Mid cap");
+  check("mid/small screen does NOT inflate the consensus count", !consensusOf([base]).get("MIDQ.NS")?.screens.includes("Mid & small-cap compounders"));
+
+  const U = UNIVERSES;
+  const allSyms = Object.values(U).flat().map((c) => c.symbol);
+  check("universe symbols stay unique after the index-constituent merge", new Set(allSyms).size === allSyms.length);
+  check("India pond ≈ Nifty 500 (≥ 500 names)", U.India.length >= 500, String(U.India.length));
+  check("Canada pond ≈ full TSX Composite + curated (≥ 230 names)", U.Canada.length >= 230, String(U.Canada.length));
+  check("US pond ≈ S&P 500 + MidCap 400 (≥ 850 names)", U["United States"].length >= 850, String(U["United States"].length));
+  check("every India name is .NS; Canada is .TO/.V", U.India.every((c) => c.symbol.endsWith(".NS")) && U.Canada.every((c) => /\.(TO|V)$/.test(c.symbol)));
+  check("US symbols carry no exchange suffix and no dots (class shares use dashes)", U["United States"].every((c) => !c.symbol.includes(".")));
+  check("TSX unit trusts converted to Yahoo dash form (AP-UN.TO style)", U.Canada.some((c) => /-UN\.TO$/.test(c.symbol)) && U.Canada.every((c) => !/\.\w+\.TO$/.test(c.symbol)));
+}
+
+console.log("\n== Theme (dark mode) store ==");
+{
+  check("loadTheme is server-safe and defaults to light", loadTheme() === "light");
+  let threw = false;
+  try {
+    applyTheme("dark");
+  } catch {
+    threw = true;
+  }
+  check("applyTheme never throws server-side", !threw);
 }
 
 console.log("\n== Market weather (macro) ==");

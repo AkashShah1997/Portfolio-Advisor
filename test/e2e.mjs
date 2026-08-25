@@ -114,6 +114,21 @@ await page.waitForSelector("text=Coffee Can compounders", { timeout: 10000 });
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${shots}/07-screener-coffeecan.png`, fullPage: true });
 
+// ---- size filter + the mid/small-cap screen ----
+await page.waitForSelector("text=Company size", { timeout: 10000 });
+await page.getByRole("button", { name: /Mid & small-cap compounders/ }).first().click();
+await page.waitForSelector("text=Jhunjhunwala's hunting ground", { timeout: 5000 });
+await page.waitForTimeout(400);
+await page.getByRole("button", { name: "Mid cap", exact: true }).click();
+await page.waitForTimeout(300);
+const smBody = await page.locator("body").textContent();
+if (!/pass at this size|Nothing mid-cap passes|Nothing passes right now/.test(smBody)) {
+  throw new Error("size filter feedback missing");
+}
+await page.screenshot({ path: `${shots}/23-smallmid.png`, fullPage: false });
+await page.getByRole("button", { name: "All sizes", exact: true }).click();
+await page.waitForTimeout(200);
+
 // ---- consensus: the names almost every buy-list agrees on ----
 await page.getByRole("button", { name: /Consensus picks/ }).first().click();
 await page.waitForSelector("text=ranked by how many agree", { timeout: 5000 });
@@ -217,8 +232,21 @@ await page.waitForSelector("text=The sit-tight projector", { timeout: 10000 });
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/11-projector.png`, fullPage: true });
 
+// ---- dark mode: toggle, verify tokens flip, persists across reload ----
+await page.getByRole("button", { name: "Switch to dark mode" }).click();
+await page.waitForTimeout(400);
+const themeAttr = await page.evaluate(() => document.documentElement.dataset.theme);
+if (themeAttr !== "dark") throw new Error("data-theme not set to dark");
+const darkBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+if (darkBg !== "rgb(20, 20, 23)") throw new Error(`dark body background wrong: ${darkBg}`);
+await page.getByRole("button", { name: /Overview/ }).first().click();
+await page.waitForTimeout(800);
+await page.screenshot({ path: `${shots}/22-dark.png`, fullPage: false });
+
 // ---- persistence: reload restores market + holdings (incl. watchlist) ----
 await page.reload({ waitUntil: "networkidle" });
+const themeAfterReload = await page.evaluate(() => document.documentElement.dataset.theme);
+if (themeAfterReload !== "dark") throw new Error("dark mode did not persist across reload");
 await page.waitForSelector("text=Your India portfolio", { timeout: 15000 });
 await page.waitForSelector("text=/Restored \\d+ holding/", { timeout: 10000 });
 const tableText = await page.locator("table").first().textContent();

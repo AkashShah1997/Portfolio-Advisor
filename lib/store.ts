@@ -61,6 +61,32 @@ const HOLDINGS_KEY = (m: Market) => `pa.v2.holdings.${m}`;
 const MARKET_KEY = "pa.v2.market";
 const UIMODE_KEY = "pa.v2.uimode";
 
+const THEME_KEY = "pa.v2.theme";
+
+export type Theme = "light" | "dark";
+
+export function loadTheme(): Theme {
+  if (!canStore()) return "light";
+  try {
+    return window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+/** Persist + apply the theme (data-theme on <html>) + notify listeners (charts). */
+export function applyTheme(t: Theme): void {
+  if (!canStore()) return;
+  try {
+    window.localStorage.setItem(THEME_KEY, t);
+  } catch {
+    /* ignore */
+  }
+  if (t === "dark") document.documentElement.dataset.theme = "dark";
+  else document.documentElement.removeAttribute("data-theme");
+  window.dispatchEvent(new CustomEvent("pa-theme", { detail: t }));
+}
+
 /** Simple (3 tabs, plain words) vs the full toolbench. Saved on-device. */
 export type UiMode = "simple" | "all";
 

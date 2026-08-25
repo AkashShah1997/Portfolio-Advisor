@@ -122,6 +122,29 @@ export interface ScreenDef {
 
 const ok = (v: number | undefined, f: (x: number) => boolean) => v !== undefined && f(v);
 
+// ---------------- market-cap tiers ----------------
+
+export type CapTier = "large" | "mid" | "small";
+
+/**
+ * Size band from LIVE market cap, currency-aware:
+ *   India (SEBI-style):  large ≥ ₹1,00,000 Cr · mid ≥ ₹25,000 Cr · small below
+ *   Canada/US:           large ≥ $10B · mid ≥ $2B · small below
+ */
+export function capTierOf(marketCap: number | undefined, symbol: string): CapTier | undefined {
+  if (marketCap === undefined || !(marketCap > 0)) return undefined;
+  if (/\.(NS|BO)$/i.test(symbol)) {
+    return marketCap >= 1e12 ? "large" : marketCap >= 2.5e11 ? "mid" : "small";
+  }
+  return marketCap >= 1e10 ? "large" : marketCap >= 2e9 ? "mid" : "small";
+}
+
+export const CAP_TIER_META: Record<CapTier, { label: string; short: string }> = {
+  large: { label: "Large cap", short: "L" },
+  mid: { label: "Mid cap", short: "Mid" },
+  small: { label: "Small cap", short: "Small" },
+};
+
 const BASE_SCREENS: ScreenDef[] = [
   {
     id: "two-year",
@@ -304,7 +327,37 @@ const CONSENSUS_SCREEN: ScreenDef = {
   },
 };
 
-export const SCREENS: ScreenDef[] = [...BASE_SCREENS, CONSENSUS_SCREEN];
+/**
+ * Mid & small caps get their own hunting-ground screen: the SAME quality bars,
+ * applied only to names below the large-cap line — where the next decade's
+ * large caps live. Deliberately NOT part of the consensus count (it's a size
+ * subset of the quality screens, and would double-count them).
+ */
+const SMALLMID_SCREEN: ScreenDef = {
+  id: "small-mid",
+  name: "Mid & small-cap compounders",
+  master: "Jhunjhunwala's hunting ground",
+  blurb: "Tomorrow's large caps are today's quality mid & small caps — same discipline, smaller names, stricter bars.",
+  criteria: "Mid/small by market cap · score ≥ 60 · zero red flags · ROCE ≥ 18% (ROE ≥ 15% for financials) · EPS growth ≥ 12% · not above fair value",
+  apply: (rows) =>
+    rows
+      .filter((r) => {
+        const tier = capTierOf(r.marketCap, r.symbol);
+        if (tier !== "mid" && tier !== "small") return false;
+        const roc = r.isFin ? r.roeAvg : r.roceAvg;
+        return (
+          r.score >= 60 &&
+          r.redFlags === 0 &&
+          ok(roc, (v) => v >= (r.isFin ? 0.15 : 0.18)) &&
+          ok(r.epsCagr, (v) => v >= 0.12) &&
+          r.valStatus !== "PRICEY"
+        );
+      })
+      .sort((a, b) => b.score - a.score)
+      .map((r) => ({ ...r, rankNote: `${CAP_TIER_META[capTierOf(r.marketCap, r.symbol)!].label}` })),
+};
+
+export const SCREENS: ScreenDef[] = [...BASE_SCREENS, SMALLMID_SCREEN, CONSENSUS_SCREEN];
 
 export interface CustomFilter {
   minScore?: number;

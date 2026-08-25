@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { MARKET_META, MARKETS, type Market } from "@/lib/store";
+import { applyTheme, loadTheme, MARKET_META, MARKETS, type Market, type Theme } from "@/lib/store";
 
 /** Sticky app chrome: brand, the India | Canada switch, and the local-only promise. */
 export function TopBar({
@@ -13,6 +14,24 @@ export function TopBar({
   onMarket: (m: Market) => void;
   onHome: () => void;
 }) {
+  // theme state syncs with the saved value after mount (SSR always renders light)
+  const [theme, setTheme] = useState<Theme>("light");
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (!cancelled) setTheme(loadTheme());
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const toggleTheme = () => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    applyTheme(next);
+  };
+
   return (
     <div className="sticky top-0 z-40 glass border-b border-grid no-print">
       <div className="max-w-6xl mx-auto px-4 h-[58px] flex items-center gap-3">
@@ -57,6 +76,15 @@ export function TopBar({
             );
           })}
         </div>
+
+        <button
+          onClick={toggleTheme}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-page hairline text-[14px] text-ink-2 hover:text-ink transition-colors"
+        >
+          <span aria-hidden>{theme === "dark" ? "☀" : "☾"}</span>
+        </button>
 
         <span
           className="hidden sm:inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-2 bg-page hairline rounded-full px-2.5 py-[4px]"
