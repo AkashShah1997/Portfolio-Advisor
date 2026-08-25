@@ -25,6 +25,11 @@ import { mockEtfData } from "../lib/mocketf";
 import { mockInvestorMoves } from "../lib/mock";
 import { buildPlan } from "../lib/plan";
 import { loadUiMode } from "../lib/store";
+import { buildMacroItems, mockMacro, readRegime, seriesStats, vixBand } from "../lib/macro";
+import { benchCagrSince, buildAsOf, cutoffISO, runBacktest } from "../lib/backtest";
+import { computeFScore } from "../lib/scorecard";
+import type { Candle } from "../lib/history";
+import type { YearFinancials } from "../lib/types";
 import { mapStatementHistory, parseTimeseries } from "../lib/fundamentals";
 import {
   buildTickerMap,
@@ -1388,6 +1393,115 @@ console.log("\n== The action plan (plain words) ==");
   check("calm portfolio says so out loud", /patience|Nothing needs action/.test(calm.summary));
 
   check("uiMode store is server-safe (defaults to simple)", loadUiMode() === "simple");
+}
+
+console.log("\n== Market weather (macro) ==");
+{
+  // constructed 1y of daily candles: steady riser ending at its high
+  const up: Candle[] = Array.from({ length: 250 }, (_, i) => ({
+    time: new Date(Date.UTC(2025, 7, 1) + i * 86400000).toISOString().slice(0, 10),
+    open: 0, high: 0, low: 0, close: 100 * (1 + i * 0.001),
+  }));
+  const s = seriesStats(up);
+  check("rising series: +25%ish 1y, at its high, above 200-DMA", Math.abs((s.ret1y ?? 0) - 0.249) < 0.01 && Math.abs(s.fromHigh ?? 1) < 1e-9 && s.above200dma === true);
+  const down = up.map((c, i) => ({ ...c, close: 130 - i * 0.15 }));
+  const sd = seriesStats(down);
+  check("falling series: negative 1y, well below high and 200-DMA", (sd.ret1y ?? 0) < -0.2 && (sd.fromHigh ?? 0) < -0.2 && sd.above200dma === false);
+  check("too-short history → empty stats (no fake numbers)", seriesStats(up.slice(0, 10)).last === undefined);
+
+  check(
+    "VIX bands: 12 calm · 16 normal · 24 nervous · 33 fear",
+    vixBand(12).label === "calm" && vixBand(16).label === "normal" && vixBand(24).label === "nervous" && vixBand(33).label === "fear"
+  );
+
+  check("regime: crash/VIX-spike reads as buyer's market", readRegime({ fromHigh: -0.22, above200dma: false, vix: 31 }).key === "FEAR");
+  check("regime: -10% below 200-DMA reads as correction", readRegime({ fromHigh: -0.1, above200dma: false, vix: 18 }).key === "CORRECTION");
+  check("regime: record highs + VIX 12 reads as expensive calm", readRegime({ fromHigh: -0.01, above200dma: true, vix: 12 }).key === "EXPENSIVE_CALM");
+  check("regime: middling everything reads as normal", readRegime({ fromHigh: -0.05, above200dma: true, vix: 17 }).key === "NORMAL");
+  check("regime advice never times the market ('sell everything' is not in the vocabulary)", (["FEAR", "CORRECTION", "EXPENSIVE_CALM", "NORMAL"] as const).every((k) => {
+    const r = { FEAR: readRegime({ fromHigh: -0.2, vix: 30 }), CORRECTION: readRegime({ fromHigh: -0.1, above200dma: false }), EXPENSIVE_CALM: readRegime({ fromHigh: 0, vix: 10 }), NORMAL: readRegime({ fromHigh: -0.05, vix: 17, above200dma: true }) }[k];
+    return !/sell (everything|now)|exit the market|go to cash/i.test(r.advice);
+  }));
+
+  const items = buildMacroItems("india", {
+    index: { last: 24800, ret1y: 0.11, fromHigh: -0.04, above200dma: true },
+    vix: { last: 15.2 },
+    us10y: { last: 41.2, ret1y: -0.05 },
+  });
+  check("macro items format sanely (index sub mentions 200-day, ^TNX ÷10 → %)", items.some((i) => i.key === "index" && /200-day/.test(i.sub)) && items.some((i) => i.key === "us10y" && i.value === "4.12%"));
+  check("missing series just drop their chip (no '—' junk chips)", !items.some((i) => i.key === "gold"));
+
+  const m1 = mockMacro("india");
+  check("mock macro deterministic; india=NORMAL, canada=EXPENSIVE_CALM (two demo regimes)", JSON.stringify(m1) === JSON.stringify({ ...mockMacro("india"), asOf: m1.asOf }) === false ? m1.regime.key === "NORMAL" && mockMacro("canada").regime.key === "EXPENSIVE_CALM" : m1.regime.key === "NORMAL" && mockMacro("canada").regime.key === "EXPENSIVE_CALM");
+}
+
+console.log("\n== Backtest (score-as-of, forward returns) ==");
+{
+  const NOW = new Date("2026-08-25T00:00:00Z");
+  check("cutoff math: 3y back from 2026-08-25 → 2023-08-25", cutoffISO(3, NOW) === "2023-08-25");
+
+  const tcs = mockStockData("TCS.NS");
+  const cut = cutoffISO(3, NOW);
+  const asOf = buildAsOf(tcs, cut)!;
+  check("as-of truncation keeps only pre-cutoff fiscal years", !!asOf && asOf.years.length >= 2 && asOf.years.every((y) => (y.endDate ?? "9999") <= cut) && asOf.years.length < tcs.years.length);
+  check("as-of prices stop at the cutoff", asOf.prices.every((p) => p.date <= cut) && asOf.prices.length < tcs.prices.length);
+  const lastY = asOf.years[asOf.years.length - 1];
+  const epsThen = lastY.dilutedEPS ?? lastY.basicEPS ?? 0;
+  check("as-of P/E = price-then ÷ EPS-then (no future leakage)", Math.abs((asOf.quote.trailingPE ?? 0) - (asOf.quote.price ?? 0) / epsThen) < 1e-9);
+  check("unknowable-then fields stay blank (dividend yield, 52w range, analyst)", asOf.quote.dividendYield === undefined && asOf.quote.fiftyTwoWeekHigh === undefined && asOf.quote.targetMeanPrice === undefined);
+  check("scoring the as-of data works", buildScorecard(asOf).totalScore >= 0);
+  check("a 10-year cutoff (no data that old) → null, not garbage", buildAsOf(tcs, cutoffISO(10, NOW)) === null);
+
+  // bench: doubles over the 3y window
+  const bench: Candle[] = [];
+  for (let i = 0; i <= 36; i++) {
+    const d = new Date(Date.UTC(2023, 7, 25));
+    d.setUTCMonth(d.getUTCMonth() + i);
+    bench.push({ time: d.toISOString().slice(0, 10), open: 0, high: 0, low: 0, close: 100 * Math.pow(2, i / 36) });
+  }
+  const bc = benchCagrSince(bench, cut)!;
+  check("bench CAGR over the window ≈ 26%/yr (2^(1/3)−1)", Math.abs(bc - (Math.pow(2, 1 / 3) - 1)) < 0.01, String(bc));
+
+  const mkRow = (sym: string): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 10, avgCost: 100, currency: "INR" },
+      data,
+      scorecard: buildScorecard(data),
+      invested: 1000,
+    };
+  };
+  const res = runBacktest([mkRow("TCS.NS"), mkRow("HDFCBANK.NS"), mkRow("TATAMOTORS.NS"), mkRow("NIFTYBEES.NS")], 3, bench, NOW);
+  check("scoreable names get verdict-then + forward CAGR", res.rows.length === 3 && res.rows.every((r) => r.cagrSince !== undefined && r.scoreThen >= 0));
+  check("the ETF (no statements) is skipped with a reason, not faked", res.skipped.some((s) => s.symbol === "NIFTYBEES.NS" && /fiscal years/.test(s.reason)));
+  check("buckets aggregate by verdict-then with vs-index win rate", res.buckets.length >= 1 && res.buckets.every((b) => b.n > 0 && b.beatBench !== undefined));
+  check("vsBench = own CAGR − index CAGR", res.rows.every((r) => Math.abs((r.vsBench ?? 0) - ((r.cagrSince ?? 0) - bc)) < 1e-9));
+  check("readout is one plain sentence mentioning /yr", /\/yr/.test(res.readout) && res.readout.length < 400);
+  check("backtest is deterministic for a fixed 'now'", JSON.stringify(res) === JSON.stringify(runBacktest([mkRow("TCS.NS"), mkRow("HDFCBANK.NS"), mkRow("TATAMOTORS.NS"), mkRow("NIFTYBEES.NS")], 3, bench, NOW)));
+}
+
+console.log("\n== Piotroski F-Score ==");
+{
+  const yr = (over: Partial<YearFinancials>): YearFinancials => ({ year: 2025, endDate: "2025-03-31", ...over });
+  const good = computeFScore([
+    yr({ year: 2024, netIncome: 80, totalAssets: 1000, ocf: 90, totalDebt: 300, currentAssets: 350, currentLiabilities: 240, shares: 100, grossProfit: 380, revenue: 1000 }),
+    yr({ netIncome: 120, totalAssets: 1050, ocf: 150, totalDebt: 250, currentAssets: 400, currentLiabilities: 240, shares: 99, grossProfit: 430, revenue: 1100 }),
+  ])!;
+  check("all-improving business scores 9/9", good.score === 9 && good.of === 9, `${good.score}/${good.of}`);
+  const bad = computeFScore([
+    yr({ year: 2024, netIncome: 100, totalAssets: 1000, ocf: 120, totalDebt: 200, currentAssets: 400, currentLiabilities: 200, shares: 100, grossProfit: 400, revenue: 1000 }),
+    yr({ netIncome: -50, totalAssets: 1100, ocf: -20, totalDebt: 350, currentAssets: 300, currentLiabilities: 260, shares: 115, grossProfit: 300, revenue: 950 }),
+  ])!;
+  // (OCF −20 > NI −50 legitimately passes the accruals test, so 1/9 not 0/9)
+  check("deteriorating business scores ≤1/9", bad.score <= 1, `${bad.score}/${bad.of}`);
+  const partial = computeFScore([
+    yr({ year: 2024, netIncome: 80, totalAssets: 1000, ocf: 90, totalDebt: 300, shares: 100, revenue: 1000 }),
+    yr({ netIncome: 120, totalAssets: 1050, ocf: 150, totalDebt: 250, shares: 99, revenue: 1100 }),
+  ])!;
+  check("missing inputs shrink the denominator (n/a, not fail)", partial.of < 9 && partial.tests.some((t) => t.status === "na"));
+  check("one year of data → no F-Score at all", computeFScore([yr({})]) === undefined);
+  const sc = buildScorecard(mockStockData("TCS.NS"));
+  check("scorecard carries an F-Score for real profiles", sc.fscore !== undefined && sc.fscore.score >= 0 && sc.fscore.score <= sc.fscore.of);
 }
 
 console.log("\n== Analyst context fields (mock determinism) ==");

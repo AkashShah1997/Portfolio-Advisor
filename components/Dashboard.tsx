@@ -34,6 +34,8 @@ import { Snowflake } from "./Snowflake";
 import { StockCard } from "./StockCard";
 import { EtfPanel } from "./EtfPanel";
 import { PlanCard } from "./PlanCard";
+import { MarketWeather } from "./MarketWeather";
+import { BacktestPanel } from "./BacktestPanel";
 import { isEtfHolding } from "@/lib/etf";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
@@ -69,6 +71,7 @@ const TABS = [
   { id: "screeners", label: "Screeners" },
   { id: "etfs", label: "ETFs" },
   { id: "smart", label: "Smart money" },
+  { id: "backtest", label: "Backtest" },
   { id: "chart", label: "Chart" },
   { id: "health", label: "Health & income" },
   { id: "future", label: "Projector" },
@@ -723,6 +726,9 @@ export function Dashboard({
       <Switcher id={tab}>
         {tab === "overview" && (
           <div className="space-y-5">
+            {/* the macro situation, in one card */}
+            <MarketWeather market={market} />
+
             {/* the plan, in plain words */}
             <PlanCard
               rows={rows}
@@ -891,6 +897,8 @@ export function Dashboard({
         )}
 
         {tab === "smart" && <SmartMoney rows={rows} market={market} onAddWatch={(s) => addWatch(s)} />}
+
+        {tab === "backtest" && <BacktestPanel rows={rows} market={market} />}
 
         {tab === "chart" && <ChartPanel rows={rows} />}
 

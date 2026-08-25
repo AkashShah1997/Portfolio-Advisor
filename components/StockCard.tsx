@@ -441,6 +441,27 @@ export function StockCard({
               <span>
                 52w <InfoTip k="week52" /> {fmtMoney(q.fiftyTwoWeekLow, cur, true)}–{fmtMoney(q.fiftyTwoWeekHigh, cur, true)}
               </span>
+              {scorecard.fscore && (
+                <span
+                  title={scorecard.fscore.tests
+                    .filter((t) => t.status !== "na")
+                    .map((t) => `${t.status === "pass" ? "✓" : "✕"} ${t.label}`)
+                    .join("\n")}
+                >
+                  F-Score <InfoTip k="fscore" />{" "}
+                  <strong
+                    className={
+                      scorecard.fscore.score >= 7
+                        ? "text-success-text"
+                        : scorecard.fscore.score <= 3
+                          ? "text-status-critical"
+                          : "text-ink"
+                    }
+                  >
+                    {scorecard.fscore.score}/{scorecard.fscore.of}
+                  </strong>
+                </span>
+              )}
             </div>
             {q.targetMeanPrice !== undefined &&
               q.price !== undefined &&

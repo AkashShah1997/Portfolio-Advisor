@@ -6,6 +6,15 @@ import { mockEtfData } from "./mocketf";
 import { mapFundSummary, type EtfData } from "./etf";
 import { mapOwnership, type OwnershipPayload } from "./ownership";
 import {
+  buildMacroPayload,
+  MACRO_SYMBOLS,
+  mockMacro,
+  seriesStats,
+  type MacroPayload,
+  type SeriesStats,
+} from "./macro";
+import type { Market } from "./store";
+import {
   hasSubstance,
   mapStatementHistory,
   mapYearRow,
@@ -441,6 +450,36 @@ export async function getEtfData(symbol: string): Promise<EtfData> {
     out.errors = [...(out.errors ?? []), `Yahoo classifies ${symbol} as ${out.quoteType}, not an ETF.`];
   }
   return out;
+}
+
+/**
+ * Market weather: ~1y of daily closes for the market's macro symbols (index,
+ * VIX, FX, gold, oil, US 10y), reduced to stats + one regime read. Uses only
+ * the crumb-free chart endpoint; failures degrade to fewer chips, never an
+ * empty card. Cached in-process for 30 minutes.
+ */
+const macroCache = new Map<string, { at: number; payload: MacroPayload }>();
+
+export async function gatherMacro(market: Market): Promise<MacroPayload> {
+  if (MOCK_ENABLED) return mockMacro(market);
+  const hit = macroCache.get(market);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.payload;
+
+  const stats: Record<string, SeriesStats> = {};
+  const errors: string[] = [];
+  await Promise.all(
+    MACRO_SYMBOLS[market].map(async ({ key, symbol }) => {
+      try {
+        const h = await getHistory(symbol, "1y");
+        stats[key] = seriesStats(h.candles);
+      } catch (e) {
+        errors.push(`${symbol}: ${(e as Error).message.slice(0, 60)}`);
+      }
+    })
+  );
+  const payload = buildMacroPayload(market, stats, errors);
+  if (payload.items.length) macroCache.set(market, { at: Date.now(), payload });
+  return payload;
 }
 
 /** USD-based FX via Yahoo as a fallback when frankfurter is unreachable. */

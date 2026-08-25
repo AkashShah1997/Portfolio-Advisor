@@ -173,6 +173,12 @@ export interface Scorecard {
   };
   avgPE?: number; // historical average P/E over available years
   currentPE?: number;
+  /** Piotroski F-Score: 9 year-over-year fundamental-improvement tests */
+  fscore?: {
+    score: number; // passes
+    of: number; // applicable tests (non-n/a)
+    tests: { label: string; status: "pass" | "fail" | "na" }[];
+  };
 }
 
 export interface AnalyzedHolding {

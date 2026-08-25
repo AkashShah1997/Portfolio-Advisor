@@ -96,6 +96,56 @@ export function computeRatios(years: YearFinancials[], prices: { date: string; c
   });
 }
 
+// ---------- Piotroski F-Score ----------
+
+/**
+ * Piotroski's 9-point F-Score over the last two fiscal years — the classic
+ * academic test of whether the fundamentals are IMPROVING (profitable, cash-
+ * generative, deleveraging, more efficient, no dilution). 8–9 strong, 0–3
+ * weak. Tests whose inputs are missing go n/a and shrink the denominator.
+ */
+export function computeFScore(years: YearFinancials[]): Scorecard["fscore"] | undefined {
+  if (years.length < 2) return undefined;
+  const cur = years[years.length - 1];
+  const prev = years[years.length - 2];
+
+  const roa = (y: YearFinancials) =>
+    y.netIncome !== undefined && y.totalAssets ? y.netIncome / y.totalAssets : undefined;
+  const lev = (y: YearFinancials) =>
+    y.totalDebt !== undefined && y.totalAssets ? y.totalDebt / y.totalAssets : undefined;
+  const cr = (y: YearFinancials) =>
+    y.currentAssets !== undefined && y.currentLiabilities ? y.currentAssets / y.currentLiabilities : undefined;
+  const gm = (y: YearFinancials) =>
+    y.grossProfit !== undefined && y.revenue ? y.grossProfit / y.revenue : undefined;
+  const at = (y: YearFinancials) => (y.revenue !== undefined && y.totalAssets ? y.revenue / y.totalAssets : undefined);
+
+  const t = (label: string, v: boolean | undefined): { label: string; status: "pass" | "fail" | "na" } => ({
+    label,
+    status: v === undefined ? "na" : v ? "pass" : "fail",
+  });
+  const cmp = (a?: number, b?: number, f?: (x: number, y: number) => boolean) =>
+    a === undefined || b === undefined ? undefined : (f ?? ((x, y) => x > y))(a, b);
+
+  const tests = [
+    t("Profitable (ROA > 0)", roa(cur) === undefined ? undefined : roa(cur)! > 0),
+    t("Operating cash flow > 0", cur.ocf === undefined ? undefined : cur.ocf > 0),
+    t("ROA improving", cmp(roa(cur), roa(prev))),
+    t("Cash beats accounting profit (OCF > net income)", cmp(cur.ocf, cur.netIncome)),
+    t("Deleveraging (debt/assets down)", cmp(lev(cur), lev(prev), (a, b) => a <= b)),
+    t("Liquidity improving (current ratio up)", cmp(cr(cur), cr(prev), (a, b) => a >= b)),
+    t("No dilution (share count flat/down)", cmp(cur.shares, prev.shares, (a, b) => a <= b * 1.02)),
+    t("Gross margin improving", cmp(gm(cur), gm(prev), (a, b) => a >= b)),
+    t("Asset turnover improving", cmp(at(cur), at(prev), (a, b) => a >= b)),
+  ];
+  const applicable = tests.filter((x) => x.status !== "na");
+  if (applicable.length < 5) return undefined; // too little to call it an F-Score
+  return {
+    score: applicable.filter((x) => x.status === "pass").length,
+    of: applicable.length,
+    tests,
+  };
+}
+
 // ---------- scorecard ----------
 
 interface CheckInput {
@@ -563,5 +613,6 @@ export function buildScorecard(data: StockData): Scorecard {
     cagr: { revenue: revCagr, eps: epsCagr, fcf: fcfCagr, years: spanYears },
     avgPE,
     currentPE,
+    fscore: computeFScore(years),
   };
 }

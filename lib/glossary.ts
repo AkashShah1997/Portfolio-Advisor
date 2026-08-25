@@ -234,6 +234,16 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
   },
 
   // ---- extras ----
+  fscore: {
+    name: "Piotroski F-Score (0–9)",
+    what: "Nine yes/no tests of whether the fundamentals IMPROVED year-over-year: profitable, cash-generative, cash beating book profit, deleveraging, better liquidity, no dilution, rising margins and asset turnover. Hover the number for the per-test breakdown.",
+    better: "Higher is better: 8–9 = fundamentals firing on all cylinders, 0–3 = deteriorating. Academic backtests found high-F cheap stocks strongly beat low-F ones — it's a momentum test for the business, not the price.",
+  },
+  regime: {
+    name: "Market weather regime",
+    what: "One read combining the index's trend (vs its 200-day average), distance from the 52-week high, and the volatility index's fear bands.",
+    better: "There's no 'better' — only posture: fear favours brave buyers of quality (Buffett), calm record-highs demand bigger margins of safety. Never a timing signal.",
+  },
   coffeeCan: {
     name: "Coffee Can test",
     what: "The share of years that cleared BOTH bars at once: revenue growth ≥10% and ROCE ≥15% (ROE for banks) — Saurabh Mukherjea's consistency filter.",

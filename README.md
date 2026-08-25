@@ -43,6 +43,14 @@ headers, custom-filter fields, pillar meters, ratio tables, the valuation snapsh
 card: what the ratio means, how it's computed, and **which direction the value school considers
 better** (with the masters' thresholds).
 
+**Market weather** (top of the Overview, both modes) — the macro situation from free public data:
+index level with 1-year return, distance from the 52-week high and position vs its **200-day
+average**; **India VIX / VIX** with fear bands (calm <14 · fear >28); USD/INR / USD/CAD; gold; oil;
+the US 10-year yield. All of it condenses into **one plain-words regime read** — "fear is on sale —
+deploy gradually into quality" / "market cooling — watchlist season" / "sunny and expensive — demand
+a bigger margin of safety" / "nothing extreme — stick to the plan" — with the value-school caveat
+printed on it: macro is context for posture, never a timing signal.
+
 **Overview** — hero band with your current value and a **5-year chart of today's holdings** that
 flips to **"vs NIFTY 50" / "vs TSX Composite"**: both lines indexed to 100 at the common start, your
 ±%/yr gap badged — the honest test every hand-picked portfolio must pass. The action summary carries
@@ -114,6 +122,17 @@ strip fills in as filings arrive. (2) **Who owns your stock**: top
 mutual funds/ETFs and institutions holding any symbol (full for US/Canada, partial for NSE, where
 promoter stakes appear under "insiders"). One click adds any smart-money name to your watchlist,
 where **your own scorecard** judges it.
+
+**Backtest** — "would this engine have helped?", answered honestly: the SAME scorecard re-run **as
+of 1, 2 or 3 years ago using only data that existed then** — fiscal years ending before the cutoff,
+the price on that day, valuation rebuilt from the two (P/E-then, P/B-then); anything unknowable then
+(dividend yield, TTM figures, 52-week range) deliberately goes n/a so nothing leaks from the future.
+Each verdict bucket then shows what it actually returned since — average CAGR, how many beat the
+index over the same window — plus a per-name table (verdict-then → verdict-now with drift arrows)
+and a one-line readout that is allowed to deliver bad news. Limits stated on the card: a handful of
+names is a sanity check, not statistics; price-only returns; survivor bias; free data caps cutoffs
+at ~3 years. Every stock card also carries a **Piotroski F-Score** (0–9 year-over-year
+fundamental-improvement tests, hover for the breakdown).
 
 **Chart** — TradingView-style charting (built on TradingView's open-source `lightweight-charts`):
 candles or area, 6M→Max ranges (daily/weekly/monthly), SMA 50/200, volume, **two-click trendline
@@ -196,7 +215,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # snowflake axes, strengths/risks, benchmark indexing, ETF
                                      # detection/catalog/fee-math/verdicts, ETF fallbacks,
                                      # multi-account merging, security-type priority,
-                                     # buy-list consensus, the action plan (280 checks)
+                                     # buy-list consensus, the action plan, macro regimes,
+                                     # backtest as-of math, Piotroski F-Score (310+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

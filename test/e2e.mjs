@@ -30,6 +30,13 @@ await page.screenshot({ path: `${shots}/02-import.png`, fullPage: true });
 await page.getByRole("button", { name: /Analyze India portfolio/ }).click();
 await page.waitForSelector("text=Action summary", { timeout: 90000 });
 
+// ---- market weather: macro chips + regime read (simple mode too) ----
+await page.waitForSelector("text=Market weather", { timeout: 15000 });
+await page.waitForSelector("text=NIFTY 50", { timeout: 15000 });
+await page.waitForSelector("text=India VIX", { timeout: 10000 });
+await page.waitForSelector("text=Nothing extreme in the weather", { timeout: 10000 }); // mock india regime
+await page.waitForSelector("text=Macro is context, not a signal", { timeout: 5000 });
+
 // ---- SIMPLE MODE (default): plain-words action plan, three tabs ----
 await page.waitForSelector("text=Your action plan", { timeout: 10000 });
 const planText = await page.locator("body").textContent();
@@ -74,6 +81,7 @@ await page.waitForSelector("text=Intrinsic value (rough)", { timeout: 10000 });
 await page.waitForSelector("text=✦ Strengths", { timeout: 10000 });
 await page.waitForSelector("text=⚑ Risks", { timeout: 10000 });
 await page.waitForSelector("text=12-mo target", { timeout: 10000 });
+await page.waitForSelector("text=F-Score", { timeout: 10000 });
 if ((await page.locator("[data-testid=snowflake]").count()) < 2) throw new Error("stock-card snowflake missing");
 if (!(await page.locator("[data-infotip=pe]").count())) throw new Error("info tooltips not wired in stock card");
 await page.waitForTimeout(600);
@@ -171,6 +179,21 @@ const bodySmart = await page.locator("body").textContent();
 if (!/SBI|Vanguard|ICICI/.test(bodySmart)) throw new Error("holders table missing");
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${shots}/16-smartmoney.png`, fullPage: true });
+
+// ---- backtest tab: score-as-of vs what happened since ----
+await page.locator("button[aria-pressed]").filter({ hasText: /^Backtest/ }).first().click();
+await page.waitForSelector("text=would the engine have helped?", { timeout: 15000 });
+await page.waitForSelector("text=/cutoff \\d{4}-\\d{2}-\\d{2}/", { timeout: 10000 });
+await page.waitForSelector("text=Verdict then", { timeout: 20000 });
+await page.waitForSelector("text=/yr avg", { timeout: 20000 });
+const btBody = await page.locator("body").textContent();
+if (!/TCS/.test(btBody)) throw new Error("backtest table missing holdings");
+if (!/Honest limits/.test(btBody)) throw new Error("backtest caveats missing");
+// switch cutoff to 2y and confirm it recomputes
+await page.getByRole("button", { name: "2y ago", exact: true }).click();
+await page.waitForTimeout(600);
+await page.waitForSelector("text=Verdict then", { timeout: 10000 });
+await page.screenshot({ path: `${shots}/21-backtest.png`, fullPage: true });
 
 // ---- chart tab ----
 await page.getByRole("button", { name: "Chart", exact: true }).click();
