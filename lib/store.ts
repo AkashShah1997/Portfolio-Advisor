@@ -110,6 +110,32 @@ export function saveUiMode(m: UiMode): void {
 
 const canStore = () => typeof window !== "undefined" && !!window.localStorage;
 
+/**
+ * Small persisted UI switches (weather expanded, matrix open, …) so the
+ * dashboard remembers how you like it. Server-safe: the default wins without
+ * a browser, and blocked storage never throws.
+ */
+const FLAG_KEY = (k: string) => `pa.v2.flag.${k}`;
+
+export function loadUiFlag(key: string, def: boolean): boolean {
+  if (!canStore()) return def;
+  try {
+    const raw = window.localStorage.getItem(FLAG_KEY(key));
+    return raw === null ? def : raw === "1";
+  } catch {
+    return def;
+  }
+}
+
+export function saveUiFlag(key: string, v: boolean): void {
+  if (!canStore()) return;
+  try {
+    window.localStorage.setItem(FLAG_KEY(key), v ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 export function loadHoldings(m: Market): Holding[] | null {
   if (!canStore()) return null;
   try {

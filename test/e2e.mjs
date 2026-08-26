@@ -36,11 +36,16 @@ await page.waitForSelector("text=NIFTY 50", { timeout: 15000 });
 await page.waitForSelector("text=India VIX", { timeout: 10000 });
 await page.waitForSelector("text=Nothing extreme in the weather", { timeout: 10000 }); // mock india regime
 await page.waitForSelector("text=Macro is context, not a signal", { timeout: 5000 });
-// hard-asset chips: silver, gold/silver ratio, gold in rupees + the hedge sleeve line
-await page.waitForSelector("text=Silver", { timeout: 10000 });
-await page.waitForSelector("text=Gold/silver ratio", { timeout: 5000 });
-await page.waitForSelector("text=Gold in ₹ (10g)", { timeout: 5000 });
+// compact by default: 3 posture chips + hedge line, the rest behind "Full weather"
+await page.waitForSelector("text=Gold in ₹ (10g)", { timeout: 10000 });
 await page.waitForSelector("text=Your hedge sleeve", { timeout: 5000 });
+if (await page.locator("text=Gold/silver ratio").count()) throw new Error("weather should start compact");
+await page.getByRole("button", { name: /Full weather/ }).click();
+await page.waitForSelector("text=Silver", { timeout: 5000 });
+await page.waitForSelector("text=Gold/silver ratio", { timeout: 5000 });
+await page.waitForSelector("text=Brent oil", { timeout: 5000 });
+await page.getByRole("button", { name: /Compact view/ }).click(); // collapse back for clean screenshots
+await page.waitForTimeout(300);
 
 // ---- SIMPLE MODE (default): plain-words action plan, three tabs ----
 await page.waitForSelector("text=Your action plan", { timeout: 10000 });
@@ -49,7 +54,8 @@ if (!/worth acting on|Nothing needs action/.test(planText)) throw new Error("pla
 if (!/sitting tight IS the strategy/.test(planText)) throw new Error("plan hold line missing");
 if (!/insurance, not the engine|same exposure costs less/.test(planText)) throw new Error("plan ETF line missing");
 if (await page.locator("text=the Buffett matrix").count()) throw new Error("matrix should be hidden in simple mode");
-if (!(await page.getByRole("button", { name: "Screeners" }).count() === 0)) throw new Error("screeners tab should be hidden in simple mode");
+if (!(await page.getByRole("button", { name: "Ideas" }).count() === 0)) throw new Error("Ideas tab should be hidden in simple mode");
+if (!(await page.getByRole("button", { name: "Checkup" }).count() === 0)) throw new Error("Checkup tab should be hidden in simple mode");
 
 // ---- portfolio snowflake in the action summary ----
 await page.waitForSelector("text=Portfolio snowflake", { timeout: 10000 });
@@ -88,7 +94,25 @@ await page.screenshot({ path: `${shots}/03-overview.png`, fullPage: true });
 // ---- switch to the full toolbench ----
 await page.getByRole("button", { name: /All tools/ }).click();
 await page.waitForSelector("text=the Buffett matrix", { timeout: 10000 });
-await page.waitForSelector("text=Screeners", { timeout: 5000 });
+await page.waitForSelector("text=Ideas", { timeout: 5000 });
+await page.waitForSelector("text=Checkup", { timeout: 5000 });
+
+// ---- the Buffett matrix collapses to a header until wanted ----
+const matrixHeader = page.locator("button[aria-expanded]").filter({ hasText: /Buffett matrix/ }).first();
+if ((await matrixHeader.getAttribute("aria-expanded")) !== "false") throw new Error("matrix should start collapsed");
+await matrixHeader.click();
+await page.waitForTimeout(500);
+if ((await matrixHeader.getAttribute("aria-expanded")) !== "true") throw new Error("matrix did not expand");
+await matrixHeader.click(); // collapse again - remembered on-device
+await page.waitForTimeout(300);
+
+// ---- the AI prompt generator collapses the same way ----
+const pgHeader = page.locator("button[aria-expanded]").filter({ hasText: /AI prompt generator/ }).first();
+if ((await pgHeader.getAttribute("aria-expanded")) !== "false") throw new Error("prompt generator should start collapsed");
+await pgHeader.click();
+await page.waitForSelector("text=include full 5-yr tables", { timeout: 5000 });
+await pgHeader.click();
+await page.waitForTimeout(300);
 
 // ---- allocation slice toggle (stocks-only / ETFs-only) ----
 await page.getByRole("button", { name: "Stocks", exact: true }).click();
@@ -112,12 +136,13 @@ await page.getByRole("button", { name: "Value", exact: true }).click();
 await page.waitForTimeout(300);
 
 // expand first stock card → intrinsic value band + strengths/risks + snowflake + analyst line
-await page.locator("button[aria-expanded]").first().click();
+await page.locator("[data-testid=stock-card-header]").first().click();
 await page.waitForSelector("text=Intrinsic value (rough)", { timeout: 10000 });
 await page.waitForSelector("text=✦ Strengths", { timeout: 10000 });
 await page.waitForSelector("text=⚑ Risks", { timeout: 10000 });
 await page.waitForSelector("text=12-mo target", { timeout: 10000 });
 await page.waitForSelector("text=F-Score", { timeout: 10000 });
+await page.waitForSelector("text=Decision board says", { timeout: 10000 }); // same engine as the Decisions tab, inline
 if ((await page.locator("[data-testid=snowflake]").count()) < 2) throw new Error("stock-card snowflake missing");
 if (!(await page.locator("[data-infotip=pe]").count())) throw new Error("info tooltips not wired in stock card");
 
@@ -155,7 +180,9 @@ if (await addBtn.count()) {
 }
 
 // ---- screeners tab (shares the scan) ----
-await page.getByRole("button", { name: "Screeners" }).click();
+// Screeners now live inside the Ideas tab (default view)
+await page.locator("button[aria-pressed]").filter({ hasText: /^Ideas/ }).first().click();
+await page.waitForSelector("text=two ways to find the next name", { timeout: 5000 });
 await page.waitForSelector("text=Screening universe", { timeout: 10000 });
 if (!(await page.locator("text=India: ").count())) console.log("note: scan badge not found (ok if relabeled)");
 await page.waitForSelector("text=Coffee Can compounders", { timeout: 10000 });
@@ -229,6 +256,8 @@ await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/19-etfs.png`, fullPage: true });
 
 // ---- smart money tab: India leads with holders; the US bench is opt-in ----
+// Smart money is the second view inside Ideas
+await page.locator("button[aria-pressed]").filter({ hasText: /^Ideas/ }).first().click();
 await page.getByRole("button", { name: "Smart money" }).click();
 await page.waitForSelector("text=Who owns your stock", { timeout: 15000 });
 await page.waitForSelector("text=US superinvestor bench (optional here)", { timeout: 10000 });
@@ -249,7 +278,10 @@ await page.waitForTimeout(400);
 await page.screenshot({ path: `${shots}/16-smartmoney.png`, fullPage: true });
 
 // ---- backtest tab: score-as-of vs what happened since ----
-await page.locator("button[aria-pressed]").filter({ hasText: /^Backtest/ }).first().click();
+// Backtest is the third view inside Checkup
+await page.locator("button[aria-pressed]").filter({ hasText: /^Checkup/ }).first().click();
+await page.waitForSelector("text=is the portfolio built right", { timeout: 5000 });
+await page.getByRole("button", { name: "Backtest" }).click();
 await page.waitForSelector("text=would the engine have helped?", { timeout: 15000 });
 await page.waitForSelector("text=/cutoff \\d{4}-\\d{2}-\\d{2}/", { timeout: 10000 });
 await page.waitForSelector("text=Verdict then", { timeout: 20000 });
@@ -257,8 +289,14 @@ await page.waitForSelector("text=/yr avg", { timeout: 20000 });
 const btBody = await page.locator("body").textContent();
 if (!/TCS/.test(btBody)) throw new Error("backtest table missing holdings");
 if (!/Honest limits/.test(btBody)) throw new Error("backtest caveats missing");
+// switch cutoff to 2y and confirm it recomputes
+await page.getByRole("button", { name: "2y ago", exact: true }).click();
+await page.waitForTimeout(600);
+await page.waitForSelector("text=Verdict then", { timeout: 10000 });
+await page.screenshot({ path: `${shots}/21-backtest.png`, fullPage: true });
 
-// ---- crash stress test: real history applied to today's holdings ----
+// ---- crash stress test: real history applied to today's holdings (Checkup › Stress test) ----
+await page.getByRole("button", { name: "Stress test" }).click();
 await page.waitForSelector("text=If history repeats", { timeout: 10000 });
 await page.waitForSelector("text=would have become", { timeout: 10000 }); // default: 2008
 await page.waitForSelector("text=What kept-buying did", { timeout: 5000 });
@@ -272,11 +310,19 @@ if (!/Gold & silver funds/.test(stBody)) throw new Error("stress buckets missing
 if (!/not a prediction of the future/.test(stBody)) throw new Error("stress caveat missing");
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${shots}/25-stress.png`, fullPage: true });
-// switch cutoff to 2y and confirm it recomputes
-await page.getByRole("button", { name: "2y ago", exact: true }).click();
+
+// ---- cross-link: a hardest-hit name jumps straight to its chart ----
+const hitBtn = page.locator("button[title='Open in the Chart tab']").first();
+const hitSym = (await hitBtn.textContent())?.trim();
+await hitBtn.click();
 await page.waitForTimeout(600);
-await page.waitForSelector("text=Verdict then", { timeout: 10000 });
-await page.screenshot({ path: `${shots}/21-backtest.png`, fullPage: true });
+const chartTab = page.locator("button[aria-pressed=true]").filter({ hasText: /^Chart/ });
+if (!(await chartTab.count())) throw new Error("stress hardest-hit click did not open the Chart tab");
+await page.waitForFunction(
+  (sym) => document.querySelector('select[aria-label="Symbol"]')?.value === sym,
+  `${hitSym}.NS`,
+  { timeout: 15000 }
+);
 
 // ---- chart tab ----
 await page.getByRole("button", { name: "Chart", exact: true }).click();
@@ -290,6 +336,8 @@ await page.screenshot({ path: `${shots}/09-chart.png`, fullPage: true });
 if (!(await page.locator("[data-testid=price-chart] canvas").count())) throw new Error("chart canvas missing");
 
 // ---- health (the Projector tab is gone by design) ----
+// Health & income is the first view inside Checkup (the group remembers the last view, so click it explicitly)
+await page.locator("button[aria-pressed]").filter({ hasText: /^Checkup/ }).first().click();
 await page.getByRole("button", { name: /Health & income/ }).click();
 await page.waitForSelector("text=Portfolio health checks", { timeout: 10000 });
 await page.waitForTimeout(500);

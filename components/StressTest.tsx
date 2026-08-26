@@ -16,10 +16,12 @@ export function StressTest({
   rows,
   fx,
   base,
+  onOpenChart,
 }: {
   rows: AnalyzedHolding[];
   fx: FxRates;
   base: Currency;
+  onOpenChart?: (symbol: string) => void;
 }) {
   const [scenarioId, setScenarioId] = useState(STRESS_SCENARIOS[1].id); // default: 2008
   const scenario = STRESS_SCENARIOS.find((s) => s.id === scenarioId) ?? STRESS_SCENARIOS[0];
@@ -126,10 +128,21 @@ export function StressTest({
               {result.worst.map((w, i) => (
                 <span key={w.symbol}>
                   {i > 0 && " · "}
-                  <strong>{w.symbol.replace(/\.(NS|BO|TO|V|NE)$/i, "")}</strong>{" "}
+                  {onOpenChart ? (
+                    <button
+                      onClick={() => onOpenChart(w.symbol)}
+                      className="font-semibold text-ink hover:text-series-1 hover:underline"
+                      title="Open in the Chart tab"
+                    >
+                      {w.symbol.replace(/\.(NS|BO|TO|V|NE)$/i, "")}
+                    </button>
+                  ) : (
+                    <strong>{w.symbol.replace(/\.(NS|BO|TO|V|NE)$/i, "")}</strong>
+                  )}{" "}
                   <span className="text-status-critical tnum">{fmtPct(w.hit)}</span>
                 </span>
               ))}
+              {onOpenChart && <span className="text-muted text-[11px]"> · click a name for its chart</span>}
             </p>
           )}
 

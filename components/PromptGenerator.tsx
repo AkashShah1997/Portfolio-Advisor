@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AnalyzedHolding, Currency, FxRates, PortfolioSummary } from "@/lib/types";
 import { buildPrompt, estimateTokens, FOCUS_META, type PromptFocus } from "@/lib/promptgen";
+import { loadUiFlag, saveUiFlag } from "@/lib/store";
 import { Badge, Card, SectionTitle } from "./ui";
+import { Collapse } from "./anim";
 
 type Scope = "portfolio" | "selected";
 
@@ -23,6 +25,21 @@ export function PromptGenerator({
   const [includeHistory, setIncludeHistory] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
+
+  // collapsed by default - it's a power tool, not a daily read; choice remembered on-device
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      await Promise.resolve();
+      setOpen(loadUiFlag("promptGenOpen", false));
+    })();
+  }, []);
+  const toggleOpen = () => {
+    setOpen((prev) => {
+      saveUiFlag("promptGenOpen", !prev);
+      return !prev;
+    });
+  };
 
   const chosen = useMemo(
     () => (scope === "portfolio" ? rows : rows.filter((r) => selected.has(r.holding.id))),
@@ -75,10 +92,26 @@ export function PromptGenerator({
 
   return (
     <Card className="p-4">
-      <SectionTitle sub="Generates a ready-to-paste prompt - your positions, 5-year ratios and scorecard verdicts included - engineered for ChatGPT, Claude, Gemini, Perplexity or any other AI. No API key needed.">
-        AI prompt generator
-      </SectionTitle>
+      <button
+        className="w-full text-left flex items-start justify-between gap-3"
+        onClick={toggleOpen}
+        aria-expanded={open}
+      >
+        <SectionTitle
+          sub={
+            open
+              ? "Generates a ready-to-paste prompt - your positions, 5-year ratios and scorecard verdicts included - engineered for ChatGPT, Claude, Gemini, Perplexity or any other AI. No API key needed."
+              : "Build a deep-analysis prompt from your real numbers to paste into any AI - click to open."
+          }
+        >
+          AI prompt generator
+        </SectionTitle>
+        <span className="text-muted text-[13px] shrink-0" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+      </button>
 
+      <Collapse open={open}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12.5px]">
         <div className="flex rounded-lg overflow-hidden hairline">
           {(["portfolio", "selected"] as Scope[]).map((s) => (
@@ -173,6 +206,7 @@ export function PromptGenerator({
           </div>
         </>
       )}
+      </Collapse>
     </Card>
   );
 }

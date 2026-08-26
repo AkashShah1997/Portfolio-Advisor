@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { AnalyzedHolding, Check, CheckStatus, Currency, Holding } from "@/lib/types";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/symbols";
 import { VERDICT_META } from "@/lib/portfolio";
+import { ACTION_META, decideRow } from "@/lib/decisions";
 import { buildPrompt } from "@/lib/promptgen";
 import { buildValuation } from "@/lib/valuation";
 import { buildJourney } from "@/lib/journey";
@@ -201,12 +202,14 @@ export function StockCard({
   aiModel,
   onRemove,
   onPatchHolding,
+  onGoDecisions,
 }: {
   row: AnalyzedHolding;
   aiKey?: string;
   aiModel?: string;
   onRemove?: () => void;
   onPatchHolding?: (patch: Partial<Holding>) => void;
+  onGoDecisions?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; text?: string; error?: string }>({ loading: false });
@@ -229,6 +232,11 @@ export function StockCard({
     [scorecard, valuation, journey]
   );
   const flake = useMemo(() => (scorecard ? snowflakeOf(scorecard, data) : null), [scorecard, data]);
+  // the same engine the Decisions tab runs - shown here so the two views can never disagree
+  const decision = useMemo(
+    () => (!isWatch && scorecard && scorecard.verdict !== "INSUFFICIENT_DATA" ? decideRow(row) : null),
+    [row, isWatch, scorecard]
+  );
 
   const copyPrompt = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -315,7 +323,12 @@ export function StockCard({
   return (
     <Card className="p-4">
       {/* header */}
-      <button className="w-full text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+      <button
+        className="w-full text-left"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        data-testid="stock-card-header"
+      >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -408,6 +421,25 @@ export function StockCard({
 
       <Collapse open={open}>
         <div className="mt-4 space-y-5">
+          {/* what the decision board says about THIS position - same engine, zero disagreement */}
+          {decision && !isEtf && (
+            <div className="bg-page hairline rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px]">
+              <span className="text-muted text-[11.5px] uppercase tracking-wide">Decision board says</span>
+              <Badge tone={ACTION_META[decision.action].tone} icon={ACTION_META[decision.action].icon}>
+                {ACTION_META[decision.action].label}
+              </Badge>
+              <span className="text-ink-2 leading-snug">{decision.headline}</span>
+              {onGoDecisions && (
+                <button
+                  onClick={onGoDecisions}
+                  className="text-series-1 hover:underline no-print text-[12px]"
+                >
+                  every reason →
+                </button>
+              )}
+            </div>
+          )}
+
           {/* strengths & risks - every bullet restates a check the engine ran */}
           {insights && (insights.strengths.length > 0 || insights.risks.length > 0) && (
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">

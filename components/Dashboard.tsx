@@ -18,7 +18,7 @@ import { benchmarkCompare, portfolioSeries, summarize, toBase, VERDICT_META } fr
 import { describeSnowflake, portfolioSnowflake, snowflakeLeaders } from "@/lib/snowflake";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
-import { loadUiMode, MARKET_META, saveUiMode, type Market, type UiMode } from "@/lib/store";
+import { loadUiFlag, loadUiMode, MARKET_META, saveUiFlag, saveUiMode, type Market, type UiMode } from "@/lib/store";
 import { candidatesFor, parseCustomSymbols, type CandidateStock, type UniverseCountry } from "@/lib/universe";
 import { toMetricRow, type MetricRow } from "@/lib/screens";
 import {
@@ -48,7 +48,7 @@ import { SmartMoney } from "./SmartMoney";
 import { ChartPanel } from "./ChartPanel";
 import { HealthPanel } from "./HealthPanel";
 import { CoachPanel } from "./CoachPanel";
-import { AnimatedNumber, Stagger, StaggerItem, Switcher } from "./anim";
+import { AnimatedNumber, Collapse, Stagger, StaggerItem, Switcher } from "./anim";
 import ReactMarkdown from "react-markdown";
 
 /** Full stock payload fetched on demand for prompts / watchlist adds. */
@@ -70,14 +70,43 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "coach", label: "Coach" },
   { id: "decisions", label: "Decisions" },
-  { id: "screeners", label: "Screeners" },
+  { id: "ideas", label: "Ideas" },
   { id: "etfs", label: "ETFs" },
-  { id: "smart", label: "Smart money" },
-  { id: "backtest", label: "Backtest" },
+  { id: "checkup", label: "Checkup" },
   { id: "chart", label: "Chart" },
-  { id: "health", label: "Health & income" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
+
+/** Two grouped tabs keep every tool reachable while halving the top row:
+ *  Ideas = "what to buy next" (Screeners · Smart money)
+ *  Checkup = "is the portfolio built right?" (Health & income · Stress test · Backtest) */
+type IdeasView = "screeners" | "smart";
+type CheckupView = "health" | "stress" | "backtest";
+
+function SubTabs<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { id: T; label: string }[];
+}) {
+  return (
+    <div className="inline-flex bg-page hairline rounded-lg p-0.5 text-[12.5px] font-medium no-print">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          aria-pressed={value === o.id}
+          className={`px-2.5 py-1 rounded-md transition-colors ${value === o.id ? "bg-series-1 text-white" : "text-ink-2 hover:text-ink"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** Simple mode shows only the tabs that answer "what should I do?" */
 const SIMPLE_TABS: readonly TabId[] = ["overview", "coach", "decisions", "etfs"];
@@ -153,6 +182,29 @@ export function Dashboard({
 
   const [sortBy, setSortBy] = useState<"weight" | "score" | "verdict">("verdict");
   const [tab, setTab] = useState<TabId>("overview");
+  const [ideasView, setIdeasView] = useState<IdeasView>("screeners");
+  const [checkupView, setCheckupView] = useState<CheckupView>("health");
+  const [chartFocus, setChartFocus] = useState<string | undefined>(undefined);
+  // the Buffett matrix collapses to a header until wanted; choice remembered on-device
+  const [matrixOpen, setMatrixOpen] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      await Promise.resolve();
+      setMatrixOpen(loadUiFlag("matrixOpen", false));
+    })();
+  }, []);
+  const toggleMatrix = () => {
+    setMatrixOpen((prev) => {
+      saveUiFlag("matrixOpen", !prev);
+      return !prev;
+    });
+  };
+  /** Navigate to a tab, optionally landing on a specific view inside a grouped tab. */
+  const goTo = (t: TabId, sub?: string) => {
+    if (t === "ideas" && (sub === "screeners" || sub === "smart")) setIdeasView(sub);
+    if (t === "checkup" && (sub === "health" || sub === "stress" || sub === "backtest")) setCheckupView(sub);
+    setTab(t);
+  };
   const [uiMode, setUiModeState] = useState<UiMode>(() => loadUiMode());
   const setUiMode = (m: UiMode) => {
     setUiModeState(m);
@@ -747,7 +799,7 @@ export function Dashboard({
         {tab === "overview" && (
           <div className="space-y-5">
             {/* the macro situation, in one card */}
-            <MarketWeather market={market} rows={invRows} fx={fx} />
+            <MarketWeather market={market} rows={invRows} fx={fx} onGoEtfs={() => goTo("etfs")} />
 
             {/* the plan, in plain words */}
             <PlanCard
@@ -824,13 +876,24 @@ export function Dashboard({
               </div>
             </Card>
 
-            {/* the Buffett matrix (full toolbench only) */}
+            {/* the Buffett matrix (full toolbench only; collapsed until wanted) */}
             {uiMode === "all" && (
               <Card className="p-4">
-                <SectionTitle sub="Every holding placed by business quality + growth (up) vs valuation margin of safety (right). Bubble = weight. The masters live top-right. Watchlist names appear translucent.">
-                  Quality vs price - the Buffett matrix
-                </SectionTitle>
-                <Matrix rows={rows} fx={fx} base={base} />
+                <button
+                  className="w-full text-left flex items-start justify-between gap-3"
+                  onClick={toggleMatrix}
+                  aria-expanded={matrixOpen}
+                >
+                  <SectionTitle sub={matrixOpen ? "Every holding placed by business quality + growth (up) vs valuation margin of safety (right). Bubble = weight. The masters live top-right. Watchlist names appear translucent." : undefined}>
+                    Quality vs price - the Buffett matrix
+                  </SectionTitle>
+                  <span className="text-muted text-[13px] shrink-0" aria-hidden>
+                    {matrixOpen ? "▾" : "▸"}
+                  </span>
+                </button>
+                <Collapse open={matrixOpen}>
+                  <Matrix rows={rows} fx={fx} base={base} />
+                </Collapse>
               </Card>
             )}
 
@@ -870,7 +933,7 @@ export function Dashboard({
               </div>
             </div>
 
-            {/* AI prompt generator (full toolbench only) */}
+            {/* AI prompt generator (full toolbench only; collapses itself) */}
             {uiMode === "all" && <PromptGenerator rows={rows} summary={summary} fx={fx} baseCurrency={base} />}
 
             {/* portfolio AI */}
@@ -913,6 +976,7 @@ export function Dashboard({
                         aiModel={aiModel}
                         onRemove={r.holding.watch ? () => removeRow(r.holding.id) : undefined}
                         onPatchHolding={(patch) => patchHolding(r.holding.id, patch)}
+                        onGoDecisions={() => goTo("decisions")}
                       />
                     </StaggerItem>
                   ))}
@@ -938,34 +1002,68 @@ export function Dashboard({
           </div>
         )}
 
-        {tab === "screeners" && (
-          <ScreenerPanel
-            rows={rows}
-            countries={meta.countries}
-            scans={scans}
-            onScan={(key, mode) => void runScan(key, mode)}
-            onScanCustom={(text) => void runScan("Custom", "force", text)}
-            onAddWatch={addWatch}
-            hydrate={hydrate}
-          />
+        {tab === "ideas" && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <SubTabs<IdeasView>
+                value={ideasView}
+                onChange={setIdeasView}
+                options={[
+                  { id: "screeners", label: "Screeners" },
+                  { id: "smart", label: "Smart money" },
+                ]}
+              />
+              <span className="text-[11.5px] text-muted">
+                two ways to find the next name: your own filters, or what proven investors filed
+              </span>
+            </div>
+            {ideasView === "screeners" ? (
+              <ScreenerPanel
+                rows={rows}
+                countries={meta.countries}
+                scans={scans}
+                onScan={(key, mode) => void runScan(key, mode)}
+                onScanCustom={(text) => void runScan("Custom", "force", text)}
+                onAddWatch={addWatch}
+                hydrate={hydrate}
+              />
+            ) : (
+              <SmartMoney rows={rows} market={market} onAddWatch={(s) => addWatch(s)} />
+            )}
+          </div>
         )}
 
         {tab === "etfs" && (
           <EtfPanel rows={rows} market={market} fx={fx} portfolioTotal={summary.totalCurrent} />
         )}
 
-        {tab === "smart" && <SmartMoney rows={rows} market={market} onAddWatch={(s) => addWatch(s)} />}
-
-        {tab === "backtest" && (
+        {tab === "checkup" && (
           <div className="space-y-4">
-            <BacktestPanel rows={rows} market={market} />
-            <StressTest rows={invRows} fx={fx} base={base} />
+            <div className="flex flex-wrap items-center gap-2">
+              <SubTabs<CheckupView>
+                value={checkupView}
+                onChange={setCheckupView}
+                options={[
+                  { id: "health", label: "Health & income" },
+                  { id: "stress", label: "Stress test" },
+                  { id: "backtest", label: "Backtest" },
+                ]}
+              />
+              <span className="text-[11.5px] text-muted">
+                is the portfolio built right - today, in a crash, and by hindsight?
+              </span>
+            </div>
+            {checkupView === "health" && (
+              <HealthPanel rows={rows} fx={fx} base={base} onGo={(t, sub) => goTo(t as TabId, sub)} />
+            )}
+            {checkupView === "stress" && (
+              <StressTest rows={invRows} fx={fx} base={base} onOpenChart={(s) => { setChartFocus(s); setTab("chart"); }} />
+            )}
+            {checkupView === "backtest" && <BacktestPanel rows={rows} market={market} />}
           </div>
         )}
 
-        {tab === "chart" && <ChartPanel rows={rows} />}
-
-        {tab === "health" && <HealthPanel rows={rows} fx={fx} base={base} />}
+        {tab === "chart" && <ChartPanel rows={rows} focusSymbol={chartFocus} />}
 
         {tab === "coach" && <CoachPanel rows={rows} market={market} fx={fx} />}
       </Switcher>

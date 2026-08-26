@@ -10,7 +10,7 @@ import { portfolioSeries, summarize } from "../lib/portfolio";
 import { buildPrompt } from "../lib/promptgen";
 import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
 import { capTierOf, CONSENSUS_MIN, consensusOf, runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
-import { applyTheme, loadTheme } from "../lib/store";
+import { applyTheme, loadTheme, loadUiFlag, saveUiFlag } from "../lib/store";
 import { normalizeSecurityType } from "../lib/parse";
 import { sma } from "../lib/history";
 import { loadHoldings, MARKET_META, saveHoldings } from "../lib/store";
@@ -1647,6 +1647,18 @@ console.log("\n== Analyst context fields (mock determinism) ==");
     "analyst fields are deterministic",
     JSON.stringify(q) === JSON.stringify(mockStockData("TCS.NS").quote)
   );
+}
+
+console.log("\n== Persisted UI flags (weather/matrix/prompt collapse memory) ==");
+{
+  check("no browser → default wins", loadUiFlag("weatherOpen", false) === false && loadUiFlag("weatherOpen", true) === true);
+  let threw = false;
+  try {
+    saveUiFlag("weatherOpen", true);
+  } catch {
+    threw = true;
+  }
+  check("saving without a browser is a no-op, not a crash", !threw);
 }
 
 console.log("\n== Crash stress test (the fire drill) ==");

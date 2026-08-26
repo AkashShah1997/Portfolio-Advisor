@@ -57,14 +57,27 @@ function timeToStr(t: Time): string | null {
   return null;
 }
 
-export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
+export function ChartPanel({ rows, focusSymbol }: { rows: AnalyzedHolding[]; focusSymbol?: string }) {
   const symbols = useMemo(() => {
     const owned = rows.filter((r) => !r.holding.watch).map((r) => r.holding.yahooSymbol);
     const watch = rows.filter((r) => r.holding.watch).map((r) => r.holding.yahooSymbol);
     return { owned, watch };
   }, [rows]);
 
-  const [symbol, setSymbol] = useState<string>(symbols.owned[0] ?? symbols.watch[0] ?? "");
+  const [symbol, setSymbol] = useState<string>(focusSymbol ?? symbols.owned[0] ?? symbols.watch[0] ?? "");
+
+  // another tab asked to open a specific symbol (e.g. a stress-test hardest-hit name)
+  const lastFocus = useRef<string | undefined>(focusSymbol);
+  useEffect(() => {
+    if (!focusSymbol || focusSymbol === lastFocus.current) return;
+    lastFocus.current = focusSymbol;
+    void (async () => {
+      await Promise.resolve();
+      setSymbol(focusSymbol);
+      setDrawings([]);
+      setPending(null);
+    })();
+  }, [focusSymbol]);
   const [custom, setCustom] = useState("");
   const [range, setRange] = useState<HistoryRange>("1y");
   const [kind, setKind] = useState<"candles" | "area">("candles");

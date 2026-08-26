@@ -24,14 +24,25 @@ const CHECK_INFO: Record<string, string> = {
   sector: "sectorConc",
 };
 
+/** Where to go to FIX a failing check - shown only when a threshold is crossed. */
+const FIX_LINK: Record<string, { tab: string; sub?: string; label: string }> = {
+  top1: { tab: "coach", label: "trim plan in the Coach →" },
+  top3: { tab: "coach", label: "trim plan in the Coach →" },
+  "quality-capital": { tab: "decisions", label: "reshuffle in Decisions →" },
+  "laggard-capital": { tab: "decisions", label: "review in Decisions →" },
+  flags: { tab: "decisions", label: "see the flags in Decisions →" },
+};
+
 export function HealthPanel({
   rows,
   fx,
   base,
+  onGo,
 }: {
   rows: AnalyzedHolding[];
   fx: FxRates;
   base: Currency;
+  onGo?: (tab: string, sub?: string) => void;
 }) {
   const checks = useMemo(() => computeHealth(rows, fx), [rows, fx]);
   const income = useMemo(() => computeIncome(rows, fx), [rows, fx]);
@@ -78,6 +89,17 @@ export function HealthPanel({
                         </>
                       )}{" "}
                       <span className="text-ink-2">- {c.detail}</span>
+                      {(c.status === "warn" || c.status === "fail") && FIX_LINK[c.id] && onGo && (
+                        <>
+                          {" "}
+                          <button
+                            onClick={() => onGo(FIX_LINK[c.id].tab, FIX_LINK[c.id].sub)}
+                            className="text-[11.5px] text-series-1 hover:underline no-print"
+                          >
+                            {FIX_LINK[c.id].label}
+                          </button>
+                        </>
+                      )}
                       <span className="block text-[11px] text-muted italic">{c.principle}</span>
                     </span>
                   </li>

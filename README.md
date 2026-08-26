@@ -33,17 +33,27 @@ The dashboard opens with just **four tabs - Overview, Coach, Decisions, ETFs** -
 with **"Your action plan"**: the whole analysis compressed into a few plain sentences (what to sell,
 what to stop adding to, which ETF fee to fix, where new money belongs, and what just needs
 patience), each line linking to the tab that holds the evidence. One click on **"All tools"**
-reveals the full bench - screeners, smart money, backtest, charting, health, the Buffett matrix
-and the AI prompt generator - and the choice is remembered on-device.
+reveals the full bench, now grouped so the top row stays calm: **Ideas** (Screeners · Smart money -
+"what to buy next"), **Checkup** (Health & income · Stress test · Backtest - "is the portfolio
+built right?"), plus Chart, the Buffett matrix and the AI prompt generator. The choice is
+remembered on-device.
 
 ## The tabs
+
+The features are wired to each other, so every finding carries its fix: stock cards show what the
+**Decision board says** inline (same engine, zero disagreement), failing health checks link to the
+Coach or Decisions, the stress test's hardest-hit names click through to their chart, the hedge
+sleeve line links to the ETFs tab, and the Overview's Buffett matrix and AI prompt generator fold
+away until wanted (remembered on-device).
 
 **Every ratio explains itself.** Hover (or keyboard-focus) the **ⓘ** beside any metric - screener
 headers, custom-filter fields, pillar meters, ratio tables, the valuation snapshot - for a plain-words
 card: what the ratio means, how it's computed, and **which direction the value school considers
 better** (with the masters' thresholds).
 
-**Market weather** (top of the Overview, both modes) - the macro situation from free public data:
+**Market weather** (top of the Overview, both modes; **compact by default** - the regime read, three
+posture chips and your hedge sleeve, with all 9 readings one click away and the choice remembered) -
+the macro situation from free public data:
 index level with 1-year return, distance from the 52-week high and position vs its **200-day
 average**; **India VIX / VIX** with fear bands (calm <14 · fear >28); USD/INR / USD/CAD; gold AND
 silver; the **gold/silver ratio** (long-run ~60-70, labelled "context, never a signal"); **gold in
@@ -100,7 +110,7 @@ refuses to call a growing business an exit just because the price lagged. Below 
 **upgrade scanner**: same-market quality names that currently screen far stronger than your weak
 holdings, one click to watchlist.
 
-**Screeners** - classic long-term screens run over the scanned market universe (**~520 India - the
+**Ideas › Screeners** - classic long-term screens run over the scanned market universe (**~520 India - the
 Nifty 500 tiers · ~235 Canada - the full S&P/TSX Composite · ~900 US - the S&P 500 + MidCap 400**,
 merged from official index constituent lists, editable), any **pasted custom list** (≤100 symbols
 per paste, repeatable), and
@@ -137,7 +147,7 @@ Overview link here instead of pretending the stock scorecard applies. When Yahoo
 nothing for a listing (common for NSE ETFs), the tab **falls back** to the curated fee table plus
 returns computed from the fund's own price history - labeled "limited data", never silently blank.
 
-**Smart money** - regional by design: the **India view leads with "Who owns your stock"** (the
+**Ideas › Smart money** - regional by design: the **India view leads with "Who owns your stock"** (the
 ownership feed covers NSE names; promoters show under insiders) and keeps the US-only 13F bench
 opt-in behind a button with the honest reason stated (13Fs are a US disclosure; India has no free
 equivalent). The **Canada view leads with the bench** - those are its investable listings. Two
@@ -156,7 +166,7 @@ mutual funds/ETFs and institutions holding any symbol (full for US/Canada, parti
 promoter stakes appear under "insiders"). One click adds any smart-money name to your watchlist,
 where **your own scorecard** judges it.
 
-**Backtest** - "would this engine have helped?", answered honestly: the SAME scorecard re-run **as
+**Checkup › Backtest** - "would this engine have helped?", answered honestly: the SAME scorecard re-run **as
 of 1, 2 or 3 years ago using only data that existed then** - fiscal years ending before the cutoff,
 the price on that day, valuation rebuilt from the two (P/E-then, P/B-then); anything unknowable then
 (dividend yield, TTM figures, 52-week range) deliberately goes n/a so nothing leaks from the future.
@@ -167,7 +177,7 @@ names is a sanity check, not statistics; price-only returns; survivor bias; free
 at ~3 years. Every stock card also carries a **Piotroski F-Score** (0–9 year-over-year
 fundamental-improvement tests, hover for the breakdown).
 
-**Crash stress test** (same tab) - real past crashes applied to what you hold TODAY: the 2000
+**Checkup › Stress test** - real past crashes applied to what you hold TODAY: the 2000
 dot-com bust, the 2008 financial crisis, the 2020 COVID crash, the 2022 rate shock, and - because
 gold-pitch videos never mention it - the **1980 gold winter** (gold -65%, 28 years to recover).
 Each holding gets its TYPE's historical hit (index funds, gold/silver funds, large caps, mid/small
@@ -183,7 +193,7 @@ MA" is the 40-week MA on weekly data - not a meaningless 200-week average), both
 and **golden / death crosses are marked right on the chart** where the 50-day crosses the 200-day.
 Works for any Yahoo symbol, not just holdings.
 
-**Health & income** - concentration checks (top holding, top-3, HHI - each with a plain-words
+**Checkup › Health & income** - concentration checks (top holding, top-3, HHI - each with a plain-words
 tooltip), sector caps **with history's receipts when a threshold is crossed** (Enron/Nokia/Yes Bank
 for single names, Nasdaq-2000's 78%-and-15-years for sector bets), capital-in-quality
 share, laggard capital, red-flag exposure - each with the master's principle - plus estimated annual
