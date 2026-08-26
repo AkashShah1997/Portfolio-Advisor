@@ -36,6 +36,11 @@ await page.waitForSelector("text=NIFTY 50", { timeout: 15000 });
 await page.waitForSelector("text=India VIX", { timeout: 10000 });
 await page.waitForSelector("text=Nothing extreme in the weather", { timeout: 10000 }); // mock india regime
 await page.waitForSelector("text=Macro is context, not a signal", { timeout: 5000 });
+// hard-asset chips: silver, gold/silver ratio, gold in rupees + the hedge sleeve line
+await page.waitForSelector("text=Silver", { timeout: 10000 });
+await page.waitForSelector("text=Gold/silver ratio", { timeout: 5000 });
+await page.waitForSelector("text=Gold in ₹ (10g)", { timeout: 5000 });
+await page.waitForSelector("text=Your hedge sleeve", { timeout: 5000 });
 
 // ---- SIMPLE MODE (default): plain-words action plan, three tabs ----
 await page.waitForSelector("text=Your action plan", { timeout: 10000 });
@@ -252,6 +257,21 @@ await page.waitForSelector("text=/yr avg", { timeout: 20000 });
 const btBody = await page.locator("body").textContent();
 if (!/TCS/.test(btBody)) throw new Error("backtest table missing holdings");
 if (!/Honest limits/.test(btBody)) throw new Error("backtest caveats missing");
+
+// ---- crash stress test: real history applied to today's holdings ----
+await page.waitForSelector("text=If history repeats", { timeout: 10000 });
+await page.waitForSelector("text=would have become", { timeout: 10000 }); // default: 2008
+await page.waitForSelector("text=What kept-buying did", { timeout: 5000 });
+await page.locator("button[aria-pressed]").filter({ hasText: /^1980 gold winter/ }).first().click();
+await page.waitForSelector("text=28 YEARS", { timeout: 5000 });
+await page.waitForSelector("text=Insurance is not an engine", { timeout: 5000 });
+await page.locator("button[aria-pressed]").filter({ hasText: /^2000 dot-com/ }).first().click();
+await page.waitForSelector("text=sorted stocks by PRICE PAID", { timeout: 5000 });
+const stBody = await page.locator("body").textContent();
+if (!/Gold & silver funds/.test(stBody)) throw new Error("stress buckets missing the hedge sleeve");
+if (!/not a prediction of the future/.test(stBody)) throw new Error("stress caveat missing");
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${shots}/25-stress.png`, fullPage: true });
 // switch cutoff to 2y and confirm it recomputes
 await page.getByRole("button", { name: "2y ago", exact: true }).click();
 await page.waitForTimeout(600);

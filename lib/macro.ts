@@ -52,6 +52,7 @@ export const MACRO_SYMBOLS: Record<
     { key: "gold", symbol: "GC=F", label: "Gold" },
     { key: "oil", symbol: "BZ=F", label: "Brent oil" },
     { key: "us10y", symbol: "^TNX", label: "US 10-yr yield" },
+    { key: "silver", symbol: "SI=F", label: "Silver" },
   ],
   canada: [
     { key: "index", symbol: "^GSPTSE", label: "TSX Composite" },
@@ -60,8 +61,13 @@ export const MACRO_SYMBOLS: Record<
     { key: "gold", symbol: "GC=F", label: "Gold" },
     { key: "oil", symbol: "CL=F", label: "WTI oil" },
     { key: "us10y", symbol: "^TNX", label: "US 10-yr yield" },
+    { key: "silver", symbol: "SI=F", label: "Silver" },
   ],
 };
+
+/** Label lookup by key (chip order is decided in buildMacroItems, not here). */
+const labelOf = (market: Market, key: string) =>
+  MACRO_SYMBOLS[market].find((s) => s.key === key)?.label ?? key;
 
 // ---------- pure series math ----------
 
@@ -107,7 +113,7 @@ export function vixBand(level: number | undefined): { label: string; tone: Macro
 export function buildMacroItems(market: Market, stats: Record<string, SeriesStats>): MacroItem[] {
   const items: MacroItem[] = [];
   const ix = stats.index ?? {};
-  const ixLabel = MACRO_SYMBOLS[market][0].label;
+  const ixLabel = labelOf(market, "index");
   if (ix.last !== undefined) {
     items.push({
       key: "index",
@@ -122,7 +128,7 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
     const band = vixBand(vx.last);
     items.push({
       key: "vix",
-      label: MACRO_SYMBOLS[market][1].label,
+      label: labelOf(market, "vix"),
       value: vx.last.toFixed(1),
       sub: `${band.label} (calm <14 · fear >28)`,
       tone: band.tone,
@@ -133,7 +139,7 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
     const weaker = (fx.ret1y ?? 0) > 0; // USD/xxx up ⇒ home currency weaker
     items.push({
       key: "fx",
-      label: MACRO_SYMBOLS[market][2].label,
+      label: labelOf(market, "fx"),
       value: fx.last.toFixed(2),
       sub: `${pct(fx.ret1y)} 1y - ${market === "india" ? "rupee" : "loonie"} ${weaker ? "weaker" : "stronger"}`,
       tone: (fx.ret1y ?? 0) > 0.05 ? "warning" : "neutral",
@@ -149,11 +155,61 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
       tone: (gold.ret1y ?? 0) > 0.2 ? "warning" : "neutral",
     });
   }
+  const silver = stats.silver ?? {};
+  if (silver.last !== undefined) {
+    items.push({
+      key: "silver",
+      label: "Silver",
+      value: `$${silver.last.toFixed(1)}`,
+      sub: `${pct(silver.ret1y)} 1y - gold's volatile sibling`,
+      tone: (silver.ret1y ?? 0) > 0.35 ? "warning" : "neutral",
+    });
+  }
+  // gold ÷ silver - how many ounces of silver one ounce of gold buys
+  if (gold.last !== undefined && silver.last !== undefined && silver.last > 0) {
+    const ratio = gold.last / silver.last;
+    const band =
+      ratio >= 85 ? "silver historically cheap vs gold" : ratio <= 50 ? "silver rich vs gold" : "near the long-run band";
+    items.push({
+      key: "gsRatio",
+      label: "Gold/silver ratio",
+      value: ratio.toFixed(0),
+      sub: `${band} (long-run ~60-70) - context, never a signal`,
+      tone: "neutral",
+    });
+  }
+  // gold in YOUR currency - the number local gold funds actually track
+  const fxs = stats.fx ?? {};
+  if (gold.last !== undefined && fxs.last !== undefined) {
+    const localRet =
+      gold.ret1y !== undefined && fxs.ret1y !== undefined
+        ? (1 + gold.ret1y) * (1 + fxs.ret1y) - 1
+        : undefined;
+    if (market === "india") {
+      const per10g = (gold.last * fxs.last * 10) / 31.1035;
+      items.push({
+        key: "goldLocal",
+        label: "Gold in ₹ (10g)",
+        value: `₹${num(per10g)}`,
+        sub: `${pct(localRet)} 1y in rupees - what GOLDBEES-style funds track`,
+        tone: "neutral",
+      });
+    } else {
+      const perOz = gold.last * fxs.last;
+      items.push({
+        key: "goldLocal",
+        label: "Gold in C$ (oz)",
+        value: `C$${num(perOz)}`,
+        sub: `${pct(localRet)} 1y in loonies - what local gold funds track`,
+        tone: "neutral",
+      });
+    }
+  }
   const oil = stats.oil ?? {};
   if (oil.last !== undefined) {
     items.push({
       key: "oil",
-      label: MACRO_SYMBOLS[market][4].label,
+      label: labelOf(market, "oil"),
       value: `$${oil.last.toFixed(0)}`,
       sub: `${pct(oil.ret1y)} 1y${market === "india" ? " - India's biggest import" : ""}`,
       tone: market === "india" && (oil.ret1y ?? 0) > 0.25 ? "warning" : "neutral",
@@ -249,6 +305,7 @@ export function mockMacro(market: Market): MacroPayload {
           vix: { last: 15.2, ret1y: 0.04 },
           fx: { last: 87.6, ret1y: 0.031 },
           gold: { last: 3390, ret1y: 0.27 },
+          silver: { last: 52.4, ret1y: 0.31 },
           oil: { last: 78, ret1y: -0.12 },
           us10y: { last: 41.2, ret1y: -0.06 },
         }
@@ -257,6 +314,7 @@ export function mockMacro(market: Market): MacroPayload {
           vix: { last: 13.1, ret1y: -0.1 },
           fx: { last: 1.35, ret1y: -0.012 },
           gold: { last: 3390, ret1y: 0.27 },
+          silver: { last: 52.4, ret1y: 0.31 },
           oil: { last: 74, ret1y: -0.1 },
           us10y: { last: 41.2, ret1y: -0.06 },
         };

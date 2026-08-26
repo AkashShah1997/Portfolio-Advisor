@@ -30,6 +30,7 @@ import { buildMacroItems, mockMacro, readRegime, seriesStats, vixBand } from "..
 import { coachPosition, momentumFromCandles, sipPlan, STANCE_META, trancheLadder } from "../lib/coach";
 import { loadChecklist, PREBUY_CHECKLIST, saveChecklist } from "../lib/checklist";
 import { snowflakeLeaders } from "../lib/snowflake";
+import { BUCKET_META, hedgeShare, runStress, STRESS_SCENARIOS, stressBucketOf } from "../lib/stress";
 import { maCrossings, maLenForInterval } from "../lib/history";
 import { benchCagrSince, buildAsOf, cutoffISO, runBacktest } from "../lib/backtest";
 import { computeFScore } from "../lib/scorecard";
@@ -1646,6 +1647,123 @@ console.log("\n== Analyst context fields (mock determinism) ==");
     "analyst fields are deterministic",
     JSON.stringify(q) === JSON.stringify(mockStockData("TCS.NS").quote)
   );
+}
+
+console.log("\n== Crash stress test (the fire drill) ==");
+{
+  const mk = (sym: string, secType?: string, value = 900, patchQuote?: Record<string, unknown>): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    const patched = patchQuote ? { ...data, quote: { ...data.quote, ...patchQuote } } : data;
+    return {
+      holding: {
+        id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym,
+        quantity: 5, avgCost: 100, currency: "INR",
+        ...(secType ? { securityType: secType } : {}),
+      } as AnalyzedHolding["holding"],
+      data: patched,
+      scorecard: buildScorecard(patched),
+      invested: 500,
+      currentValue: value,
+    };
+  };
+  const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const goldEtf = mk("GOLDBEES.NS", "EXCHANGE_TRADED_FUND");
+  const nifty = mk("NIFTYBEES.NS", "EXCHANGE_TRADED_FUND");
+  const tcs = mk("TCS.NS", "EQUITY");
+  const pricey = mk("DMART.NS", "EQUITY", 900, { trailingPE: 62 });
+
+  check("5 scenarios with unique ids", STRESS_SCENARIOS.length === 5 && new Set(STRESS_SCENARIOS.map((s) => s.id)).size === 5);
+  check("every scenario tells the story in plain words (story, recovery, what-DCA-did)",
+    STRESS_SCENARIOS.every((s) => s.story.length > 40 && s.recovery.length > 20 && s.dcaNote.length > 20));
+  check("the hedge gets stress-tested too: 1980 gold winter hits ONLY the hedge sleeve", (() => {
+    const g = STRESS_SCENARIOS.find((s) => s.id === "gold1980")!;
+    return g.hits.hedge < -0.5 && g.hits.equityEtf === 0 && g.hits.largeStock === 0;
+  })());
+  check("2000 sorts by price paid: expensive stocks fall hardest, gold rises", (() => {
+    const d = STRESS_SCENARIOS.find((s) => s.id === "dotcom2000")!;
+    return d.hits.expensiveStock < d.hits.largeStock && d.hits.hedge > 0;
+  })());
+  check("2008 is the everything-crash: even the hedge takes a hit", STRESS_SCENARIOS.find((s) => s.id === "gfc2008")!.hits.hedge < 0);
+
+  check("gold ETF classifies as hedge", stressBucketOf(goldEtf) === "hedge");
+  check("index ETF classifies as equity fund", stressBucketOf(nifty) === "equityEtf");
+  check("large quality stock classifies as large-cap", stressBucketOf(tcs) === "largeStock");
+  check("P/E 62 stock classifies as expensive", stressBucketOf(pricey) === "expensiveStock");
+  check("every bucket has a plain-words label", (Object.keys(BUCKET_META) as (keyof typeof BUCKET_META)[]).every((k) => BUCKET_META[k].label.length > 3 && BUCKET_META[k].plain.length > 3));
+
+  const rows = [goldEtf, tcs, pricey];
+  const gfc = runStress(rows, fxI, STRESS_SCENARIOS.find((s) => s.id === "gfc2008")!)!;
+  check("2008 stress: total damage lands between the best and worst bucket", gfc.pct < -0.25 && gfc.pct > -0.6);
+  check("buckets sorted worst-hit first", gfc.buckets.every((b, i) => i === 0 || gfc.buckets[i - 1].hit <= b.hit));
+  check("worst list only carries losing positions", gfc.worst.every((w) => w.hit < 0));
+  const winter = runStress(rows, fxI, STRESS_SCENARIOS.find((s) => s.id === "gold1980")!)!;
+  check("gold winter leaves equities alone, hits only the gold sleeve", (() => {
+    const expected = 900 * 0.35 + 900 + 900;
+    return Math.abs(winter.totalAfter - expected) < 1;
+  })());
+  check("watchlist rows carry no capital into the drill", runStress([{ ...tcs, holding: { ...tcs.holding, watch: true } }], fxI, STRESS_SCENARIOS[0]) === null);
+
+  const hs = hedgeShare(rows, fxI)!;
+  check("hedge sleeve share = gold value / total (1/3 here)", Math.abs(hs.share - 1 / 3) < 0.001 && hs.symbols.includes("GOLDBEES.NS"));
+  check("no hedge funds → share 0, not null", (hedgeShare([tcs], fxI)?.share ?? -1) === 0);
+}
+
+console.log("\n== Hard-asset chips (silver, ratio, gold in your money) ==");
+{
+  const india = mockMacro("india");
+  const keys = india.items.map((i) => i.key);
+  check("silver chip present", keys.includes("silver"));
+  check("gold/silver ratio chip present", keys.includes("gsRatio"));
+  check("gold-in-rupees chip present", keys.includes("goldLocal"));
+  const ratio = india.items.find((i) => i.key === "gsRatio")!;
+  check("ratio math: 3390/52.4 ≈ 65", ratio.value === "65");
+  check("ratio explains itself in plain words", /long-run/.test(ratio.sub) && /context/.test(ratio.sub));
+  const gl = india.items.find((i) => i.key === "goldLocal")!;
+  check("india quotes gold per 10g in ₹", gl.label.includes("10g") && gl.value.startsWith("₹"));
+  check("local gold return compounds world gold × currency", /1y in rupees/.test(gl.sub));
+  const ca = mockMacro("canada");
+  const caGl = ca.items.find((i) => i.key === "goldLocal")!;
+  check("canada quotes gold per oz in C$", caGl.label.includes("C$") && caGl.value.startsWith("C$"));
+  check("labelOf refactor kept oil labels right", india.items.find((i) => i.key === "oil") !== undefined && mockMacro("india").items.some((i) => i.label === "Brent oil") && ca.items.some((i) => i.label === "WTI oil"));
+}
+
+console.log("\n== Concentration vs history (health analogs) ==");
+{
+  const mk = (sym: string, value: number): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 5, avgCost: 100, currency: "INR" },
+      data,
+      scorecard: buildScorecard(data),
+      invested: value / 2,
+      currentValue: value,
+    };
+  };
+  const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  // one stock at 60% of a 2-stock, single-sector portfolio
+  const concentrated = computeHealth([mk("TCS.NS", 6000), mk("INFY.NS", 4000)], fxI);
+  const top1 = concentrated.find((c) => c.id === "top1")!;
+  check("top holding 60% → fail with history's receipts (Enron, Nokia, Yes Bank)", top1.status === "fail" && /Enron/.test(top1.principle) && /Nokia/.test(top1.principle));
+  const sector = concentrated.find((c) => c.id === "sector")!;
+  check("one-sector portfolio → fail with the Nasdaq-2000 analog", sector.status !== "pass" && /78%/.test(sector.principle) && /15 years/.test(sector.principle));
+  // balanced portfolio keeps the original principles (analogs only when crossed)
+  const balanced = computeHealth(
+    [mk("TCS.NS", 2500), mk("HDFCBANK.NS", 2500), mk("RELIANCE.NS", 2500), mk("ITC.NS", 2500)],
+    fxI
+  );
+  const bTop1 = balanced.find((c) => c.id === "top1")!;
+  check("balanced portfolio keeps the calm principle (no scare quotes)", bTop1.status === "pass" && !/Enron/.test(bTop1.principle));
+}
+
+console.log("\n== Plain-language glossary for the new features ==");
+{
+  const newKeys = ["stress", "hedge", "silver", "gsRatio", "goldLocal", "topHolding", "sectorConc", "hhi"];
+  check("every new key has a plain-words entry", newKeys.every((k) => {
+    const e = METRIC_INFO[k];
+    return !!e && e.name.length > 2 && e.what.length > 40 && e.better.length > 40;
+  }));
+  check("the hedge entry carries the 1980 warning", /28 years/.test(METRIC_INFO.hedge.better));
+  check("the stress entry frames it as sizing, not prediction", /not a prediction/.test(METRIC_INFO.stress.better));
 }
 
 console.log("\n== Pre-buy checklist (the judgment gates) ==");

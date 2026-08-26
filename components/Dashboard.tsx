@@ -36,6 +36,7 @@ import { EtfPanel } from "./EtfPanel";
 import { PlanCard } from "./PlanCard";
 import { MarketWeather } from "./MarketWeather";
 import { BacktestPanel } from "./BacktestPanel";
+import { StressTest } from "./StressTest";
 import { isEtfHolding } from "@/lib/etf";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
@@ -746,7 +747,7 @@ export function Dashboard({
         {tab === "overview" && (
           <div className="space-y-5">
             {/* the macro situation, in one card */}
-            <MarketWeather market={market} />
+            <MarketWeather market={market} rows={invRows} fx={fx} />
 
             {/* the plan, in plain words */}
             <PlanCard
@@ -955,7 +956,12 @@ export function Dashboard({
 
         {tab === "smart" && <SmartMoney rows={rows} market={market} onAddWatch={(s) => addWatch(s)} />}
 
-        {tab === "backtest" && <BacktestPanel rows={rows} market={market} />}
+        {tab === "backtest" && (
+          <div className="space-y-4">
+            <BacktestPanel rows={rows} market={market} />
+            <StressTest rows={invRows} fx={fx} base={base} />
+          </div>
+        )}
 
         {tab === "chart" && <ChartPanel rows={rows} />}
 

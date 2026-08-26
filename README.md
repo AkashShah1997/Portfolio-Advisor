@@ -45,8 +45,11 @@ better** (with the masters' thresholds).
 
 **Market weather** (top of the Overview, both modes) - the macro situation from free public data:
 index level with 1-year return, distance from the 52-week high and position vs its **200-day
-average**; **India VIX / VIX** with fear bands (calm <14 · fear >28); USD/INR / USD/CAD; gold; oil;
-the US 10-year yield. All of it condenses into **one plain-words regime read** - "fear is on sale -
+average**; **India VIX / VIX** with fear bands (calm <14 · fear >28); USD/INR / USD/CAD; gold AND
+silver; the **gold/silver ratio** (long-run ~60-70, labelled "context, never a signal"); **gold in
+YOUR currency** (₹ per 10g for India - what GOLDBEES-style funds track - C$ per oz for Canada); oil;
+the US 10-year yield. Below the chips, the **hedge sleeve** line shows what share of your portfolio
+sits in gold/silver funds against the classic 5-10% insurance band. All of it condenses into **one plain-words regime read** - "fear is on sale -
 deploy gradually into quality" / "market cooling - watchlist season" / "sunny and expensive - demand
 a bigger margin of safety" / "nothing extreme - stick to the plan" - with the value-school caveat
 printed on it: macro is context for posture, never a timing signal.
@@ -164,6 +167,14 @@ names is a sanity check, not statistics; price-only returns; survivor bias; free
 at ~3 years. Every stock card also carries a **Piotroski F-Score** (0–9 year-over-year
 fundamental-improvement tests, hover for the breakdown).
 
+**Crash stress test** (same tab) - real past crashes applied to what you hold TODAY: the 2000
+dot-com bust, the 2008 financial crisis, the 2020 COVID crash, the 2022 rate shock, and - because
+gold-pitch videos never mention it - the **1980 gold winter** (gold -65%, 28 years to recover).
+Each holding gets its TYPE's historical hit (index funds, gold/silver funds, large caps, mid/small
+caps, expensive stocks at P/E ≥ 40), and the card shows your total before/after, the hardest-hit
+positions, how long recovery took, and **what kept-running SIPs did** through each bottom. A fire
+drill for position sizing with its limits printed on it - arithmetic on the past, not a prediction.
+
 **Chart** - TradingView-style charting (built on TradingView's open-source `lightweight-charts`):
 candles or area, 6M→Max ranges (daily/weekly/monthly), volume, **two-click trendline drawing**, and
 the value-investor twist - **your average cost, the fair-value estimate and the buy-below level
@@ -172,7 +183,9 @@ MA" is the 40-week MA on weekly data - not a meaningless 200-week average), both
 and **golden / death crosses are marked right on the chart** where the 50-day crosses the 200-day.
 Works for any Yahoo symbol, not just holdings.
 
-**Health & income** - concentration checks (top holding, top-3, HHI), sector caps, capital-in-quality
+**Health & income** - concentration checks (top holding, top-3, HHI - each with a plain-words
+tooltip), sector caps **with history's receipts when a threshold is crossed** (Enron/Nokia/Yes Bank
+for single names, Nasdaq-2000's 78%-and-15-years for sector bets), capital-in-quality
 share, laggard capital, red-flag exposure - each with the master's principle - plus estimated annual
 dividend income (yield on value / on cost) and currency exposure.
 
@@ -258,7 +271,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # backtest as-of math, Piotroski F-Score, cap tiers,
                                      # the mid/small screen, theme store, the position coach,
                                      # MA crossings, allocation buckets, the pre-buy checklist,
-                                     # snowflake axis leaders, the SEC UA contact rule (360+ checks)
+                                     # snowflake axis leaders, the SEC UA contact rule, the crash
+                                     # stress test, hard-asset chips, concentration analogs (390+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

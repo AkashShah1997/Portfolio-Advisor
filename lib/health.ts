@@ -61,15 +61,19 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
         : "Munger: wide diversification is protection against ignorance; a focused list you understand beats a long one you don't",
   });
 
-  // 2. Top holding
+  // 2. Top holding (with history's receipts when the threshold is crossed)
   const sorted = [...ws].sort((a, b) => b.w - a.w);
   const top1 = sorted[0];
+  const top1Status: HealthStatus = top1.w <= 0.25 ? "pass" : top1.w <= 0.4 ? "warn" : "fail";
   checks.push({
     id: "top1",
     label: "Top holding ≤ 25% of portfolio",
-    status: top1.w <= 0.25 ? "pass" : top1.w <= 0.4 ? "warn" : "fail",
+    status: top1Status,
     detail: `${top1.row.holding.yahooSymbol} is ${pctS(top1.w, 1)} of current value`,
-    principle: "Buffett tolerates concentration only in your single best-understood idea",
+    principle:
+      top1Status === "pass"
+        ? "Buffett tolerates concentration only in your single best-understood idea"
+        : "History's single-name lessons: Enron, Nokia (2000), Yes Bank - each a 'safe' giant that fell 90%+ and never came back for holders. Buffett-level concentration needs Buffett-level understanding",
   });
 
   // 3. Top-3 concentration
@@ -100,12 +104,16 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
     bySector.set(s, (bySector.get(s) ?? 0) + v.w);
   }
   const [maxSector, maxSectorW] = [...bySector.entries()].sort((a, b) => b[1] - a[1])[0];
+  const sectorStatus: HealthStatus = maxSectorW <= 0.35 ? "pass" : maxSectorW <= 0.5 ? "warn" : "fail";
   checks.push({
     id: "sector",
     label: "Largest sector ≤ 35%",
-    status: maxSectorW <= 0.35 ? "pass" : maxSectorW <= 0.5 ? "warn" : "fail",
+    status: sectorStatus,
     detail: `${maxSector} is ${pctS(maxSectorW, 1)} of the portfolio`,
-    principle: "Fisher: industries share fates - don't let one theme own your future",
+    principle:
+      sectorStatus === "pass"
+        ? "Fisher: industries share fates - don't let one theme own your future"
+        : "When one theme owned portfolios before, it ended badly: the Nasdaq fell 78% in 2000 and took 15 years to recover; Tokyo 1989 took 34. The sector was real both times - the price and the concentration were the problem",
   });
 
   // 6. Geography tilt (informational)

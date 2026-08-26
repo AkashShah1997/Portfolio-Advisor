@@ -5,7 +5,7 @@ import type { AnalyzedHolding, Currency, FxRates } from "@/lib/types";
 import { computeHealth, computeIncome, activeRows, type HealthStatus } from "@/lib/health";
 import { toBase } from "@/lib/portfolio";
 import { fmtMoney, fmtPct, CURRENCY_SYMBOL } from "@/lib/symbols";
-import { Badge, Card, SectionTitle } from "./ui";
+import { Badge, Card, InfoTip, SectionTitle } from "./ui";
 import { HBars, StackedSplit } from "./charts";
 import { AnimatedNumber, Stagger, StaggerItem } from "./anim";
 
@@ -14,6 +14,14 @@ const STATUS_UI: Record<HealthStatus, { icon: string; cls: string }> = {
   warn: { icon: "!", cls: "text-[#8a6100]" },
   fail: { icon: "✕", cls: "text-status-critical" },
   info: { icon: "ⓘ", cls: "text-series-1" },
+};
+
+/** Plain-language tooltips for the checks that carry jargon. */
+const CHECK_INFO: Record<string, string> = {
+  top1: "topHolding",
+  top3: "topHolding",
+  hhi: "hhi",
+  sector: "sectorConc",
 };
 
 export function HealthPanel({
@@ -62,7 +70,13 @@ export function HealthPanel({
                       {s.icon}
                     </span>
                     <span>
-                      <span className="text-ink">{c.label}</span>{" "}
+                      <span className="text-ink">{c.label}</span>
+                      {CHECK_INFO[c.id] && (
+                        <>
+                          {" "}
+                          <InfoTip k={CHECK_INFO[c.id]} />
+                        </>
+                      )}{" "}
                       <span className="text-ink-2">- {c.detail}</span>
                       <span className="block text-[11px] text-muted italic">{c.principle}</span>
                     </span>

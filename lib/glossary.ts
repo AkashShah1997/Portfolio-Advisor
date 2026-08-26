@@ -239,6 +239,46 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     what: "Investing a fixed amount on a fixed schedule (SIP), or a pre-planned tranche ladder into dips - so the plan decides when to buy, not your mood.",
     better: "The evidence: automatic, price-blind buying beats waiting for the perfect entry for almost everyone, because time in the market beats timing it. Boost below the 200-day average; never skip a month because it 'feels high'.",
   },
+  stress: {
+    name: "Crash stress test",
+    what: "A fire drill: it takes real past crashes (2000, 2008, 2020, 2022, and gold's own 1980 winter) and applies the damage each TYPE of investment took back then to what you hold today. You see your total before and after, which holdings get hit hardest, how long recovery took, and what happened to people who kept buying.",
+    better: "There is no better or worse - it's not a prediction. The one question it answers: if your portfolio fell this much next year, would you panic-sell at the bottom? If yes, your position sizes are the problem, and the cheap time to fix them is NOW, while markets are calm.",
+  },
+  hedge: {
+    name: "Hedge sleeve (gold & silver funds)",
+    what: "The slice of your portfolio sitting in gold and silver funds. Think of it as insurance: it tends to hold value when stock markets and currencies fall, but it pays no dividend, builds no products, and compounds nothing.",
+    better: "The masters cap it around 5-10% of the portfolio. Zero is a valid choice; much more than 10% turns insurance into a bet - and gold itself once fell 65% (1980) and took 28 years to recover. Insurance, not an engine.",
+  },
+  silver: {
+    name: "Silver",
+    what: "Gold's volatile little sibling: part precious metal (fear asset), part industrial input (solar panels, electronics). It usually moves in gold's direction but 2-3x as hard, in BOTH directions.",
+    better: "Neither direction is 'better' - it's context. Big silver rallies typically come late, after gold has already run; big silver crashes are just as dramatic. If you hold it at all, hold it small.",
+  },
+  gsRatio: {
+    name: "Gold/silver ratio",
+    what: "How many ounces of silver one ounce of gold buys. Over the last century it has averaged roughly 60-70.",
+    better: "Above ~85, silver is historically cheap compared to gold; below ~50, expensive. But the ratio can stay stretched for YEARS, so it's a patience curiosity, never a timing signal - and never a reason to load up on either metal.",
+  },
+  goldLocal: {
+    name: "Gold in your currency",
+    what: "The world gold price converted into your money - ₹ per 10 grams for India (how jewellers and GOLDBEES quote it), C$ per ounce for Canada. It moves with BOTH the world gold price and your currency's strength.",
+    better: "Neither direction is 'better'. The useful insight: when the rupee weakens, gold in ₹ rises even if world gold does nothing - that's why gold works as currency insurance for Indian savers, and why its ₹ returns often beat its $ returns.",
+  },
+  topHolding: {
+    name: "Top-holding concentration",
+    what: "How much of your total portfolio sits in your single biggest position (and your biggest three). The bigger the share, the more your future depends on one company not stumbling.",
+    better: "Lower is safer; the app flags a single name above 25%. History's warning cases - Enron, Nokia in 2000, Yes Bank - were all 'obviously safe' giants that fell 90%+ and never came back. Concentration is only for your single best-understood idea.",
+  },
+  sectorConc: {
+    name: "Sector concentration",
+    what: "How much of your portfolio rides one industry. Companies in the same sector share the same fate: one regulation, one technology shift, one bubble bursting hits them all together.",
+    better: "Below ~35% in any one sector is the comfortable zone. When one theme owned portfolios before, it ended badly: the Nasdaq fell 78% in 2000 and took 15 years to recover - and the internet was REAL. The theme being right doesn't protect you from the price being wrong.",
+  },
+  hhi: {
+    name: "Concentration index (HHI)",
+    what: "One number (0 to 1) that measures how spread out your money really is, counting every position's weight. It answers: 'my 15 stocks - do they BEHAVE like 15, or like 4 big bets with 11 decorations?' The 'effective positions' number next to it is the honest count.",
+    better: "Lower is more diversified. Below 0.10 reads as genuinely spread out; above 0.18 means a few names quietly dominate - your portfolio is more concentrated than its length suggests.",
+  },
   checklist: {
     name: "Pre-buy checklist",
     what: "Ten yes-or-no judgment gates from the masters' actual filters (Lynch's one-sentence test, Buffett's 10-year market closure, Munger's inversion, Graham's price-first discipline). No data feed can tick these; only you can. Ticks save on this device, per stock.",

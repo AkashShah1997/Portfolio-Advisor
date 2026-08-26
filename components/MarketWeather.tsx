@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Market } from "@/lib/store";
 import type { MacroPayload, MacroTone } from "@/lib/macro";
-import { Badge, Card, SectionTitle, Spinner } from "./ui";
+import type { AnalyzedHolding, FxRates } from "@/lib/types";
+import { hedgeShare } from "@/lib/stress";
+import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 
 /**
  * Market weather - the macro situation as chips + ONE plain-words regime read.
@@ -25,9 +27,48 @@ const REGIME_TONE: Record<MacroTone, "good" | "neutral" | "warning" | "serious">
   serious: "serious",
 };
 
-export function MarketWeather({ market }: { market: Market }) {
+export function MarketWeather({
+  market,
+  rows,
+  fx,
+}: {
+  market: Market;
+  rows?: AnalyzedHolding[];
+  fx?: FxRates;
+}) {
   const [state, setState] = useState<Record<string, MacroPayload | "loading" | "error">>({});
   const inFlight = useRef<Set<string>>(new Set());
+
+  // the hedge sleeve - independent of the macro fetch, computed from holdings
+  const hedge = useMemo(() => (rows && fx ? hedgeShare(rows, fx) : null), [rows, fx]);
+  const hedgeRead = useMemo(() => {
+    if (!hedge) return null;
+    const p = hedge.share;
+    if (p === 0)
+      return {
+        tone: "neutral" as MacroTone,
+        text: "you hold no gold/silver funds. That's a valid choice - it's optional insurance, not a must.",
+      };
+    if (p < 0.05)
+      return {
+        tone: "good" as MacroTone,
+        text: `a light ${(p * 100).toFixed(1)}% slice (${hedge.symbols.join(", ")}) - below the classic 5-10% band, which is fine.`,
+      };
+    if (p <= 0.1)
+      return {
+        tone: "good" as MacroTone,
+        text: `${(p * 100).toFixed(1)}% (${hedge.symbols.join(", ")}) - inside the classic 5-10% insurance band.`,
+      };
+    if (p <= 0.15)
+      return {
+        tone: "warning" as MacroTone,
+        text: `${(p * 100).toFixed(1)}% (${hedge.symbols.join(", ")}) - a bit above the classic 5-10% band. Let new money, not selling, bring it back.`,
+      };
+    return {
+      tone: "warning" as MacroTone,
+      text: `${(p * 100).toFixed(1)}% (${hedge.symbols.join(", ")}) - well above the 5-10% cap. Remember 1980: gold fell 65% and took 28 years to recover. Insurance, not an engine.`,
+    };
+  }, [hedge]);
 
   useEffect(() => {
     if (state[market] !== undefined || inFlight.current.has(market)) return;
@@ -90,6 +131,12 @@ export function MarketWeather({ market }: { market: Market }) {
             </p>
           </div>
         </>
+      )}
+      {hedgeRead && (
+        <p className="text-[12px] text-ink-2 mt-3 leading-snug">
+          <span className={`inline-block w-[7px] h-[7px] rounded-full mr-1.5 ${DOT[hedgeRead.tone]}`} aria-hidden />
+          <strong className="text-ink">Your hedge sleeve</strong> <InfoTip k="hedge" />: {hedgeRead.text}
+        </p>
       )}
     </Card>
   );
