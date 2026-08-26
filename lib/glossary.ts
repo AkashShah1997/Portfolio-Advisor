@@ -234,6 +234,16 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
   },
 
   // ---- extras ----
+  dca: {
+    name: "DCA — dollar/rupee-cost averaging",
+    what: "Investing a fixed amount on a fixed schedule (SIP), or a pre-planned tranche ladder into dips — so the plan decides when to buy, not your mood.",
+    better: "The evidence: automatic, price-blind buying beats waiting for the perfect entry for almost everyone, because time in the market beats timing it. Boost below the 200-day average; never skip a month because it 'feels high'.",
+  },
+  momentum: {
+    name: "Momentum (context chips)",
+    what: "Where the price sits vs its own recent history: distance from the 52-week high, vs the 200-day average, and the 3-month move.",
+    better: "For a long-term buyer these pace decisions, they don't make them: dips in quality are for tranches, strength is where trims execute best. Never a signal on its own.",
+  },
   capTier: {
     name: "Company size (market-cap tier)",
     what: "Banded from live market cap: India — large ≥ ₹1,00,000 Cr, mid ≥ ₹25,000 Cr, small below (SEBI-style). Canada/US — large ≥ $10B, mid ≥ $2B, small below.",

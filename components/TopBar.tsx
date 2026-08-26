@@ -81,9 +81,21 @@ export function TopBar({
           onClick={toggleTheme}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-page hairline text-[14px] text-ink-2 hover:text-ink transition-colors"
+          className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-page hairline text-ink-2 hover:text-ink hover:rotate-12 transition-all"
         >
-          <span aria-hidden>{theme === "dark" ? "☀" : "☾"}</span>
+          {theme === "dark" ? (
+            /* sun */
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <circle cx="12" cy="12" r="4.4" fill="currentColor" stroke="none" />
+              <path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7" />
+            </svg>
+          ) : (
+            /* crescent moon with a star */
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M20.6 14.8A8.8 8.8 0 0 1 9.2 3.4a.6.6 0 0 0-.8-.74A9.9 9.9 0 1 0 21.34 15.6a.6.6 0 0 0-.74-.8Z" />
+              <path d="M17.2 4.2l.62 1.58 1.58.62-1.58.62-.62 1.58-.62-1.58-1.58-.62 1.58-.62Z" opacity="0.85" />
+            </svg>
+          )}
         </button>
 
         <span

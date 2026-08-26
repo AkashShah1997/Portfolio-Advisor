@@ -1,5 +1,6 @@
 import type { AnalyzedHolding, Currency, FxRates, PortfolioSummary, Verdict } from "./types";
 import { countryForSymbol } from "./symbols";
+import { isEtfHolding } from "./etf";
 
 export function toBase(value: number, from: Currency, fx: FxRates): number {
   return value * (fx.rates[from] ?? 1);
@@ -32,7 +33,15 @@ export function summarize(rows: AnalyzedHolding[], fx: FxRates): PortfolioSummar
 
     const country = countryForSymbol(r.holding.yahooSymbol);
     byCountry.set(country, (byCountry.get(country) ?? 0) + cur);
-    const sector = r.data?.quote.sector ?? "Unknown";
+    // funds get their own bucket instead of polluting "Unknown"
+    const sector = isEtfHolding(
+      r.holding.yahooSymbol,
+      r.data?.quote.name ?? r.holding.name,
+      r.data?.quote.quoteType,
+      r.holding.securityType
+    )
+      ? "ETFs / funds"
+      : (r.data?.quote.sector ?? "Unknown");
     bySector.set(sector, (bySector.get(sector) ?? 0) + cur);
 
     if (r.scorecard) {

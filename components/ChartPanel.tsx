@@ -7,17 +7,26 @@ import {
   ColorType,
   createChart,
   CrosshairMode,
+  createSeriesMarkers,
   HistogramSeries,
   LineSeries,
   LineStyle,
   type IChartApi,
   type ISeriesApi,
   type MouseEventParams,
+  type SeriesMarker,
   type SeriesType,
   type Time,
 } from "lightweight-charts";
 import type { AnalyzedHolding, Currency } from "@/lib/types";
-import { HISTORY_RANGES, sma, type HistoryPayload, type HistoryRange } from "@/lib/history";
+import {
+  HISTORY_RANGES,
+  maCrossings,
+  maLenForInterval,
+  sma,
+  type HistoryPayload,
+  type HistoryRange,
+} from "@/lib/history";
 import { buildValuation } from "@/lib/valuation";
 import { VERDICT_META } from "@/lib/portfolio";
 import { currencyForSymbol, fmtMoney, fmtNum, fmtPct } from "@/lib/symbols";
@@ -60,7 +69,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
   const [range, setRange] = useState<HistoryRange>("1y");
   const [kind, setKind] = useState<"candles" | "area">("candles");
   const [sma50, setSma50] = useState(true);
-  const [sma200, setSma200] = useState(false);
+  const [sma200, setSma200] = useState(true); // long-term default: both MAs on, crosses visible
   const [showVol, setShowVol] = useState(true);
   const [showLevels, setShowLevels] = useState(true);
   const [drawMode, setDrawMode] = useState(false);
@@ -266,6 +275,11 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
     }
 
     // moving averages
+    // moving averages in DAY-equivalents per interval: on weekly candles the
+    // "200-day MA" is the 40-week MA — so golden/death crosses actually show
+    // on the long-range views a 5-year holder cares about.
+    const len50 = maLenForInterval(50, payload.interval);
+    const len200 = maLenForInterval(200, payload.interval);
     const addSma = (len: number, color: string) => {
       const data = sma(candles, len);
       if (data.length < 2) return;
@@ -279,8 +293,23 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
       s.setData(data.map((d) => ({ time: d.time as Time, value: d.value })));
       allSeriesRef.current.push(s);
     };
-    if (sma50) addSma(50, "#2a78d6");
-    if (sma200) addSma(200, "#eb6834");
+    if (sma50) addSma(len50, "#2a78d6");
+    if (sma200) addSma(len200, "#eb6834");
+
+    // golden / death cross markers where the 50-day crosses the 200-day
+    if (sma50 && sma200) {
+      const crosses = maCrossings(candles, len50, len200);
+      if (crosses.length) {
+        const markers: SeriesMarker<Time>[] = crosses.map((c) => ({
+          time: c.time as Time,
+          position: c.kind === "golden" ? "belowBar" : "aboveBar",
+          color: c.kind === "golden" ? "#1baf7a" : "#d03b3b",
+          shape: c.kind === "golden" ? "arrowUp" : "arrowDown",
+          text: c.kind === "golden" ? "Golden cross" : "Death cross",
+        }));
+        createSeriesMarkers(main, markers);
+      }
+    }
 
     // trendline drawings
     for (const d of drawings) {
@@ -432,11 +461,16 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
 
         <label className="inline-flex items-center gap-1.5 text-ink-2">
           <input type="checkbox" checked={sma50} onChange={(e) => setSma50(e.target.checked)} className="accent-[#2a78d6]" />
-          <span className="inline-block w-3 h-[3px] rounded" style={{ background: "#2a78d6" }} /> SMA 50
+          <span className="inline-block w-3 h-[3px] rounded" style={{ background: "#2a78d6" }} /> 50-day MA
         </label>
         <label className="inline-flex items-center gap-1.5 text-ink-2">
           <input type="checkbox" checked={sma200} onChange={(e) => setSma200(e.target.checked)} className="accent-[#eb6834]" />
-          <span className="inline-block w-3 h-[3px] rounded" style={{ background: "#eb6834" }} /> SMA 200
+          <span
+            className="inline-block w-3 h-[3px] rounded"
+            style={{ background: "#eb6834" }}
+            title="Day-equivalent on every range (40-week MA on weekly data) — golden/death crosses are marked on the chart"
+          />{" "}
+          200-day MA
         </label>
         <label className="inline-flex items-center gap-1.5 text-ink-2">
           <input type="checkbox" checked={showVol} onChange={(e) => setShowVol(e.target.checked)} className="accent-[#2a78d6]" />

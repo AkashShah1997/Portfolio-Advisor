@@ -27,6 +27,8 @@ import { mockInvestorMoves } from "../lib/mock";
 import { buildPlan } from "../lib/plan";
 import { loadUiMode } from "../lib/store";
 import { buildMacroItems, mockMacro, readRegime, seriesStats, vixBand } from "../lib/macro";
+import { coachPosition, momentumFromCandles, sipPlan, STANCE_META, trancheLadder } from "../lib/coach";
+import { maCrossings, maLenForInterval } from "../lib/history";
 import { benchCagrSince, buildAsOf, cutoffISO, runBacktest } from "../lib/backtest";
 import { computeFScore } from "../lib/scorecard";
 import type { Candle } from "../lib/history";
@@ -1556,6 +1558,80 @@ console.log("\n== Piotroski F-Score ==");
   check("one year of data → no F-Score at all", computeFScore([yr({})]) === undefined);
   const sc = buildScorecard(mockStockData("TCS.NS"));
   check("scorecard carries an F-Score for real profiles", sc.fscore !== undefined && sc.fscore.score >= 0 && sc.fscore.score <= sc.fscore.of);
+}
+
+console.log("\n== Day-equivalent MAs & golden/death crosses ==");
+{
+  check(
+    "MA lengths convert per interval (200d = 200 daily / 40 weekly / 10 monthly bars)",
+    maLenForInterval(200, "1d") === 200 && maLenForInterval(200, "1wk") === 40 && maLenForInterval(200, "1mo") === 10 && maLenForInterval(50, "1wk") === 10
+  );
+  // V-shaped series: short MA falls through the long MA, then climbs back → one death + one golden
+  const mk = (i: number, close: number): Candle => ({
+    time: new Date(Date.UTC(2024, 0, 1) + i * 86400000).toISOString().slice(0, 10),
+    open: close, high: close, low: close, close,
+  });
+  const vshape: Candle[] = [];
+  for (let i = 0; i < 60; i++) vshape.push(mk(i, 100)); // flat base
+  for (let i = 60; i < 90; i++) vshape.push(mk(i, 100 - (i - 59) * 1.5)); // slide
+  for (let i = 90; i < 160; i++) vshape.push(mk(i, 55 + (i - 89) * 1.2)); // recovery
+  const crosses = maCrossings(vshape, 10, 40);
+  check("V-shaped price → exactly one death cross then one golden cross", crosses.length === 2 && crosses[0].kind === "death" && crosses[1].kind === "golden", JSON.stringify(crosses));
+  check("crosses are chronological", crosses[0].time < crosses[1].time);
+  check("flat series → no crosses", maCrossings(vshape.slice(0, 60), 10, 40).length === 0);
+}
+
+console.log("\n== The position coach (trim / hold / buy-dip / DCA) ==");
+{
+  const upCandles: Candle[] = Array.from({ length: 250 }, (_, i) => ({
+    time: new Date(Date.UTC(2025, 7, 1) + i * 86400000).toISOString().slice(0, 10),
+    open: 0, high: 0, low: 0, close: 100 + i * 0.3,
+  }));
+  const dipCandles = upCandles.map((c, i) => (i > 200 ? { ...c, close: 160 - (i - 200) * 0.8 } : c));
+  const up = momentumFromCandles(upCandles);
+  const dip = momentumFromCandles(dipCandles);
+  check("momentum math: rising series sits at its high and above the 200-day", Math.abs(up.pctFromHigh ?? 1) < 1e-9 && (up.vs200d ?? 0) > 0);
+  check("momentum math: broken series is well off its high and below the 200-day", (dip.pctFromHigh ?? 0) < -0.15 && (dip.vs200d ?? 0) < 0);
+
+  const baseIn = { symbol: "X.NS", currency: "INR" as const, price: 100 };
+  // ETF core → DCA with a SIP plan; on a dip → BUY_DIP with the boost line
+  const etfCalm = coachPosition({ ...baseIn, isEtf: true, etfVerdict: "INCREASE", momentum: up, pnlPct: 0.2, weightPct: 0.1 });
+  check("core ETF in calm → keep DCA-ing with a SIP plan", etfCalm.stance === "DCA" && etfCalm.dca?.style === "SIP");
+  const etfDip = coachPosition({ ...baseIn, isEtf: true, etfVerdict: "HOLD", momentum: dip, pnlPct: 0.1 });
+  check("core ETF on a dip → buy the dip + boost-month SIP line", etfDip.stance === "BUY_DIP" && (etfDip.dca?.lines.some((l) => /boost month|1\.5×/i.test(l)) ?? false));
+  const etfFear = coachPosition({ ...baseIn, isEtf: true, etfVerdict: "INCREASE", momentum: up, regime: "FEAR" });
+  check("fear regime alone puts a core ETF in buy-the-dip posture", etfFear.stance === "BUY_DIP");
+  check("ETF with a fee/size problem → review, not more money", coachPosition({ ...baseIn, isEtf: true, etfVerdict: "SWITCH" }).stance === "REVIEW");
+
+  // stocks
+  check("failed quality case → exit review, profit or not", coachPosition({ ...baseIn, isEtf: false, action: "EXIT", pnlPct: 0.5 }).stance === "EXIT_REVIEW");
+  const trim = coachPosition({ ...baseIn, isEtf: false, action: "HOLD", verdict: "HOLD_QUALITY_PRICEY", valStatus: "PRICEY", pnlPct: 0.5, weightPct: 0.2, momentum: up });
+  check("+50% & pricey & overweight & near highs → trim a slice", trim.stance === "TRIM" && /right-size|trim 10–25%/i.test(trim.headline));
+  const dipBuy = coachPosition({ ...baseIn, isEtf: false, action: "ACCUMULATE", verdict: "ADD_MORE", valStatus: "FAIR", pnlPct: 0.5, weightPct: 0.05, momentum: dip });
+  check("quality stock on a pullback → buy the dip with a 3-tranche ladder", dipBuy.stance === "BUY_DIP" && dipBuy.dca?.style === "TRANCHES");
+  const hold = coachPosition({ ...baseIn, isEtf: false, action: "HOLD", verdict: "HOLD", valStatus: "FAIR", pnlPct: 0.5, weightPct: 0.05, momentum: up });
+  check("+50% alone is NOT a sell signal — quality at fair price near highs → sit tight", hold.stance === "HOLD");
+  check("profit line always frames weight-not-profit", hold.points.some((p) => /never by itself a reason to sell/.test(p)));
+
+  const ladder = trancheLadder(100, "INR");
+  check("tranche ladder prices: now / −7% / −15%", ladder.lines[1].includes("93") && ladder.lines[2].includes("85"));
+  check("SIP plan carries the below-200-day boost rule", sipPlan(true).lines.some((l) => /boost month/i.test(l)) && sipPlan(false).lines.some((l) => /1\.5×/.test(l)));
+  check("every stance has display meta with a unique priority", new Set(Object.values(STANCE_META).map((m) => m.priority)).size === Object.keys(STANCE_META).length);
+}
+
+console.log("\n== Allocation buckets (ETFs out of 'Unknown') ==");
+{
+  const data = mockStockData("NIFTYBEES.NS");
+  const row: AnalyzedHolding = {
+    holding: { id: "e", broker: "zerodha", rawSymbol: "NIFTYBEES", yahooSymbol: "NIFTYBEES.NS", quantity: 10, avgCost: 200, currency: "INR" },
+    data,
+    scorecard: buildScorecard(data),
+    invested: 2000,
+    currentValue: 2850,
+  };
+  const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const s = summarize([row], fxI);
+  check("ETF holdings land in an 'ETFs / funds' sector bucket, not 'Unknown'", s.bySector.some((x) => x.label === "ETFs / funds") && !s.bySector.some((x) => x.label === "Unknown"));
 }
 
 console.log("\n== Analyst context fields (mock determinism) ==");

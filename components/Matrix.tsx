@@ -95,15 +95,44 @@ export function Matrix({
 
   if (pts.length < 2) return null;
 
+  // Collision-aware labels: suffix stripped, pushed BELOW dots near the top
+  // edge, anchored inward near the sides, parity-staggered so clusters
+  // (several 100-score names in a corner) fan out instead of overprinting.
+  const renderLabel = (props: { x?: number | string; y?: number | string; index?: number }) => {
+    const i = props.index ?? -1;
+    const p = pts[i];
+    const px = Number(props.x);
+    const py = Number(props.y);
+    if (!p || !Number.isFinite(px) || !Number.isFinite(py)) return null;
+    const short = p.symbol.replace(/\.(NS|BO|TO|V|NE)$/i, "");
+    const nearTop = p.y > 90;
+    const nearRight = p.x > 86;
+    const nearLeft = p.x < 10;
+    const stagger = (i % 3) * 9; // fan clustered labels apart
+    const dy = nearTop ? 18 + stagger : -(9 + stagger);
+    return (
+      <text
+        x={px}
+        y={py}
+        dx={nearRight ? -10 : nearLeft ? 10 : 0}
+        dy={dy}
+        textAnchor={nearRight ? "end" : nearLeft ? "start" : "middle"}
+        style={{ fill: "var(--color-ink-2)", fontSize: 10, fontWeight: 600 }}
+      >
+        {short}
+      </text>
+    );
+  };
+
   return (
     <div className="relative">
-      <ResponsiveContainer width="100%" height={300}>
-        <ScatterChart margin={{ top: 18, right: 18, bottom: 10, left: 2 }}>
+      <ResponsiveContainer width="100%" height={340}>
+        <ScatterChart margin={{ top: 24, right: 28, bottom: 10, left: 2 }}>
           <CartesianGrid stroke="#e1e0d9" strokeWidth={1} />
           <XAxis
             type="number"
             dataKey="x"
-            domain={[-5, 105]}
+            domain={[-8, 108]}
             ticks={[0, 25, 50, 75, 100]}
             tickLine={false}
             axisLine={{ stroke: "#c3c2b7", strokeWidth: 1 }}
@@ -118,7 +147,7 @@ export function Matrix({
           <YAxis
             type="number"
             dataKey="y"
-            domain={[-5, 105]}
+            domain={[-8, 108]}
             ticks={[0, 25, 50, 75, 100]}
             width={34}
             tickLine={false}
@@ -139,20 +168,24 @@ export function Matrix({
             {pts.map((p) => (
               <Cell key={p.symbol} fill={p.color} fillOpacity={p.watch ? 0.35 : 0.75} stroke={p.color} />
             ))}
-            <LabelList
-              dataKey="symbol"
-              position="top"
-              style={{ fill: "#52514e", fontSize: 10, fontWeight: 600 }}
-            />
+            <LabelList dataKey="symbol" content={renderLabel} />
           </Scatter>
         </ScatterChart>
       </ResponsiveContainer>
-      {/* quadrant captions */}
-      <div className="pointer-events-none absolute inset-0 text-[10.5px] text-muted">
-        <span className="absolute right-6 top-4">wonderful &amp; fairly priced — the sweet spot</span>
-        <span className="absolute left-12 top-4">wonderful but pricey — patience</span>
-        <span className="absolute right-6 bottom-12">cheap… for a reason?</span>
-        <span className="absolute left-12 bottom-12">weak &amp; expensive — why own it?</span>
+      {/* quadrant captions — corner chips that stay legible under labels */}
+      <div className="pointer-events-none absolute inset-0 text-[10px] text-muted">
+        <span className="absolute right-7 top-1 bg-surface/85 hairline rounded-full px-2 py-[2px]">
+          wonderful &amp; fairly priced — the sweet spot
+        </span>
+        <span className="absolute left-10 top-1 bg-surface/85 hairline rounded-full px-2 py-[2px]">
+          wonderful but pricey — patience
+        </span>
+        <span className="absolute right-7 bottom-12 bg-surface/85 hairline rounded-full px-2 py-[2px]">
+          cheap… for a reason?
+        </span>
+        <span className="absolute left-10 bottom-12 bg-surface/85 hairline rounded-full px-2 py-[2px]">
+          weak &amp; expensive — why own it?
+        </span>
       </div>
     </div>
   );

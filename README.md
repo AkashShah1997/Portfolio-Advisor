@@ -29,7 +29,7 @@ shows its evidence. ETFs and new listings get an honest "insufficient data" verd
 
 ## Simple by default
 
-The dashboard opens with just **three tabs — Overview, Decisions, ETFs** — and the Overview leads
+The dashboard opens with just **four tabs — Overview, Coach, Decisions, ETFs** — and the Overview leads
 with **"Your action plan"**: the whole analysis compressed into a few plain sentences (what to sell,
 what to stop adding to, which ETF fee to fix, where new money belongs, and what just needs
 patience), each line linking to the tab that holds the evidence. One click on **"All tools"**
@@ -72,6 +72,17 @@ The verdict separates the three reasons a stock "did nothing" for years: improvi
 lagging price (coiled spring — keep), flat business + flat price (dead money — recycle), or
 deteriorating business (the fall is deserved — exit review). The same chip appears on the Decisions
 board.
+
+**Coach** — the "I'm up 50% on this: now what?" screen. Every position gets ONE stance — **Trim a
+slice / Sit tight / Buy the dip / Keep DCA-ing / Exit review** — from your profit and weight, the
+quality verdict, valuation, **live momentum** (distance from the 52-week high, vs the 200-day
+average, 3-month move) and the market regime. DCA is first-class: core ETFs get **SIP plans**
+(fixed monthly amount, automated, with a ~1.5× boost rule below the 200-day average, "never skip a
+month because it feels high"), and quality-stock pullbacks get **3-tranche dip ladders with actual
+prices** (now / −7% / −15%). The framing is value-school throughout: profit is a reason to check
+WEIGHT, never by itself a reason to sell a compounder; trims execute into strength; adds happen in
+tranches, not lump-sum courage. A **↻ Refresh momentum** button re-pulls every position's price
+history and the regime fresh, stamped with the time.
 
 **Decisions** — the straight answer to "I've held this for years and it's done nothing":
 every holding sorted into **Consider exiting / Trim / Accumulate / Hold** with the full evidence
@@ -118,7 +129,11 @@ Overview link here instead of pretending the stock scorecard applies. When Yahoo
 nothing for a listing (common for NSE ETFs), the tab **falls back** to the curated fee table plus
 returns computed from the fund's own price history — labeled "limited data", never silently blank.
 
-**Smart money** — two honest lenses on what serious long-horizon capital is doing. (1)
+**Smart money** — regional by design: the **India view leads with "Who owns your stock"** (the
+ownership feed covers NSE names; promoters show under insiders) and keeps the US-only 13F bench
+opt-in behind a button with the honest reason stated (13Fs are a US disclosure; India has no free
+equivalent). The **Canada view leads with the bench** — those are its investable listings. Two
+honest lenses on what serious long-horizon capital is doing. (1)
 **Superinvestor conviction moves**: a hand-picked bench of nine managers with decades-long public
 records (Buffett's Berkshire, Terry Smith's Fundsmith, Akre, Li Lu's Himalaya, Chris Hohn's TCI,
 Ackman's Pershing Square, Klarman's Baupost, Gayner's Markel, Rochon's Giverny), read straight from
@@ -143,17 +158,19 @@ at ~3 years. Every stock card also carries a **Piotroski F-Score** (0–9 year-o
 fundamental-improvement tests, hover for the breakdown).
 
 **Chart** — TradingView-style charting (built on TradingView's open-source `lightweight-charts`):
-candles or area, 6M→Max ranges (daily/weekly/monthly), SMA 50/200, volume, **two-click trendline
-drawing**, and the value-investor twist — **your average cost, the fair-value estimate and the
-buy-below level drawn on the price axis**. Works for any Yahoo symbol, not just holdings.
+candles or area, 6M→Max ranges (daily/weekly/monthly), volume, **two-click trendline drawing**, and
+the value-investor twist — **your average cost, the fair-value estimate and the buy-below level
+drawn on the price axis**. The moving averages are **day-equivalent on every range** (the "200-day
+MA" is the 40-week MA on weekly data — not a meaningless 200-week average), both are on by default,
+and **golden / death crosses are marked right on the chart** where the 50-day crosses the 200-day.
+Works for any Yahoo symbol, not just holdings.
 
 **Health & income** — concentration checks (top holding, top-3, HHI), sector caps, capital-in-quality
 share, laggard capital, red-flag exposure — each with the master's principle — plus estimated annual
 dividend income (yield on value / on cost) and currency exposure.
 
-**Projector** — "buy right, sit tight" in numbers: scenario compounding built from your holdings'
-own value-weighted EPS growth, monthly-contribution slider, years-to-double. An illustration, not a
-forecast.
+(The old Projector tab was retired — the Coach's DCA plans and the Backtest answer the same
+questions with fewer made-up numbers.)
 
 **Take it to any AI:** every stock, scanned idea, and decision has a one-click **AI prompt** —
 positions, 5-year ratios, scorecard verdicts and fair-value estimates baked in — for ChatGPT,
@@ -232,7 +249,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # multi-account merging, security-type priority,
                                      # buy-list consensus, the action plan, macro regimes,
                                      # backtest as-of math, Piotroski F-Score, cap tiers,
-                                     # the mid/small screen, theme store (325 checks)
+                                     # the mid/small screen, theme store, the position coach,
+                                     # MA crossings, allocation buckets (345+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

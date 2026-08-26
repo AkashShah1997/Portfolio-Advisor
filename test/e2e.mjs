@@ -53,6 +53,22 @@ if (!(await page.locator("[data-testid=snowflake]").count())) throw new Error("p
 // ---- ETF holdings are routed to the ETFs tab ----
 await page.waitForSelector("text=see the ETFs tab", { timeout: 10000 });
 
+// ---- the Coach (simple mode): trim / hold / buy-dip / DCA per position ----
+await page.locator("button[aria-pressed]").filter({ hasText: /^Coach/ }).first().click();
+await page.waitForSelector("text=Position coach", { timeout: 10000 });
+await page.waitForSelector("text=Keep DCA-ing", { timeout: 30000 }); // NIFTYBEES core ETF
+await page.waitForSelector("text=The SIP plan", { timeout: 10000 });
+await page.waitForSelector("text=vs 52w high", { timeout: 30000 }); // momentum chips loaded
+const coachBody = await page.locator("body").textContent();
+if (!/never by itself a reason to sell/.test(coachBody)) throw new Error("coach profit framing missing");
+if (!/Sit tight|Trim a slice|Buy the dip/.test(coachBody)) throw new Error("coach stances missing");
+await page.getByRole("button", { name: /Refresh momentum/ }).click();
+await page.waitForSelector("text=/refreshed \\d/", { timeout: 30000 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${shots}/24-coach.png`, fullPage: true });
+await page.locator("button[aria-pressed]").filter({ hasText: /^Overview/ }).first().click();
+await page.waitForTimeout(400);
+
 // scroll through once so view-triggered entrances have fired, then capture the simple overview
 await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 await page.waitForTimeout(800);
@@ -64,6 +80,17 @@ await page.screenshot({ path: `${shots}/03-overview.png`, fullPage: true });
 await page.getByRole("button", { name: /All tools/ }).click();
 await page.waitForSelector("text=the Buffett matrix", { timeout: 10000 });
 await page.waitForSelector("text=Screeners", { timeout: 5000 });
+
+// ---- allocation slice toggle (stocks-only / ETFs-only) ----
+await page.getByRole("button", { name: "Stocks", exact: true }).click();
+await page.waitForSelector("text=Sectors — stocks", { timeout: 5000 });
+await page.getByRole("button", { name: "ETFs", exact: true }).last().click();
+const allocBody = await page.locator("body").textContent();
+if (!/NIFTYBEES/.test(allocBody)) throw new Error("ETF-only allocation slice missing NIFTYBEES");
+await page.getByRole("button", { name: "All", exact: true }).click();
+await page.waitForTimeout(200);
+// the sector chart buckets funds instead of 'Unknown'
+if (!/ETFs \/ funds/.test(await page.locator("body").textContent())) throw new Error("ETF sector bucket missing");
 
 // ---- hero chart: benchmark toggle (indexed vs NIFTY 50) ----
 await page.getByRole("button", { name: /vs NIFTY 50/ }).click();
@@ -180,8 +207,13 @@ await page.waitForSelector("text=Junior BeES", { timeout: 15000 });
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/19-etfs.png`, fullPage: true });
 
-// ---- smart money tab (progressive per-investor loading) ----
+// ---- smart money tab: India leads with holders; the US bench is opt-in ----
 await page.getByRole("button", { name: "Smart money" }).click();
+await page.waitForSelector("text=Who owns your stock", { timeout: 15000 });
+await page.waitForSelector("text=US superinvestor bench (optional here)", { timeout: 10000 });
+if (await page.locator("text=Superinvestor conviction moves").count())
+  throw new Error("US bench should be hidden in India until revealed");
+await page.getByRole("button", { name: /Show the US bench/ }).click();
 await page.waitForSelector("text=Superinvestor conviction moves", { timeout: 15000 });
 await page.waitForSelector("text=Berkshire Hathaway", { timeout: 15000 });
 await page.waitForSelector("text=Pershing Square", { timeout: 20000 }); // non-curated filer card rendered too
@@ -221,16 +253,13 @@ await page.waitForTimeout(600);
 await page.screenshot({ path: `${shots}/09-chart.png`, fullPage: true });
 if (!(await page.locator("[data-testid=price-chart] canvas").count())) throw new Error("chart canvas missing");
 
-// ---- health + projector ----
+// ---- health (the Projector tab is gone by design) ----
 await page.getByRole("button", { name: /Health & income/ }).click();
 await page.waitForSelector("text=Portfolio health checks", { timeout: 10000 });
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/10-health.png`, fullPage: true });
-
-await page.getByRole("button", { name: "Projector" }).click();
-await page.waitForSelector("text=The sit-tight projector", { timeout: 10000 });
-await page.waitForTimeout(500);
-await page.screenshot({ path: `${shots}/11-projector.png`, fullPage: true });
+if (await page.locator("button[aria-pressed]").filter({ hasText: /^Projector/ }).count())
+  throw new Error("Projector tab should be removed");
 
 // ---- dark mode: toggle, verify tokens flip, persists across reload ----
 await page.getByRole("button", { name: "Switch to dark mode" }).click();

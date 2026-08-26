@@ -24,8 +24,9 @@ export async function GET(
   }
 
   const key = `${symbol}|${range}`;
+  const fresh = req.nextUrl.searchParams.get("fresh") === "1"; // Coach refresh button
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL_MS) {
+  if (!fresh && hit && Date.now() - hit.at < TTL_MS) {
     return NextResponse.json(hit.body);
   }
 

@@ -46,7 +46,7 @@ import { ScreenerPanel } from "./ScreenerPanel";
 import { SmartMoney } from "./SmartMoney";
 import { ChartPanel } from "./ChartPanel";
 import { HealthPanel } from "./HealthPanel";
-import { Projector } from "./Projector";
+import { CoachPanel } from "./CoachPanel";
 import { AnimatedNumber, Stagger, StaggerItem, Switcher } from "./anim";
 import ReactMarkdown from "react-markdown";
 
@@ -67,6 +67,7 @@ const VERDICT_ORDER: Verdict[] = [
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "coach", label: "Coach" },
   { id: "decisions", label: "Decisions" },
   { id: "screeners", label: "Screeners" },
   { id: "etfs", label: "ETFs" },
@@ -74,12 +75,11 @@ const TABS = [
   { id: "backtest", label: "Backtest" },
   { id: "chart", label: "Chart" },
   { id: "health", label: "Health & income" },
-  { id: "future", label: "Projector" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-/** Simple mode shows only the three tabs that answer "what should I do?" */
-const SIMPLE_TABS: readonly TabId[] = ["overview", "decisions", "etfs"];
+/** Simple mode shows only the tabs that answer "what should I do?" */
+const SIMPLE_TABS: readonly TabId[] = ["overview", "coach", "decisions", "etfs"];
 
 function SeriesTip({
   active,
@@ -273,15 +273,33 @@ export function Dashboard({
     return [...arr, ...watchSorted];
   }, [invRows, watchRows, sortBy, fx]);
 
+  // allocation cards can be narrowed to just stocks or just ETFs/funds
+  const [allocFilter, setAllocFilter] = useState<"all" | "stocks" | "etfs">("all");
+  const allocRows = useMemo(() => {
+    if (allocFilter === "all") return invRows;
+    return invRows.filter((r) => {
+      const etf = isEtfHolding(
+        r.holding.yahooSymbol,
+        r.data?.quote.name ?? r.holding.name,
+        r.data?.quote.quoteType,
+        r.holding.securityType
+      );
+      return allocFilter === "etfs" ? etf : !etf;
+    });
+  }, [invRows, allocFilter]);
+  const allocSummary = useMemo(
+    () => (allocFilter === "all" ? summary : summarize(allocRows, fx)),
+    [allocFilter, allocRows, summary, fx]
+  );
   const allocation = useMemo(
     () =>
-      invRows
+      allocRows
         .map((r) => ({
           label: r.holding.yahooSymbol,
           value: toBase(r.currentValue ?? r.invested, r.holding.currency, fx),
         }))
         .sort((a, b) => b.value - a.value),
-    [invRows, fx]
+    [allocRows, fx]
   );
 
   const actions = useMemo(() => {
@@ -794,20 +812,38 @@ export function Dashboard({
               </Card>
             )}
 
-            {/* allocation */}
+            {/* allocation — narrowable to stocks-only or ETFs-only */}
             <div className="grid lg:grid-cols-2 gap-4">
               <Card className="p-4">
-                <SectionTitle sub={`Share of current value, in ${base}.`}>Allocation by holding</SectionTitle>
-                <HBars items={allocation} format={(v) => fmtMoney(v, base, true)} />
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <SectionTitle sub={`Share of current value, in ${base}.`}>Allocation by holding</SectionTitle>
+                  <div className="inline-flex bg-page hairline rounded-lg p-0.5 text-[11.5px] font-medium no-print">
+                    {(["all", "stocks", "etfs"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setAllocFilter(f)}
+                        className={`px-2 py-0.5 rounded-md transition-colors ${allocFilter === f ? "bg-series-1 text-white" : "text-ink-2 hover:text-ink"}`}
+                        aria-pressed={allocFilter === f}
+                      >
+                        {f === "all" ? "All" : f === "stocks" ? "Stocks" : "ETFs"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {allocation.length ? (
+                  <HBars items={allocation} format={(v) => fmtMoney(v, base, true)} />
+                ) : (
+                  <p className="text-[12.5px] text-muted">Nothing in this slice.</p>
+                )}
               </Card>
               <div className="space-y-4">
                 <Card className="p-4">
-                  <SectionTitle>Geography</SectionTitle>
-                  <StackedSplit items={summary.byCountry} format={(v) => fmtMoney(v, base, true)} />
+                  <SectionTitle>Geography{allocFilter !== "all" ? ` — ${allocFilter}` : ""}</SectionTitle>
+                  <StackedSplit items={allocSummary.byCountry} format={(v) => fmtMoney(v, base, true)} />
                 </Card>
                 <Card className="p-4">
-                  <SectionTitle>Sectors</SectionTitle>
-                  <HBars items={summary.bySector} format={(v) => fmtMoney(v, base, true)} maxBars={8} />
+                  <SectionTitle>Sectors{allocFilter !== "all" ? ` — ${allocFilter}` : ""}</SectionTitle>
+                  <HBars items={allocSummary.bySector} format={(v) => fmtMoney(v, base, true)} maxBars={8} />
                 </Card>
               </div>
             </div>
@@ -904,7 +940,7 @@ export function Dashboard({
 
         {tab === "health" && <HealthPanel rows={rows} fx={fx} base={base} />}
 
-        {tab === "future" && <Projector rows={rows} fx={fx} base={base} startValue={summary.totalCurrent} />}
+        {tab === "coach" && <CoachPanel rows={rows} market={market} fx={fx} />}
       </Switcher>
 
       <p className="text-[11.5px] text-muted leading-relaxed border-t border-grid pt-3">

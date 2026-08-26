@@ -460,10 +460,10 @@ export async function getEtfData(symbol: string): Promise<EtfData> {
  */
 const macroCache = new Map<string, { at: number; payload: MacroPayload }>();
 
-export async function gatherMacro(market: Market): Promise<MacroPayload> {
+export async function gatherMacro(market: Market, fresh = false): Promise<MacroPayload> {
   if (MOCK_ENABLED) return mockMacro(market);
   const hit = macroCache.get(market);
-  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.payload;
+  if (!fresh && hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.payload;
 
   const stats: Record<string, SeriesStats> = {};
   const errors: string[] = [];

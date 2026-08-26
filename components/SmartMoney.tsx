@@ -202,7 +202,10 @@ export function SmartMoney({
   market: Market;
   onAddWatch: (symbol: string) => Promise<boolean>;
 }) {
-  // one entry per filer — each card loads, fails and retries on its own
+  // one entry per filer — each card loads, fails and retries on its own.
+  // India view: 13Fs are US-only disclosures, so the bench is opt-in there
+  // and "Who owns your stock" (which covers NSE names) leads instead.
+  const [showBench, setShowBench] = useState(market !== "india");
   const [invs, setInvs] = useState<Record<string, InvestorMoves | "loading" | "error">>({});
   const invInFlight = useRef<Set<string>>(new Set());
   const [busyWatch, setBusyWatch] = useState<string | null>(null);
@@ -220,6 +223,7 @@ export function SmartMoney({
 
   // fetch each filer independently, 3 at a time — cards appear as they arrive
   useEffect(() => {
+    if (!showBench) return; // India: don't fetch SEC filings until asked
     const missing = SUPERINVESTORS.filter(
       (s) => invs[s.cik] === undefined && !invInFlight.current.has(s.cik)
     ).slice(0, 3);
@@ -246,7 +250,7 @@ export function SmartMoney({
         })
       );
     })();
-  }, [invs]);
+  }, [invs, showBench]);
 
   const retryInvestor = (cik: string) => {
     setInvs((prev) => {
@@ -347,9 +351,28 @@ export function SmartMoney({
   );
 
   return (
-    <div className="space-y-4">
+    // flex + explicit order: India leads with what covers NSE names (the
+    // ownership feed); the US-only 13F bench is opt-in there. Canada leads
+    // with the bench — those ARE its investable listings.
+    <div className="flex flex-col gap-4">
+      {/* India: the US bench is opt-in, with the honest reason */}
+      {market === "india" && !showBench && (
+        <Card className="p-4 order-2">
+          <SectionTitle sub="13F filings are a US disclosure — great for ideas, but none of these managers can hold your NSE names, and India has no free 13F equivalent. For Indian names, “Who owns your stock” above reads the ownership feed (promoters show under insiders); the exchange shareholding pattern has the authoritative list.">
+            US superinvestor bench (optional here)
+          </SectionTitle>
+          <button
+            onClick={() => setShowBench(true)}
+            className="bg-series-1 text-white rounded-lg px-3.5 py-1.5 text-[12.5px] font-semibold"
+          >
+            Show the US bench ▸
+          </button>
+        </Card>
+      )}
+
       {/* superinvestor moves */}
-      <Card className="p-4">
+      {showBench && (
+      <Card className={`p-4 ${market === "india" ? "order-2" : ""}`}>
         <SectionTitle sub="A hand-picked bench of long-horizon managers with decades-long public records, read straight from their official SEC 13F filings. Filings lag by up to 45 days and show US-listed long positions only — clone ideas, then do your own work.">
           Superinvestor conviction moves
         </SectionTitle>
@@ -385,7 +408,10 @@ export function SmartMoney({
           </div>
         )}
       </Card>
+      )}
 
+      {showBench && (
+      <div className={market === "india" ? "order-3" : ""}>
       <Stagger mode="mount">
         <div className="space-y-3">
           {SUPERINVESTORS.map((s) => {
@@ -444,16 +470,11 @@ export function SmartMoney({
           })}
         </div>
       </Stagger>
-      {market === "india" && (
-        <p className="text-[11.5px] text-muted italic">
-          13F filings cover US listings, so “+watch” lives in the Canada view. India has no free
-          equivalent of 13Fs — for your NSE names, use “Who owns your stock” below (and the exchange
-          shareholding pattern for the full picture).
-        </p>
+      </div>
       )}
 
-      {/* who owns your stock */}
-      <Card className="p-4">
+      {/* who owns your stock — leads in the India view */}
+      <Card className={`p-4 ${market === "india" ? "order-1" : ""}`}>
         <SectionTitle sub="Top mutual funds and institutions holding a stock, from the free ownership feed — full for US/Canadian listings, partial for NSE names (promoter stakes show under 'insiders').">
           Who owns your stock
         </SectionTitle>
@@ -523,7 +544,7 @@ export function SmartMoney({
         )}
       </Card>
 
-      <p className="text-[11.5px] text-muted leading-relaxed">
+      <p className={`text-[11.5px] text-muted leading-relaxed ${market === "india" ? "order-4" : ""}`}>
         Sources: SEC EDGAR 13F filings (official, free) and Yahoo Finance ownership data (free,
         unofficial). Smart-money positions are context, not instructions — Pabrai clones shamelessly,
         but he reads the filing first. Their size, mandates and hedges differ from yours.
