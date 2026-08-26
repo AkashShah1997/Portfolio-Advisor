@@ -1,7 +1,7 @@
 import type { AnalyzedHolding, Currency, FxRates, Scorecard, StockData } from "./types";
 
 /**
- * The snowflake — a Simply-Wall-St-style 5-axis shape, built entirely from
+ * The snowflake - a Simply-Wall-St-style 5-axis shape, built entirely from
  * this app's own scorecard so the picture and the checks can never disagree.
  *
  * Four axes are the scorecard pillars (0–100). The fifth, Income, is derived
@@ -9,7 +9,7 @@ import type { AnalyzedHolding, Currency, FxRates, Scorecard, StockData } from ".
  *   - how much it pays        (yield vs a 4% "full marks" bar)  → up to 60
  *   - whether it's sustainable (payout ratio ≤ 70%)             → up to 25
  *   - whether cash funds it    (share of FCF-positive years)    → up to 15
- * A non-payer honestly scores near zero on Income — that's a fact, not a flaw.
+ * A non-payer honestly scores near zero on Income - that's a fact, not a flaw.
  *
  * The portfolio snowflake is the value-weighted average of the holdings'
  * snowflakes, so concentration shows up in the shape.
@@ -106,14 +106,39 @@ export function portfolioSnowflake(
   return { axes: acc, covered, total };
 }
 
+/** Per-axis leaders: which holdings actually carry each arm of the snowflake. */
+export interface AxisLeaders {
+  key: keyof SnowflakeAxes;
+  label: string;
+  leaders: { symbol: string; score: number }[];
+}
+
+export function snowflakeLeaders(rows: AnalyzedHolding[], top = 3): AxisLeaders[] {
+  const flakes: { symbol: string; flake: SnowflakeAxes }[] = [];
+  for (const r of rows) {
+    if (r.holding.watch || !r.scorecard || !r.data) continue;
+    const f = snowflakeOf(r.scorecard, r.data);
+    if (!f) continue;
+    flakes.push({ symbol: r.holding.yahooSymbol.replace(/\.(NS|BO|TO|V|NE)$/i, ""), flake: f });
+  }
+  return SNOWFLAKE_AXES.map((a) => ({
+    key: a.key,
+    label: a.label,
+    leaders: [...flakes]
+      .sort((x, y) => y.flake[a.key] - x.flake[a.key])
+      .slice(0, top)
+      .map((x) => ({ symbol: x.symbol, score: x.flake[a.key] })),
+  }));
+}
+
 /** One-line read of the shape, SWS-style ("past performer with growth ahead"). */
 export function describeSnowflake(a: SnowflakeAxes): string {
   const parts: string[] = [];
   const strong = SNOWFLAKE_AXES.filter((x) => a[x.key] >= 65).map((x) => x.label.toLowerCase());
   const weak = SNOWFLAKE_AXES.filter((x) => a[x.key] < 40).map((x) => x.label.toLowerCase());
-  if (strong.length >= 4 && !weak.length) return "A rounded compounder profile — strong on nearly every axis.";
+  if (strong.length >= 4 && !weak.length) return "A rounded compounder profile - strong on nearly every axis.";
   if (strong.length) parts.push(`strong on ${strong.join(", ")}`);
   if (weak.length) parts.push(`thin on ${weak.join(", ")}`);
-  if (!parts.length) return "Middling on every axis — nothing broken, nothing exceptional.";
+  if (!parts.length) return "Middling on every axis - nothing broken, nothing exceptional.";
   return parts.join("; ") + ".";
 }

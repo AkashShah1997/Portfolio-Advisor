@@ -2,13 +2,13 @@ import type { Market } from "./store";
 import type { Candle } from "./history";
 
 /**
- * Market weather — the macro situation from free, crumb-free Yahoo history:
+ * Market weather - the macro situation from free, crumb-free Yahoo history:
  * index trend (vs 200-DMA), drawdown from the 52-week high, volatility (VIX /
  * India VIX) with fear bands, the home currency vs USD, gold, oil and the US
  * 10-year yield. Condensed into ONE plain-words regime read.
  *
  * The philosophy is stated, not hidden: for a 5-year+ value investor macro is
- * CONTEXT, never a timing signal — the buy-below prices already encode the
+ * CONTEXT, never a timing signal - the buy-below prices already encode the
  * discipline. What macro changes is posture: how greedy to be when others are
  * fearful (Buffett), and how much margin of safety to demand when the sun is
  * out. All pure math here; fetching lives in lib/yahoo.ts.
@@ -40,7 +40,7 @@ export interface MacroPayload {
   errors?: string[];
 }
 
-/** Symbols per market — all served by Yahoo's crumb-free chart endpoint. */
+/** Symbols per market - all served by Yahoo's crumb-free chart endpoint. */
 export const MACRO_SYMBOLS: Record<
   Market,
   { key: string; symbol: string; label: string }[]
@@ -90,9 +90,9 @@ export function seriesStats(candles: Candle[]): SeriesStats {
 }
 
 const pct = (v: number | undefined, d = 1) =>
-  v === undefined ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
+  v === undefined ? "–" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
 const num = (v: number | undefined, d = 0) =>
-  v === undefined ? "—" : v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+  v === undefined ? "–" : v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 
 // ---------- item builders ----------
 
@@ -113,7 +113,7 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
       key: "index",
       label: ixLabel,
       value: num(ix.last),
-      sub: `${pct(ix.ret1y)} 1y · ${ix.fromHigh !== undefined ? `${Math.abs(ix.fromHigh * 100).toFixed(1)}% below high` : "—"} · ${ix.above200dma ? "above" : "below"} 200-day avg`,
+      sub: `${pct(ix.ret1y)} 1y · ${ix.fromHigh !== undefined ? `${Math.abs(ix.fromHigh * 100).toFixed(1)}% below high` : "–"} · ${ix.above200dma ? "above" : "below"} 200-day avg`,
       tone: (ix.fromHigh ?? 0) <= -0.15 ? "serious" : (ix.fromHigh ?? 0) <= -0.08 || ix.above200dma === false ? "warning" : "good",
     });
   }
@@ -135,7 +135,7 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
       key: "fx",
       label: MACRO_SYMBOLS[market][2].label,
       value: fx.last.toFixed(2),
-      sub: `${pct(fx.ret1y)} 1y — ${market === "india" ? "rupee" : "loonie"} ${weaker ? "weaker" : "stronger"}`,
+      sub: `${pct(fx.ret1y)} 1y - ${market === "india" ? "rupee" : "loonie"} ${weaker ? "weaker" : "stronger"}`,
       tone: (fx.ret1y ?? 0) > 0.05 ? "warning" : "neutral",
     });
   }
@@ -145,7 +145,7 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
       key: "gold",
       label: "Gold",
       value: `$${num(gold.last)}`,
-      sub: `${pct(gold.ret1y)} 1y — the fear asset`,
+      sub: `${pct(gold.ret1y)} 1y - the fear asset`,
       tone: (gold.ret1y ?? 0) > 0.2 ? "warning" : "neutral",
     });
   }
@@ -155,7 +155,7 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
       key: "oil",
       label: MACRO_SYMBOLS[market][4].label,
       value: `$${oil.last.toFixed(0)}`,
-      sub: `${pct(oil.ret1y)} 1y${market === "india" ? " — India's biggest import" : ""}`,
+      sub: `${pct(oil.ret1y)} 1y${market === "india" ? " - India's biggest import" : ""}`,
       tone: market === "india" && (oil.ret1y ?? 0) > 0.25 ? "warning" : "neutral",
     });
   }
@@ -166,7 +166,7 @@ export function buildMacroItems(market: Market, stats: Record<string, SeriesStat
       key: "us10y",
       label: "US 10-yr yield",
       value: `${level.toFixed(2)}%`,
-      sub: `${pct(y.ret1y)} 1y — the world's discount rate`,
+      sub: `${pct(y.ret1y)} 1y - the world's discount rate`,
       tone: level >= 5 ? "warning" : "neutral",
     });
   }
@@ -190,16 +190,16 @@ export function readRegime(inp: {
     return {
       key: "FEAR",
       tone: "good",
-      headline: "Fear is on sale — this is what long-term buyers wait years for.",
+      headline: "Fear is on sale - this is what long-term buyers wait years for.",
       advice:
-        "“Be greedy when others are fearful” (Buffett). Deploy gradually into quality names from your buy-zone and consensus lists — in tranches, not all at once, and only businesses you'd hold through worse.",
+        "“Be greedy when others are fearful” (Buffett). Deploy gradually into quality names from your buy-zone and consensus lists - in tranches, not all at once, and only businesses you'd hold through worse.",
     };
   }
   if (cooling) {
     return {
       key: "CORRECTION",
       tone: "warning",
-      headline: "The market is cooling — watchlist season, not panic season.",
+      headline: "The market is cooling - watchlist season, not panic season.",
       advice:
         "Corrections are when watchlists earn their keep: quality names drift toward your buy-below prices. Re-check the Decisions tab, keep cash ready, ignore forecasts.",
     };
@@ -208,7 +208,7 @@ export function readRegime(inp: {
     return {
       key: "EXPENSIVE_CALM",
       tone: "warning",
-      headline: "Sunny and near the highs — the easy money is behind, not ahead.",
+      headline: "Sunny and near the highs - the easy money is behind, not ahead.",
       advice:
         "Calm markets at record prices reward patience over activity: demand a bigger margin of safety, don't chase what already ran, and let SIPs/averaging do the buying.",
     };
@@ -216,7 +216,7 @@ export function readRegime(inp: {
   return {
     key: "NORMAL",
     tone: "neutral",
-    headline: "Nothing extreme in the weather — stick to the plan.",
+    headline: "Nothing extreme in the weather - stick to the plan.",
     advice:
       "No macro edge to exploit either way. Price discipline beats prediction: your buy-below levels and the action plan already encode everything this dashboard knows.",
   };

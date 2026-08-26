@@ -10,7 +10,7 @@ import {
 } from "motion/react";
 import { useEffect, type ReactNode } from "react";
 
-/** Shared motion primitives — one easing, one voice, reduced-motion aware. */
+/** Shared motion primitives - one easing, one voice, reduced-motion aware. */
 
 export const EASE = [0.22, 0.61, 0.36, 1] as const;
 

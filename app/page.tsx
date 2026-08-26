@@ -270,7 +270,7 @@ export default function Home() {
               {step === "analyzing" && (
                 <motion.div key={`${market}-analyzing`} {...stepAnim}>
                   <Card className="p-5">
-                    <SectionTitle sub="Fetching 5 years of statements, ratios and prices per stock from Yahoo Finance (free API — a large portfolio takes a minute).">
+                    <SectionTitle sub="Fetching 5 years of statements, ratios and prices per stock from Yahoo Finance (free API - a large portfolio takes a minute).">
                       Analyzing {progress.length} {MARKET_META[market].label} holdings…
                     </SectionTitle>
                     <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1">

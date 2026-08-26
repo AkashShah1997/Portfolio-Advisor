@@ -72,7 +72,7 @@ export function summarize(rows: AnalyzedHolding[], fx: FxRates): PortfolioSummar
 
 /**
  * Value of the CURRENT holdings through time (monthly, base currency).
- * Honest framing: this prices today's share counts across the last ~5 years —
+ * Honest framing: this prices today's share counts across the last ~5 years -
  * it is not your actual account history (it ignores when you bought).
  */
 export function portfolioSeries(rows: AnalyzedHolding[], fx: FxRates): { date: string; value: number }[] {
@@ -162,7 +162,7 @@ export const VERDICT_META: Record<
   { label: string; icon: string; tone: "good" | "neutral" | "warning" | "serious" | "critical" | "muted" }
 > = {
   ADD_MORE: { label: "Add More", icon: "▲", tone: "good" },
-  HOLD_QUALITY_PRICEY: { label: "Hold — pricey", icon: "◆", tone: "neutral" },
+  HOLD_QUALITY_PRICEY: { label: "Hold - pricey", icon: "◆", tone: "neutral" },
   HOLD: { label: "Hold", icon: "●", tone: "neutral" },
   WATCH: { label: "Watch", icon: "!", tone: "warning" },
   REVIEW_EXIT: { label: "Review for Exit", icon: "✕", tone: "critical" },

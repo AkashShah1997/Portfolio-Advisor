@@ -10,7 +10,7 @@ import { fmtMoney, fmtPct } from "@/lib/symbols";
 import { Badge, Card, SectionTitle, Spinner } from "./ui";
 
 /**
- * Backtest — re-run the scorecard as of 1/2/3 years ago using ONLY data that
+ * Backtest - re-run the scorecard as of 1/2/3 years ago using ONLY data that
  * existed then, and show what each verdict bucket actually returned since,
  * against the index. A proof-of-discipline sanity check with its limits
  * printed on it, not a performance claim.
@@ -63,8 +63,8 @@ export function BacktestPanel({ rows, market }: { rows: AnalyzedHolding[]; marke
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <SectionTitle sub="The same scorecard, re-run with ONLY the statements and the price that existed at the cutoff — anything unknowable then (dividend yield, TTM figures, 52-week range) honestly goes n/a. Then: what each verdict bucket returned since, vs the index.">
-          Backtest — would the engine have helped?
+        <SectionTitle sub="The same scorecard, re-run with ONLY the statements and the price that existed at the cutoff - anything unknowable then (dividend yield, TTM figures, 52-week range) honestly goes n/a. Then: what each verdict bucket returned since, vs the index.">
+          Backtest - would the engine have helped?
         </SectionTitle>
 
         <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
@@ -103,7 +103,7 @@ export function BacktestPanel({ rows, market }: { rows: AnalyzedHolding[]; marke
                       {vm.label} then
                     </Badge>
                     <div className="text-[17px] font-semibold tnum mt-1.5 leading-none">
-                      {b.avgCagr !== undefined ? `${b.avgCagr >= 0 ? "+" : ""}${fmtPct(b.avgCagr)}` : "—"}
+                      {b.avgCagr !== undefined ? `${b.avgCagr >= 0 ? "+" : ""}${fmtPct(b.avgCagr)}` : "–"}
                       <span className="text-[11px] font-normal text-muted">/yr avg</span>
                     </div>
                     <div className="text-[11px] text-muted mt-1">
@@ -161,14 +161,14 @@ export function BacktestPanel({ rows, market }: { rows: AnalyzedHolding[]; marke
                         </td>
                         <td className="py-2 pr-3 text-right tnum">{r.scoreThen}</td>
                         <td className="py-2 pr-3 text-right tnum whitespace-nowrap">
-                          {r.priceThen !== undefined ? fmtMoney(r.priceThen, cur, true) : "—"} →{" "}
-                          {r.priceNow !== undefined ? fmtMoney(r.priceNow, cur, true) : "—"}
+                          {r.priceThen !== undefined ? fmtMoney(r.priceThen, cur, true) : "–"} →{" "}
+                          {r.priceNow !== undefined ? fmtMoney(r.priceNow, cur, true) : "–"}
                         </td>
                         <td className={`py-2 pr-3 text-right tnum font-medium ${(r.cagrSince ?? 0) >= 0 ? "text-success-text" : "text-status-critical"}`}>
-                          {r.cagrSince !== undefined ? `${r.cagrSince >= 0 ? "+" : ""}${fmtPct(r.cagrSince)}` : "—"}
+                          {r.cagrSince !== undefined ? `${r.cagrSince >= 0 ? "+" : ""}${fmtPct(r.cagrSince)}` : "–"}
                         </td>
                         <td className={`py-2 pr-3 text-right tnum ${(r.vsBench ?? 0) >= 0 ? "text-success-text" : "text-ink-2"}`}>
-                          {r.vsBench !== undefined ? `${r.vsBench >= 0 ? "+" : ""}${fmtPct(r.vsBench)}` : "—"}
+                          {r.vsBench !== undefined ? `${r.vsBench >= 0 ? "+" : ""}${fmtPct(r.vsBench)}` : "–"}
                         </td>
                         <td className="py-2">
                           {vn ? (
@@ -179,7 +179,7 @@ export function BacktestPanel({ rows, market }: { rows: AnalyzedHolding[]; marke
                               <span className="text-muted text-[11px]">{drift(r)}</span>
                             </span>
                           ) : (
-                            "—"
+                            "–"
                           )}
                         </td>
                       </tr>
@@ -191,7 +191,7 @@ export function BacktestPanel({ rows, market }: { rows: AnalyzedHolding[]; marke
 
             {result.skipped.length > 0 && (
               <p className="text-[11.5px] text-muted mt-2">
-                Skipped: {result.skipped.map((s) => s.symbol.replace(/\.(NS|BO|TO|V)$/i, "")).join(", ")} — {result.skipped[0].reason}.
+                Skipped: {result.skipped.map((s) => s.symbol.replace(/\.(NS|BO|TO|V)$/i, "")).join(", ")} - {result.skipped[0].reason}.
               </p>
             )}
           </>
@@ -201,7 +201,7 @@ export function BacktestPanel({ rows, market }: { rows: AnalyzedHolding[]; marke
           Honest limits: this is a sanity check on a handful of names, not statistics. Returns are price-only
           (dividends excluded on both sides), the sample contains only names that still exist and that you track
           (survivors), and 5–6 fiscal years of free data cap the cutoff at ~3 years. It answers “did the
-          discipline point the right way here?” — nothing more. Add watchlist names and rescan to widen the
+          discipline point the right way here?” - nothing more. Add watchlist names and rescan to widen the
           sample.
         </p>
       </Card>

@@ -65,7 +65,7 @@ export function ImportScreen({
           <span className="text-success-text font-medium">
             ✓ Restored {holdings.length} holding{holdings.length === 1 ? "" : "s"} saved on this device
           </span>
-          <span className="text-ink-2">— re-import a fresh CSV anytime to replace them.</span>
+          <span className="text-ink-2">- re-import a fresh CSV anytime to replace them.</span>
           <button onClick={onErase} className="text-status-critical hover:underline ml-auto">
             erase saved data
           </button>
@@ -74,7 +74,7 @@ export function ImportScreen({
 
       <FadeUp mode="mount">
         <section>
-          <SectionTitle sub="Parsed and stored locally. Symbols auto-resolve to Yahoo format — fix any guess inline below.">
+          <SectionTitle sub="Parsed and stored locally. Symbols auto-resolve to Yahoo format - fix any guess inline below.">
             1 · Import holdings
           </SectionTitle>
           <ImportPanel market={market} onFile={onFile} />
@@ -106,7 +106,7 @@ export function ImportScreen({
 
       <FadeUp mode="mount" delay={0.05}>
         <section>
-          <SectionTitle sub="Optional: paste your own Anthropic API key for Claude-written commentary on top of the deterministic scorecard. The key stays in this tab's memory only — never saved, never logged.">
+          <SectionTitle sub="Optional: paste your own Anthropic API key for Claude-written commentary on top of the deterministic scorecard. The key stays in this tab's memory only - never saved, never logged.">
             {holdings.length > 0 ? "3" : "2"} · AI commentary (optional)
           </SectionTitle>
           <Card className="p-4">

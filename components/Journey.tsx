@@ -7,7 +7,7 @@ import { fmtMoney, fmtNum, fmtPct } from "@/lib/symbols";
 import { Badge } from "./ui";
 
 /**
- * "Since you bought" — fundamentals at purchase vs today, with a plain
+ * "Since you bought" - fundamentals at purchase vs today, with a plain
  * verdict: improving business, dead money, or deserved decline.
  */
 
@@ -19,7 +19,7 @@ const TONE_BADGE: Record<string, "good" | "neutral" | "warning" | "critical"> = 
 };
 
 function fmtVal(v: number | undefined, kind: JourneyRow["kind"], cur: Currency): string {
-  if (v === undefined) return "—";
+  if (v === undefined) return "–";
   switch (kind) {
     case "money":
       return fmtMoney(v, cur, true);
@@ -58,7 +58,7 @@ export function Journey({
           {j.atWindowEdge ? " or earlier" : ""}
         </Badge>
         {j.estimated && (
-          <span className="text-[11px] text-muted">estimated from your avg cost — correct it:</span>
+          <span className="text-[11px] text-muted">estimated from your avg cost - correct it:</span>
         )}
         {!j.estimated && <span className="text-[11px] text-muted">set by you:</span>}
         <input
@@ -101,7 +101,7 @@ export function Journey({
                 <td className="py-1 text-right">
                   {r.better === true && <span className="text-success-text font-bold">▲ better</span>}
                   {r.better === false && <span className="text-status-critical font-bold">▼ worse</span>}
-                  {r.better === undefined && <span className="text-muted">— flat</span>}
+                  {r.better === undefined && <span className="text-muted">- flat</span>}
                 </td>
               </tr>
             ))}
@@ -125,7 +125,7 @@ export function Journey({
       </p>
       <p className="text-[10.5px] text-muted italic mt-1">
         Fiscal-year fundamentals from free Yahoo data; the buy month is {j.estimated ? "an estimate from your average cost" : "the month you set"}.
-        Lynch: “Know what you own, and know why you own it” — this table is the “why” checked against time.
+        Lynch: “Know what you own, and know why you own it” - this table is the “why” checked against time.
       </p>
     </div>
   );

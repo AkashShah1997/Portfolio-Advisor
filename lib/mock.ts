@@ -6,7 +6,7 @@ import type { OwnershipPayload } from "./ownership";
 /**
  * Deterministic mock data so the whole app can be exercised without network
  * access (e.g. in a sandboxed dev environment). NEVER enabled unless
- * MOCK_DATA=1 is set — production on Vercel uses live Yahoo Finance data.
+ * MOCK_DATA=1 is set - production on Vercel uses live Yahoo Finance data.
  */
 export const MOCK_ENABLED = process.env.MOCK_DATA === "1";
 
@@ -32,22 +32,22 @@ interface Profile {
 const CURATED: Record<string, Profile> = {
   "RELIANCE.NS": { name: "Reliance Industries Ltd", sector: "Energy", industry: "Oil & Gas Refining", currency: "INR", baseRevenue: 9.7e12, revGrowth: 0.09, netMargin: 0.075, roe: 0.095, debtToEquity: 0.44, pe: 24, growthNoise: 0.05, divYield: 0.004, shares: 6.77e9 },
   "TCS.NS": { name: "Tata Consultancy Services", sector: "Technology", industry: "IT Services", currency: "INR", baseRevenue: 2.55e12, revGrowth: 0.1, netMargin: 0.19, roe: 0.46, debtToEquity: 0.08, pe: 27, growthNoise: 0.03, divYield: 0.017, shares: 3.62e9 },
-  "HDFCBANK.NS": { name: "HDFC Bank Ltd", sector: "Financial Services", industry: "Banks — Regional", currency: "INR", baseRevenue: 2.8e12, revGrowth: 0.16, netMargin: 0.22, roe: 0.155, debtToEquity: 6.8, pe: 19, growthNoise: 0.04, divYield: 0.011, shares: 7.6e9 },
+  "HDFCBANK.NS": { name: "HDFC Bank Ltd", sector: "Financial Services", industry: "Banks - Regional", currency: "INR", baseRevenue: 2.8e12, revGrowth: 0.16, netMargin: 0.22, roe: 0.155, debtToEquity: 6.8, pe: 19, growthNoise: 0.04, divYield: 0.011, shares: 7.6e9 },
   "INFY.NS": { name: "Infosys Ltd", sector: "Technology", industry: "IT Services", currency: "INR", baseRevenue: 1.6e12, revGrowth: 0.09, netMargin: 0.165, roe: 0.31, debtToEquity: 0.09, pe: 24, growthNoise: 0.04, divYield: 0.026, shares: 4.15e9 },
   "TATAMOTORS.NS": { name: "Tata Motors Ltd", sector: "Consumer Cyclical", industry: "Auto Manufacturers", currency: "INR", baseRevenue: 4.4e12, revGrowth: 0.11, netMargin: 0.05, roe: 0.28, debtToEquity: 1.1, pe: 9, growthNoise: 0.12, lossYear: 1, divYield: 0.006, shares: 3.68e9 },
   "ITC.NS": { name: "ITC Ltd", sector: "Consumer Defensive", industry: "Tobacco / FMCG", currency: "INR", baseRevenue: 0.72e12, revGrowth: 0.08, netMargin: 0.27, roe: 0.28, debtToEquity: 0.02, pe: 25, growthNoise: 0.04, divYield: 0.033, shares: 12.5e9 },
-  "SHOP.TO": { name: "Shopify Inc", sector: "Technology", industry: "Software — Application", currency: "CAD", baseRevenue: 12.3e9, revGrowth: 0.24, netMargin: 0.13, roe: 0.12, debtToEquity: 0.1, pe: 58, growthNoise: 0.08, lossYear: 1, shares: 1.29e9 },
-  "RY.TO": { name: "Royal Bank of Canada", sector: "Financial Services", industry: "Banks — Diversified", currency: "CAD", baseRevenue: 62e9, revGrowth: 0.07, netMargin: 0.26, roe: 0.145, debtToEquity: 9.5, pe: 13.5, growthNoise: 0.04, divYield: 0.034, shares: 1.41e9 },
+  "SHOP.TO": { name: "Shopify Inc", sector: "Technology", industry: "Software - Application", currency: "CAD", baseRevenue: 12.3e9, revGrowth: 0.24, netMargin: 0.13, roe: 0.12, debtToEquity: 0.1, pe: 58, growthNoise: 0.08, lossYear: 1, shares: 1.29e9 },
+  "RY.TO": { name: "Royal Bank of Canada", sector: "Financial Services", industry: "Banks - Diversified", currency: "CAD", baseRevenue: 62e9, revGrowth: 0.07, netMargin: 0.26, roe: 0.145, debtToEquity: 9.5, pe: 13.5, growthNoise: 0.04, divYield: 0.034, shares: 1.41e9 },
   "ENB.TO": { name: "Enbridge Inc", sector: "Energy", industry: "Oil & Gas Midstream", currency: "CAD", baseRevenue: 55e9, revGrowth: 0.05, netMargin: 0.11, roe: 0.095, debtToEquity: 1.35, pe: 19, growthNoise: 0.06, divYield: 0.061, shares: 2.18e9 },
   "CNR.TO": { name: "Canadian National Railway", sector: "Industrials", industry: "Railroads", currency: "CAD", baseRevenue: 17.5e9, revGrowth: 0.05, netMargin: 0.31, roe: 0.27, debtToEquity: 0.95, pe: 19, growthNoise: 0.04, divYield: 0.022, shares: 0.63e9 },
   AAPL: { name: "Apple Inc", sector: "Technology", industry: "Consumer Electronics", currency: "USD", baseRevenue: 405e9, revGrowth: 0.05, netMargin: 0.25, roe: 1.4, debtToEquity: 1.6, pe: 32, growthNoise: 0.04, divYield: 0.005, shares: 15.0e9 },
-  MSFT: { name: "Microsoft Corp", sector: "Technology", industry: "Software — Infrastructure", currency: "USD", baseRevenue: 280e9, revGrowth: 0.14, netMargin: 0.35, roe: 0.36, debtToEquity: 0.3, pe: 35, growthNoise: 0.03, divYield: 0.007, shares: 7.43e9 },
-  // ETF units — the stock pipeline only needs a name/price (the scorecard says
+  MSFT: { name: "Microsoft Corp", sector: "Technology", industry: "Software - Infrastructure", currency: "USD", baseRevenue: 280e9, revGrowth: 0.14, netMargin: 0.35, roe: 0.36, debtToEquity: 0.3, pe: 35, growthNoise: 0.03, divYield: 0.007, shares: 7.43e9 },
+  // ETF units - the stock pipeline only needs a name/price (the scorecard says
   // "insufficient data" by design); real fund analysis lives in mocketf.ts.
-  "NIFTYBEES.NS": { name: "Nippon India ETF Nifty 50 BeES", sector: "ETF", industry: "Index ETF — Nifty 50", currency: "INR", baseRevenue: 1e9, revGrowth: 0.1, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 20, growthNoise: 0.02, divYield: 0.01, px: 285, etf: true },
-  "GOLDBEES.NS": { name: "Nippon India ETF Gold BeES", sector: "ETF", industry: "Commodity ETF — Gold", currency: "INR", baseRevenue: 1e9, revGrowth: 0.08, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 20, growthNoise: 0.02, px: 66, etf: true },
+  "NIFTYBEES.NS": { name: "Nippon India ETF Nifty 50 BeES", sector: "ETF", industry: "Index ETF - Nifty 50", currency: "INR", baseRevenue: 1e9, revGrowth: 0.1, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 20, growthNoise: 0.02, divYield: 0.01, px: 285, etf: true },
+  "GOLDBEES.NS": { name: "Nippon India ETF Gold BeES", sector: "ETF", industry: "Commodity ETF - Gold", currency: "INR", baseRevenue: 1e9, revGrowth: 0.08, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 20, growthNoise: 0.02, px: 66, etf: true },
   "XEQT.TO": { name: "iShares Core Equity ETF Portfolio", sector: "ETF", industry: "All-Equity Portfolio ETF", currency: "CAD", baseRevenue: 1e9, revGrowth: 0.09, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 18, growthNoise: 0.02, divYield: 0.017, px: 29, etf: true },
-  "VFV.TO": { name: "Vanguard S&P 500 Index ETF", sector: "ETF", industry: "Index ETF — S&P 500", currency: "CAD", baseRevenue: 1e9, revGrowth: 0.11, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 22, growthNoise: 0.02, divYield: 0.011, px: 148, etf: true },
+  "VFV.TO": { name: "Vanguard S&P 500 Index ETF", sector: "ETF", industry: "Index ETF - S&P 500", currency: "CAD", baseRevenue: 1e9, revGrowth: 0.11, netMargin: 0.1, roe: 0.1, debtToEquity: 0, pe: 22, growthNoise: 0.02, divYield: 0.011, px: 148, etf: true },
 };
 
 /** Small deterministic PRNG so unknown symbols still get stable, plausible data. */
@@ -213,7 +213,7 @@ export function mockStockData(symbol: string): StockData {
       recommendationKey: p.etf ? undefined : p.roe >= 0.15 ? "buy" : "hold",
       numberOfAnalystOpinions: p.etf ? undefined : 8 + (hashSeed(symbol) % 25),
     },
-    // fund units carry no company statements — the ETFs tab judges them instead
+    // fund units carry no company statements - the ETFs tab judges them instead
     years: p.etf ? [] : years,
     prices,
     fetchedAt: new Date().toISOString(),
@@ -306,7 +306,7 @@ export function mockSmartMoves(): InvestorMoves[] {
       cik: "0001067983",
       name: "Berkshire Hathaway",
       manager: "Warren Buffett",
-      blurb: "The reference compounder — durable moats held for decades.",
+      blurb: "The reference compounder - durable moats held for decades.",
       record: "~20%/yr over ~60 years",
       quarter: "2026-06-30",
       prevQuarter: "2026-03-31",

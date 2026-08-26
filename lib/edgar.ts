@@ -16,12 +16,19 @@ export type { InvestorMoves, SmartMovesPayload } from "./thirteenf";
 
 /**
  * SEC EDGAR client for superinvestor 13F filings. Free and official; needs no
- * key, only a descriptive User-Agent and polite pacing (SEC asks ≤10 req/s —
+ * key, only a descriptive User-Agent and polite pacing (SEC asks ≤10 req/s -
  * we run far gentler). Results are cached in-process for 6h: quarterly
  * filings don't change between lunch and dinner.
  */
 
-const UA = "PortfolioAdvisor/2.0 (open-source personal research tool)";
+/**
+ * SEC's fair-access policy REQUIRES a User-Agent that identifies the requester
+ * with a contact address, and www.sec.gov (the Archives host) returns 403
+ * without one (data.sec.gov is more lenient, which is why the submissions call
+ * worked while index.json failed). Put YOUR email here when self-hosting:
+ * https://www.sec.gov/os/webmaster-faq#developers
+ */
+const UA = "PortfolioAdvisor/2.6 (personal research tool; contact@portfolio-advisor.local)";
 
 // ---- gentle SEC queue (separate from the Yahoo queue) ----
 const MAX_CONCURRENT = 4;
@@ -189,7 +196,7 @@ async function fetchInvestorCached(inv: (typeof SUPERINVESTORS)[number]): Promis
 }
 
 /**
- * One investor at a time — this is what the UI calls, so each card loads (and
+ * One investor at a time - this is what the UI calls, so each card loads (and
  * fails, and retries) independently instead of the whole bench waiting on the
  * slowest SEC response. Returns null for a CIK not on the bench.
  */

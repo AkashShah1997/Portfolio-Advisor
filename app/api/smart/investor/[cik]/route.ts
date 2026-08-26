@@ -5,7 +5,7 @@ export const maxDuration = 30;
 
 /**
  * One superinvestor's 13F moves. The UI calls this once per filer so cards
- * load progressively — one slow SEC response no longer blocks the whole tab.
+ * load progressively - one slow SEC response no longer blocks the whole tab.
  * (Server-side per-CIK cache lives in lib/edgar.ts, 6h.)
  */
 export async function GET(

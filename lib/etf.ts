@@ -1,12 +1,12 @@
 /**
- * ETF data model + pure mapping — client-safe (no yahoo import here, so tests
+ * ETF data model + pure mapping - client-safe (no yahoo import here, so tests
  * and components can use it; the server fetch lives in lib/yahoo.ts).
  *
  * Yahoo's fund modules (fundProfile / topHoldings / fundPerformance /
  * defaultKeyStatistics) carry what actually matters for a passive holder:
  * the expense ratio (MER), AUM, category, trailing & annual returns, top-10
  * concentration and sector weights. Coverage is good for US/Canadian ETFs and
- * patchier for NSE ETFs — missing fields stay undefined and the UI says so.
+ * patchier for NSE ETFs - missing fields stay undefined and the UI says so.
  */
 
 export interface EtfTopHolding {
@@ -47,7 +47,7 @@ export interface EtfData {
 /**
  * Is this holding an ETF/fund? Trust order:
  *   1. the broker's own Security Type column (EXCHANGE_TRADED_FUND / EQUITY / …)
- *   2. Yahoo's quoteType — including EQUITY meaning "definitely a stock"
+ *   2. Yahoo's quoteType - including EQUITY meaning "definitely a stock"
  *   3. unambiguous NSE fund-family suffixes (…BEES / …IETF exist only on funds)
  *   4. name heuristics, only when everything above is silent
  * An equity must never land in the ETF section just because its name is fancy.
@@ -66,7 +66,7 @@ export function isEtfHolding(
 
   if (quoteType === "ETF" || quoteType === "MUTUALFUND") return true;
   if (quoteType === "EQUITY") return nseFundFamily; // trust Yahoo, except the unambiguous fund suffixes
-  if (quoteType) return false; // INDEX, CRYPTO, FUTURE… — not fund units
+  if (quoteType) return false; // INDEX, CRYPTO, FUTURE… - not fund units
 
   if (nseFundFamily || /ETF$/.test(base)) return true;
   return name
@@ -207,7 +207,7 @@ export function fundDataEmpty(e: EtfData): boolean {
 
 /**
  * Annualized 1/3/5-year returns computed from the ~5y of monthly closes the
- * stock pipeline already fetched — price-only (distributions excluded), which
+ * stock pipeline already fetched - price-only (distributions excluded), which
  * for growth-oriented Indian ETFs is close enough to be honest context.
  */
 export function trailingFromPrices(prices: { date: string; close: number }[]): EtfData["trailing"] {

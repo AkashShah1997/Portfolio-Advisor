@@ -2,7 +2,7 @@ import type { MetricRow } from "./screens";
 
 /**
  * On-device scan cache. Scanning a whole market universe (~100–150 names on
- * free Yahoo data) takes minutes the first time — so every scored name is
+ * free Yahoo data) takes minutes the first time - so every scored name is
  * cached compactly in localStorage for 24h. Reopening the app (or switching
  * tabs) reuses the cache instantly, and a scan only fetches missing/stale
  * names. Cached rows carry no heavy statement data; prompts and watchlist
@@ -66,7 +66,7 @@ export function saveScanLites(scanKey: string, rows: MetricRow[], now = Date.now
     for (const r of rows) existing.set(r.symbol.toUpperCase(), toLite(r, now));
     window.localStorage.setItem(KEY(scanKey), JSON.stringify({ v: 2, rows: [...existing.values()] }));
   } catch {
-    /* storage full — the scan still works in memory */
+    /* storage full - the scan still works in memory */
   }
 }
 

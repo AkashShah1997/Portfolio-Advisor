@@ -13,10 +13,10 @@ import type {
 /**
  * Value-investing scorecard.
  *
- * Encodes the shared playbook of the long-horizon quality-value school —
+ * Encodes the shared playbook of the long-horizon quality-value school -
  * anchored in Warren Buffett, Radhakishan Damani and Rakesh Jhunjhunwala, and
  * drawing on Munger, Graham, Fisher, Lynch, Akre, Greenblatt, Terry Smith,
- * Pabrai, Raamdeo Agrawal (QGLP) and Saurabh Mukherjea (Coffee Can) — as
+ * Pabrai, Raamdeo Agrawal (QGLP) and Saurabh Mukherjea (Coffee Can) - as
  * explicit, data-backed checks over ~5 fiscal years:
  *
  *  - Buffett/Munger: durable moats (high, stable ROE & margins), low debt,
@@ -25,7 +25,7 @@ import type {
  *    businesses, ruthless price discipline, then do nothing.
  *  - Jhunjhunwala/Agrawal: growth at a reasonable price, ROCE focus,
  *    earnings consistency, "buy right, sit tight".
- *  - Mukherjea: Coffee Can consistency — rev growth ≥10% AND ROCE ≥15%,
+ *  - Mukherjea: Coffee Can consistency - rev growth ≥10% AND ROCE ≥15%,
  *    year after year. Akre: reinvestment engine (ROE × retention).
  *  - Graham/Pabrai: margin of safety; Greenblatt: earnings yield × ROC.
  *
@@ -99,7 +99,7 @@ export function computeRatios(years: YearFinancials[], prices: { date: string; c
 // ---------- Piotroski F-Score ----------
 
 /**
- * Piotroski's 9-point F-Score over the last two fiscal years — the classic
+ * Piotroski's 9-point F-Score over the last two fiscal years - the classic
  * academic test of whether the fundamentals are IMPROVING (profitable, cash-
  * generative, deleveraging, more efficient, no dilution). 8–9 strong, 0–3
  * weak. Tests whose inputs are missing go n/a and shrink the denominator.
@@ -295,14 +295,14 @@ export function buildScorecard(data: StockData): Scorecard {
       const sd = stdev(nmSeries);
       if (m === undefined || sd === undefined || m <= 0) return [undefined, "Not enough margin history"];
       const cv = sd / m;
-      return [band(cv, 0.25, 0.5, false), `Margin variability (CV) ${(cv * 100).toFixed(0)}% — lower is steadier`];
+      return [band(cv, 0.25, 0.5, false), `Margin variability (CV) ${(cv * 100).toFixed(0)}% - lower is steadier`];
     },
   });
   checks.push({
     id: "roetrend",
     pillar: "quality",
     label: "ROE not in multi-year decline",
-    philosophy: "Buffett/Agrawal: longevity of the moat — watch for it being breached",
+    philosophy: "Buffett/Agrawal: longevity of the moat - watch for it being breached",
     weight: 4,
     fn: () => {
       if (roeSeries.length < 4) return [undefined, "Fewer than 4 years of ROE history"];
@@ -415,7 +415,7 @@ export function buildScorecard(data: StockData): Scorecard {
     id: "consistency",
     pillar: "growth",
     label: "Earnings consistency (no losses, few down years)",
-    philosophy: "Damani: consistency over drama — hold for decades",
+    philosophy: "Damani: consistency over drama - hold for decades",
     weight: 6,
     fn: () => {
       if (!niSeries.length) return [undefined, "Earnings history unavailable"];
@@ -476,7 +476,7 @@ export function buildScorecard(data: StockData): Scorecard {
     id: "peg",
     pillar: "valuation",
     label: "PEG ratio ≤ 1.5",
-    philosophy: "Lynch/Jhunjhunwala: growth at a reasonable price — pay for growth, never overpay",
+    philosophy: "Lynch/Jhunjhunwala: growth at a reasonable price - pay for growth, never overpay",
     weight: 5,
     fn: () => [band(pegRatio, 1.0, 1.5, false), `PEG ${x2(pegRatio)}`],
   });
@@ -502,7 +502,7 @@ export function buildScorecard(data: StockData): Scorecard {
       id: "fcfyield",
       pillar: "valuation",
       label: "FCF yield ≥ 4%",
-      philosophy: "Buffett/Pabrai: cash flow is the margin of safety — heads I win, tails I don't lose much",
+      philosophy: "Buffett/Pabrai: cash flow is the margin of safety - heads I win, tails I don't lose much",
       weight: 4,
       fn: () => [band(fcfYield, 0.04, 0.025), `FCF yield ${pct(fcfYield)}`],
     });
@@ -546,11 +546,11 @@ export function buildScorecard(data: StockData): Scorecard {
 
   // ---------- red flags ----------
   const redFlags: string[] = [];
-  if (!isFin && latestICR !== undefined && latestICR < 2) redFlags.push(`Interest coverage is only ${latestICR.toFixed(1)}x — debt service is eating profits.`);
+  if (!isFin && latestICR !== undefined && latestICR < 2) redFlags.push(`Interest coverage is only ${latestICR.toFixed(1)}x - debt service is eating profits.`);
   if (!isFin && latestD2E !== undefined && latestD2E > 2) redFlags.push(`Debt-to-equity of ${latestD2E.toFixed(1)}x is far beyond value-investing comfort.`);
   if (niSeries.length && (last?.netIncome ?? 1) <= 0) redFlags.push("Latest fiscal year was loss-making.");
-  if (fcfPositiveShare !== undefined && fcfPositiveShare < 0.5) redFlags.push("Free cash flow negative in most years — the business consumes cash.");
-  if (roeFalling3 && latestROE !== undefined && latestROE < 0.1) redFlags.push("ROE has declined three straight years and is now below 10% — possible moat erosion.");
+  if (fcfPositiveShare !== undefined && fcfPositiveShare < 0.5) redFlags.push("Free cash flow negative in most years - the business consumes cash.");
+  if (roeFalling3 && latestROE !== undefined && latestROE < 0.1) redFlags.push("ROE has declined three straight years and is now below 10% - possible moat erosion.");
   if (epsFirst && epsLast && epsLast < epsFirst * 0.6) redFlags.push("EPS is down more than 40% versus five years ago.");
   if (currentPE !== undefined && currentPE > 60 && (epsCagr ?? 0) < 0.15) redFlags.push(`P/E of ${currentPE.toFixed(0)} with modest growth leaves no margin of safety.`);
 
@@ -580,23 +580,23 @@ export function buildScorecard(data: StockData): Scorecard {
     ADD_MORE:
       "Quality business at a sensible price. On a 5-year+ horizon this is the kind of position the masters would quietly accumulate.",
     HOLD_QUALITY_PRICEY:
-      "Wonderful business, rich price. Keep holding — but add only on meaningful dips. Patience is a position too.",
+      "Wonderful business, rich price. Keep holding - but add only on meaningful dips. Patience is a position too.",
     HOLD: "Solid but not exceptional. Hold and review annually; don't add aggressively until quality or price improves.",
     WATCH:
       "The long-term thesis is weakening on the numbers. Watch the next 2–4 quarters closely before committing new money.",
     REVIEW_EXIT:
-      "Fails core long-term quality tests. Re-examine why you own it — capital compounds faster in stronger businesses.",
+      "Fails core long-term quality tests. Re-examine why you own it - capital compounds faster in stronger businesses.",
     INSUFFICIENT_DATA:
       "Not enough fundamental history to score confidently (common for ETFs, new listings, or sparse coverage). Judge this one separately.",
   };
 
   const philosophyNotes: Record<Verdict, string> = {
-    ADD_MORE: "“It's far better to buy a wonderful company at a fair price than a fair company at a wonderful price.” — Warren Buffett",
-    HOLD_QUALITY_PRICEY: "“The big money is not in the buying and selling, but in the waiting.” — Charlie Munger (Buffett's partner)",
-    HOLD: "“Buy right, sit tight.” — Rakesh Jhunjhunwala",
-    WATCH: "“Know what you own, and know why you own it.” — Peter Lynch (a test Damani applies ruthlessly)",
-    REVIEW_EXIT: "“Should you find yourself in a chronically leaking boat, energy devoted to changing vessels is likely more productive than energy devoted to patching leaks.” — Warren Buffett",
-    INSUFFICIENT_DATA: "“Risk comes from not knowing what you're doing.” — Warren Buffett",
+    ADD_MORE: "“It's far better to buy a wonderful company at a fair price than a fair company at a wonderful price.” - Warren Buffett",
+    HOLD_QUALITY_PRICEY: "“The big money is not in the buying and selling, but in the waiting.” - Charlie Munger (Buffett's partner)",
+    HOLD: "“Buy right, sit tight.” - Rakesh Jhunjhunwala",
+    WATCH: "“Know what you own, and know why you own it.” - Peter Lynch (a test Damani applies ruthlessly)",
+    REVIEW_EXIT: "“Should you find yourself in a chronically leaking boat, energy devoted to changing vessels is likely more productive than energy devoted to patching leaks.” - Warren Buffett",
+    INSUFFICIENT_DATA: "“Risk comes from not knowing what you're doing.” - Warren Buffett",
   };
 
   return {

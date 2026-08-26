@@ -35,7 +35,7 @@ import { Badge, Card, SectionTitle, Spinner } from "./ui";
 /**
  * TradingView-style price chart (built on TradingView's open-source
  * lightweight-charts): candles or area, 6M→Max ranges, SMA 50/200, volume,
- * two-click trendline drawing, and — the value-investor twist — your average
+ * two-click trendline drawing, and - the value-investor twist - your average
  * cost, the rough fair-value estimate and the buy-below level drawn straight
  * on the price axis.
  */
@@ -276,7 +276,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
 
     // moving averages
     // moving averages in DAY-equivalents per interval: on weekly candles the
-    // "200-day MA" is the 40-week MA — so golden/death crosses actually show
+    // "200-day MA" is the 40-week MA - so golden/death crosses actually show
     // on the long-range views a 5-year holder cares about.
     const len50 = maLenForInterval(50, payload.interval);
     const len200 = maLenForInterval(200, payload.interval);
@@ -468,7 +468,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
           <span
             className="inline-block w-3 h-[3px] rounded"
             style={{ background: "#eb6834" }}
-            title="Day-equivalent on every range (40-week MA on weekly data) — golden/death crosses are marked on the chart"
+            title="Day-equivalent on every range (40-week MA on weekly data) - golden/death crosses are marked on the chart"
           />{" "}
           200-day MA
         </label>
@@ -504,7 +504,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
 
       {/* legend */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[12.5px] tnum">
-        <span className="font-semibold text-[14px]">{symbol || "—"}</span>
+        <span className="font-semibold text-[14px]">{symbol || "–"}</span>
         {shown && (
           <>
             <span className="text-muted">{shown.t}</span>
@@ -538,7 +538,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
         <div ref={containerRef} className="absolute inset-0" data-testid="price-chart" />
         {error && (
           <div className="absolute inset-0 grid place-items-center bg-surface/80 text-[13px] text-status-critical">
-            {error} — check the symbol and try again.
+            {error} - check the symbol and try again.
           </div>
         )}
         {!symbol && (
@@ -568,7 +568,7 @@ export function ChartPanel({ rows }: { rows: AnalyzedHolding[] }) {
             </span>
           )}
           <span className="text-[11px] text-muted italic ml-auto">
-            A value investor charts to find patience, not patterns — the levels matter more than the wiggles.
+            A value investor charts to find patience, not patterns - the levels matter more than the wiggles.
           </span>
         </div>
       )}

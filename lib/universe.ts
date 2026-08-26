@@ -1,14 +1,14 @@
 /**
- * Scan universes — broad, hand-curated coverage of each market: large caps
+ * Scan universes - broad, hand-curated coverage of each market: large caps
  * PLUS a deliberate mid- & small-cap tier (~80 extra India names, ~16 Canada),
- * so the screens can hunt where tomorrow's large caps live — without any paid
+ * so the screens can hunt where tomorrow's large caps live - without any paid
  * screener API. Size is judged live from market cap (capTierOf in screens.ts),
  * so the "Mid & small-cap compounders" screen and the size filter always use
  * current values, not stale labels.
  *
- * NOT recommendations — candidates. The same scorecard that judges your
+ * NOT recommendations - candidates. The same scorecard that judges your
  * holdings judges them, live, from free Yahoo data. Names that fail to fetch
- * are reported and skipped. Edit freely — anything with a Yahoo symbol works,
+ * are reported and skipped. Edit freely - anything with a Yahoo symbol works,
  * and the Screeners tab also accepts a pasted custom list.
  */
 
@@ -24,7 +24,7 @@ const c = (symbol: string, name: string, sector: string): CandidateStock => ({ s
 
 export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
   India: [
-    // — IT & tech services —
+    // - IT & tech services -
     c("TCS.NS", "Tata Consultancy Services", "IT Services"),
     c("INFY.NS", "Infosys", "IT Services"),
     c("HCLTECH.NS", "HCL Technologies", "IT Services"),
@@ -41,7 +41,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("NAUKRI.NS", "Info Edge (Naukri)", "Internet"),
     c("POLICYBZR.NS", "PB Fintech (Policybazaar)", "Internet / Fintech"),
     c("IRCTC.NS", "IRCTC", "Internet / Travel"),
-    // — banks & NBFCs —
+    // - banks & NBFCs -
     c("HDFCBANK.NS", "HDFC Bank", "Banks"),
     c("ICICIBANK.NS", "ICICI Bank", "Banks"),
     c("KOTAKBANK.NS", "Kotak Mahindra Bank", "Banks"),
@@ -57,7 +57,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("MUTHOOTFIN.NS", "Muthoot Finance", "Gold NBFC"),
     c("PFC.NS", "Power Finance Corp", "Infra Finance"),
     c("RECLTD.NS", "REC Ltd", "Infra Finance"),
-    // — insurance & capital markets —
+    // - insurance & capital markets -
     c("HDFCLIFE.NS", "HDFC Life Insurance", "Insurance"),
     c("SBILIFE.NS", "SBI Life Insurance", "Insurance"),
     c("ICICIPRULI.NS", "ICICI Prudential Life", "Insurance"),
@@ -70,7 +70,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("MCX.NS", "MCX", "Exchange"),
     c("IEX.NS", "Indian Energy Exchange", "Exchange"),
     c("ANGELONE.NS", "Angel One", "Broking"),
-    // — consumer staples —
+    // - consumer staples -
     c("HINDUNILVR.NS", "Hindustan Unilever", "FMCG"),
     c("NESTLEIND.NS", "Nestlé India", "FMCG"),
     c("ITC.NS", "ITC", "FMCG / Tobacco"),
@@ -85,7 +85,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("UNITDSPR.NS", "United Spirits", "Beverages"),
     c("PGHH.NS", "P&G Hygiene & Health", "FMCG"),
     c("JUBLFOOD.NS", "Jubilant FoodWorks", "QSR"),
-    // — retail & consumer discretionary —
+    // - retail & consumer discretionary -
     c("DMART.NS", "Avenue Supermarts (DMart)", "Retail"),
     c("TRENT.NS", "Trent (Westside/Zudio)", "Retail"),
     c("TITAN.NS", "Titan Company", "Jewellery / Retail"),
@@ -100,7 +100,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("KEI.NS", "KEI Industries", "Cables"),
     c("INDHOTEL.NS", "Indian Hotels (Taj)", "Hotels"),
     c("INDIGO.NS", "InterGlobe Aviation (IndiGo)", "Airlines"),
-    // — autos & ancillaries —
+    // - autos & ancillaries -
     c("MARUTI.NS", "Maruti Suzuki", "Autos"),
     c("M&M.NS", "Mahindra & Mahindra", "Autos"),
     c("TATAMOTORS.NS", "Tata Motors", "Autos"),
@@ -116,7 +116,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("APOLLOTYRE.NS", "Apollo Tyres", "Tyres"),
     c("TIINDIA.NS", "Tube Investments", "Auto / Engineering"),
     c("BOSCHLTD.NS", "Bosch India", "Auto Parts"),
-    // — pharma & healthcare —
+    // - pharma & healthcare -
     c("SUNPHARMA.NS", "Sun Pharma", "Pharma"),
     c("DRREDDY.NS", "Dr. Reddy's", "Pharma"),
     c("CIPLA.NS", "Cipla", "Pharma"),
@@ -135,7 +135,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("MAXHEALTH.NS", "Max Healthcare", "Hospitals"),
     c("FORTIS.NS", "Fortis Healthcare", "Hospitals"),
     c("LALPATHLAB.NS", "Dr Lal PathLabs", "Diagnostics"),
-    // — energy, utilities, commodities —
+    // - energy, utilities, commodities -
     c("RELIANCE.NS", "Reliance Industries", "Conglomerate / Energy"),
     c("ONGC.NS", "ONGC", "Oil & Gas"),
     c("IOC.NS", "Indian Oil", "Refining"),
@@ -149,7 +149,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("TATASTEEL.NS", "Tata Steel", "Steel"),
     c("HINDALCO.NS", "Hindalco", "Aluminium"),
     c("VEDL.NS", "Vedanta", "Diversified Mining"),
-    // — industrials, infra, defence —
+    // - industrials, infra, defence -
     c("LT.NS", "Larsen & Toubro", "E&C"),
     c("SIEMENS.NS", "Siemens India", "Capital Goods"),
     c("ABB.NS", "ABB India", "Capital Goods"),
@@ -162,7 +162,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("ADANIPORTS.NS", "Adani Ports", "Ports"),
     c("BHARTIARTL.NS", "Bharti Airtel", "Telecom"),
     c("TATACOMM.NS", "Tata Communications", "Telecom Infra"),
-    // — cement, chemicals, materials —
+    // - cement, chemicals, materials -
     c("ULTRACEMCO.NS", "UltraTech Cement", "Cement"),
     c("SHREECEM.NS", "Shree Cement", "Cement"),
     c("AMBUJACEM.NS", "Ambuja Cements", "Cement"),
@@ -177,11 +177,11 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("DEEPAKNTR.NS", "Deepak Nitrite", "Chemicals"),
     c("ASTRAL.NS", "Astral", "Pipes"),
     c("SUPREMEIND.NS", "Supreme Industries", "Plastics"),
-    // — real estate —
+    // - real estate -
     c("DLF.NS", "DLF", "Real Estate"),
     c("GODREJPROP.NS", "Godrej Properties", "Real Estate"),
     c("OBEROIRLTY.NS", "Oberoi Realty", "Real Estate"),
-    // — mid & small caps: engineering / industrials —
+    // - mid & small caps: engineering / industrials -
     c("APLAPOLLO.NS", "APL Apollo Tubes", "Steel Tubes"),
     c("SUNDRMFAST.NS", "Sundram Fasteners", "Auto Components"),
     c("SCHAEFFLER.NS", "Schaeffler India", "Bearings"),
@@ -204,7 +204,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("ENDURANCE.NS", "Endurance Technologies", "Auto Components"),
     c("SUPRAJIT.NS", "Suprajit Engineering", "Auto Components"),
     c("EXIDEIND.NS", "Exide Industries", "Batteries"),
-    // — mid & small caps: chemicals —
+    // - mid & small caps: chemicals -
     c("NAVINFLUOR.NS", "Navin Fluorine", "Specialty Chemicals"),
     c("AARTIIND.NS", "Aarti Industries", "Specialty Chemicals"),
     c("ATUL.NS", "Atul Ltd", "Specialty Chemicals"),
@@ -214,7 +214,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("CLEAN.NS", "Clean Science & Technology", "Green Chemistry"),
     c("NOCIL.NS", "NOCIL", "Rubber Chemicals"),
     c("COROMANDEL.NS", "Coromandel International", "Agri Inputs"),
-    // — mid & small caps: financials —
+    // - mid & small caps: financials -
     c("AUBANK.NS", "AU Small Finance Bank", "Banks"),
     c("KARURVYSYA.NS", "Karur Vysya Bank", "Banks"),
     c("CUB.NS", "City Union Bank", "Banks"),
@@ -227,14 +227,14 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("POONAWALLA.NS", "Poonawalla Fincorp", "NBFC"),
     c("SUNDARMFIN.NS", "Sundaram Finance", "NBFC"),
     c("MFSL.NS", "Max Financial Services", "Insurance"),
-    // — mid & small caps: healthcare —
+    // - mid & small caps: healthcare -
     c("METROPOLIS.NS", "Metropolis Healthcare", "Diagnostics"),
     c("AJANTPHARM.NS", "Ajanta Pharma", "Pharma"),
     c("JBCHEPHARM.NS", "JB Chemicals & Pharma", "Pharma"),
     c("ERIS.NS", "Eris Lifesciences", "Pharma"),
     c("NATCOPHARM.NS", "Natco Pharma", "Pharma"),
     c("POLYMED.NS", "Poly Medicure", "Medical Devices"),
-    // — mid & small caps: IT & digital —
+    // - mid & small caps: IT & digital -
     c("CYIENT.NS", "Cyient", "ER&D Services"),
     c("SONATSOFTW.NS", "Sonata Software", "IT Services"),
     c("INTELLECT.NS", "Intellect Design Arena", "Banking Software"),
@@ -242,7 +242,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("LATENTVIEW.NS", "Latent View Analytics", "Analytics"),
     c("MAPMYINDIA.NS", "C.E. Info Systems (MapmyIndia)", "Digital Maps"),
     c("ROUTE.NS", "Route Mobile", "CPaaS"),
-    // — mid & small caps: consumer —
+    // - mid & small caps: consumer -
     c("RADICO.NS", "Radico Khaitan", "Spirits"),
     c("EMAMILTD.NS", "Emami", "FMCG"),
     c("JYOTHYLAB.NS", "Jyothy Labs", "FMCG"),
@@ -260,7 +260,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("EPL.NS", "EPL Ltd", "Packaging"),
     c("GILLETTE.NS", "Gillette India", "FMCG"),
     c("AKZOINDIA.NS", "Akzo Nobel India", "Paints"),
-    // — index constituents: Nifty 100 / Midcap 150 / Smallcap 250 (auto-merged from official index constituents, Aug 2026) —
+    // - index constituents: Nifty 100 / Midcap 150 / Smallcap 250 (auto-merged from official index constituents, Aug 2026) -
     c("ADANIENSOL.NS", "ADANIENSOL", "Nifty Next 50"),
     c("ADANIGREEN.NS", "ADANIGREEN", "Nifty Next 50"),
     c("ADANIPOWER.NS", "ADANIPOWER", "Nifty Next 50"),
@@ -561,7 +561,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("ABFRL.NS", "Aditya Birla Fashion", "Nifty Smallcap 250"),
   ],
   Canada: [
-    // — software & tech —
+    // - software & tech -
     c("CSU.TO", "Constellation Software", "Software"),
     c("TOI.V", "Topicus.com", "Software"),
     c("SHOP.TO", "Shopify", "Software"),
@@ -571,7 +571,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("ENGH.TO", "Enghouse Systems", "Software"),
     c("GIB-A.TO", "CGI Inc", "IT Services"),
     c("CLS.TO", "Celestica", "Electronics Mfg"),
-    // — consumer —
+    // - consumer -
     c("ATD.TO", "Alimentation Couche-Tard", "Convenience Retail"),
     c("DOL.TO", "Dollarama", "Discount Retail"),
     c("L.TO", "Loblaw Companies", "Grocery"),
@@ -587,7 +587,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("GOOS.TO", "Canada Goose", "Apparel"),
     c("DOO.TO", "BRP (Ski-Doo)", "Rec Vehicles"),
     c("MG.TO", "Magna International", "Auto Parts"),
-    // — rails, transport, industrials —
+    // - rails, transport, industrials -
     c("CNR.TO", "Canadian National Railway", "Rails"),
     c("CP.TO", "Canadian Pacific Kansas City", "Rails"),
     c("TFII.TO", "TFI International", "Trucking"),
@@ -606,7 +606,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("FSV.TO", "FirstService", "Property Services"),
     c("SJ.TO", "Stella-Jones", "Wood Products"),
     c("WFG.TO", "West Fraser Timber", "Lumber"),
-    // — banks, insurance, asset mgmt —
+    // - banks, insurance, asset mgmt -
     c("RY.TO", "Royal Bank of Canada", "Banks"),
     c("TD.TO", "TD Bank", "Banks"),
     c("BMO.TO", "Bank of Montreal", "Banks"),
@@ -630,7 +630,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("BAM.TO", "Brookfield Asset Mgmt", "Alt. Assets"),
     c("ONEX.TO", "Onex", "Private Equity"),
     c("TRI.TO", "Thomson Reuters", "Info Services"),
-    // — energy & pipelines —
+    // - energy & pipelines -
     c("ENB.TO", "Enbridge", "Pipelines"),
     c("TRP.TO", "TC Energy", "Pipelines"),
     c("PPL.TO", "Pembina Pipeline", "Pipelines"),
@@ -642,7 +642,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("CVE.TO", "Cenovus Energy", "Oil & Gas"),
     c("TOU.TO", "Tourmaline Oil", "Natural Gas"),
     c("PKI.TO", "Parkland", "Fuel Distribution"),
-    // — utilities & telecom —
+    // - utilities & telecom -
     c("FTS.TO", "Fortis", "Utilities"),
     c("EMA.TO", "Emera", "Utilities"),
     c("H.TO", "Hydro One", "Utilities"),
@@ -653,7 +653,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("BCE.TO", "BCE", "Telecom"),
     c("RCI-B.TO", "Rogers Communications", "Telecom"),
     c("QBR-B.TO", "Quebecor", "Telecom / Media"),
-    // — materials & miners —
+    // - materials & miners -
     c("NTR.TO", "Nutrien", "Fertilizers"),
     c("MX.TO", "Methanex", "Chemicals"),
     c("CCL-B.TO", "CCL Industries", "Packaging"),
@@ -666,7 +666,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("TECK-B.TO", "Teck Resources", "Diversified Mining"),
     c("FM.TO", "First Quantum Minerals", "Copper"),
     c("LUN.TO", "Lundin Mining", "Copper"),
-    // — mid & small caps —
+    // - mid & small caps -
     c("TVK.TO", "TerraVest Industries", "Industrial Products"),
     c("BDGI.TO", "Badger Infrastructure", "Excavation Services"),
     c("SIS.TO", "Savaria", "Accessibility Equipment"),
@@ -683,7 +683,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("MDA.TO", "MDA Space", "Space Technology"),
     c("DNTL.TO", "dentalcorp Holdings", "Dental Clinics"),
     c("CTS.TO", "Converge Technology", "IT Solutions"),
-    // — index constituents: S&P/TSX Composite (auto-merged from official index constituents, Aug 2026) —
+    // - index constituents: S&P/TSX Composite (auto-merged from official index constituents, Aug 2026) -
     c("VNP.TO", "VNP", "TSX Composite"),
     c("ABRA.TO", "ABRA", "TSX Composite"),
     c("AAV.TO", "AAV", "TSX Composite"),
@@ -807,7 +807,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("WPK.TO", "WPK", "TSX Composite"),
   ],
   "United States": [
-    // — mega tech & semis —
+    // - mega tech & semis -
     c("AAPL", "Apple", "Technology"),
     c("MSFT", "Microsoft", "Technology"),
     c("GOOGL", "Alphabet", "Communication"),
@@ -823,7 +823,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("KLAC", "KLA Corp", "Semi Equipment"),
     c("MU", "Micron", "Memory"),
     c("TSLA", "Tesla", "Autos / Energy"),
-    // — software & internet —
+    // - software & internet -
     c("ADBE", "Adobe", "Software"),
     c("CRM", "Salesforce", "Software"),
     c("ORCL", "Oracle", "Software"),
@@ -840,7 +840,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("UBER", "Uber", "Platforms"),
     c("ABNB", "Airbnb", "Platforms"),
     c("BKNG", "Booking Holdings", "Travel"),
-    // — payments & financials —
+    // - payments & financials -
     c("V", "Visa", "Payments"),
     c("MA", "Mastercard", "Payments"),
     c("AXP", "American Express", "Payments / Lending"),
@@ -866,7 +866,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("MMC", "Marsh & McLennan", "Insurance Brokerage"),
     c("AON", "Aon", "Insurance Brokerage"),
     c("AJG", "Arthur J. Gallagher", "Insurance Brokerage"),
-    // — healthcare —
+    // - healthcare -
     c("UNH", "UnitedHealth", "Managed Care"),
     c("ELV", "Elevance Health", "Managed Care"),
     c("HCA", "HCA Healthcare", "Hospitals"),
@@ -890,7 +890,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("EW", "Edwards Lifesciences", "Med Devices"),
     c("IDXX", "IDEXX Laboratories", "Vet Diagnostics"),
     c("BDX", "Becton Dickinson", "Med Devices"),
-    // — consumer —
+    // - consumer -
     c("COST", "Costco", "Retail"),
     c("WMT", "Walmart", "Retail"),
     c("TGT", "Target", "Retail"),
@@ -918,7 +918,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("CL", "Colgate-Palmolive", "Staples"),
     c("KMB", "Kimberly-Clark", "Staples"),
     c("DIS", "Disney", "Media"),
-    // — industrials —
+    // - industrials -
     c("GE", "GE Aerospace", "Aerospace"),
     c("RTX", "RTX Corp", "Aerospace & Defence"),
     c("LMT", "Lockheed Martin", "Defence"),
@@ -949,7 +949,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("TT", "Trane Technologies", "HVAC"),
     c("ADP", "ADP", "Payroll"),
     c("PAYX", "Paychex", "Payroll"),
-    // — energy, utilities, materials —
+    // - energy, utilities, materials -
     c("XOM", "ExxonMobil", "Oil & Gas"),
     c("CVX", "Chevron", "Oil & Gas"),
     c("COP", "ConocoPhillips", "Oil & Gas"),
@@ -960,7 +960,7 @@ export const UNIVERSES: Record<UniverseCountry, CandidateStock[]> = {
     c("APD", "Air Products", "Industrial Gases"),
     c("SHW", "Sherwin-Williams", "Paints"),
     c("ECL", "Ecolab", "Specialty Chemicals"),
-    // — index constituents: S&P 500 + S&P MidCap 400 (auto-merged from official index constituents, Aug 2026) —
+    // - index constituents: S&P 500 + S&P MidCap 400 (auto-merged from official index constituents, Aug 2026) -
     c("MMM", "MMM", "S&P 500"),
     c("AOS", "AOS", "S&P 500"),
     c("AES", "AES", "S&P 500"),
@@ -1736,7 +1736,7 @@ export function parseCustomSymbols(text: string, heldSymbols: Iterable<string>):
     if (!s || s.length > 20 || !/^[A-Z0-9][A-Z0-9.&^=-]*$/.test(s)) continue;
     if (held.has(s) || seen.has(s)) continue;
     seen.add(s);
-    out.push({ symbol: s, name: s, sector: "—" });
+    out.push({ symbol: s, name: s, sector: "–" });
     if (out.length >= 100) break;
   }
   return out;

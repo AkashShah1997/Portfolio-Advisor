@@ -42,7 +42,7 @@ export function sma(candles: Candle[], len: number): { time: string; value: numb
 /**
  * Day-equivalent MA length for the chart's interval, so "the 200-day MA" is
  * ALWAYS the 200-day MA: 200 bars on daily, 40 bars on weekly, 10 on monthly.
- * (The old behavior — 200 weekly bars = a 4-YEAR average — is why golden/death
+ * (The old behavior - 200 weekly bars = a 4-YEAR average - is why golden/death
  * crosses never appeared on long-range views.)
  */
 export function maLenForInterval(days: number, interval: "1d" | "1wk" | "1mo"): number {

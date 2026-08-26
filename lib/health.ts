@@ -2,7 +2,7 @@ import type { AnalyzedHolding, FxRates } from "./types";
 import { toBase } from "./portfolio";
 
 /**
- * Portfolio health checks — construction-level tests the masters apply before
+ * Portfolio health checks - construction-level tests the masters apply before
  * they ever look at an individual stock: concentration, diversification,
  * whether capital is riding the best ideas, and how much of it sits in
  * businesses the scorecard distrusts.
@@ -57,7 +57,7 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
     detail: `${n} holding${n === 1 ? "" : "s"} carrying capital`,
     principle:
       n > 25
-        ? "Lynch: beware 'diworsification' — conviction dilutes fast past ~25 names"
+        ? "Lynch: beware 'diworsification' - conviction dilutes fast past ~25 names"
         : "Munger: wide diversification is protection against ignorance; a focused list you understand beats a long one you don't",
   });
 
@@ -105,7 +105,7 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
     label: "Largest sector ≤ 35%",
     status: maxSectorW <= 0.35 ? "pass" : maxSectorW <= 0.5 ? "warn" : "fail",
     detail: `${maxSector} is ${pctS(maxSectorW, 1)} of the portfolio`,
-    principle: "Fisher: industries share fates — don't let one theme own your future",
+    principle: "Fisher: industries share fates - don't let one theme own your future",
   });
 
   // 6. Geography tilt (informational)
@@ -120,7 +120,7 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
       id: "geo",
       label: "Home-market tilt",
       status: "info",
-      detail: `${maxGeo} is ${pctS(maxGeoW, 0)} of the portfolio — fine if intentional; currency and policy risk travel together`,
+      detail: `${maxGeo} is ${pctS(maxGeoW, 0)} of the portfolio - fine if intentional; currency and policy risk travel together`,
       principle: "Damani invests where he understands; just know that's the bet you're making",
     });
   }
@@ -148,7 +148,7 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
       label: "Capital in Watch / Review-for-Exit names ≤ 15%",
       status: laggardW <= 0.15 ? "pass" : laggardW <= 0.3 ? "warn" : "fail",
       detail: `${pctS(laggardW, 0)} of scored capital is in holdings the screener distrusts`,
-      principle: "Buffett: patch the leaking boat or change vessels — don't finance the leak",
+      principle: "Buffett: patch the leaking boat or change vessels - don't finance the leak",
     });
 
     // 9. Red-flag exposure
@@ -159,7 +159,7 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
       label: "Capital exposed to red flags ≤ 10%",
       status: flaggedW <= 0.1 ? "pass" : flaggedW <= 0.25 ? "warn" : "fail",
       detail: `${pctS(flaggedW, 0)} of scored capital carries at least one red flag`,
-      principle: "Jhunjhunwala: respect leverage and losses — they compound too",
+      principle: "Jhunjhunwala: respect leverage and losses - they compound too",
     });
   }
 

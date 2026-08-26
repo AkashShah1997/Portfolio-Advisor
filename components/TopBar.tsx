@@ -48,7 +48,7 @@ export function TopBar({
           </span>
         </button>
 
-        {/* market switch — always on top, one market at a time */}
+        {/* market switch - always on top, one market at a time */}
         <div className="mx-auto flex items-center bg-page hairline rounded-full p-[3px]">
           {MARKETS.map((m) => {
             const meta = MARKET_META[m];
@@ -100,7 +100,7 @@ export function TopBar({
 
         <span
           className="hidden sm:inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-2 bg-page hairline rounded-full px-2.5 py-[4px]"
-          title="Holdings and watchlists are saved only in this browser's local storage. No server, no account — clearing site data erases everything."
+          title="Holdings and watchlists are saved only in this browser's local storage. No server, no account - clearing site data erases everything."
         >
           <span aria-hidden>🔒</span> Local-only
         </span>

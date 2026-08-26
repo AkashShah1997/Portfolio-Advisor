@@ -75,7 +75,7 @@ export function PromptGenerator({
 
   return (
     <Card className="p-4">
-      <SectionTitle sub="Generates a ready-to-paste prompt — your positions, 5-year ratios and scorecard verdicts included — engineered for ChatGPT, Claude, Gemini, Perplexity or any other AI. No API key needed.">
+      <SectionTitle sub="Generates a ready-to-paste prompt - your positions, 5-year ratios and scorecard verdicts included - engineered for ChatGPT, Claude, Gemini, Perplexity or any other AI. No API key needed.">
         AI prompt generator
       </SectionTitle>
 

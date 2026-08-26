@@ -19,7 +19,7 @@ import { toBase, VERDICT_META } from "@/lib/portfolio";
 import { fmtMoney } from "@/lib/symbols";
 
 /**
- * The Buffett Matrix — every holding placed by "how good is the business?"
+ * The Buffett Matrix - every holding placed by "how good is the business?"
  * (quality + growth pillars) vs "how sensible is the price?" (valuation
  * pillar). Bubble area = current weight. The sweet spot is top-right:
  * wonderful companies at fair prices.
@@ -172,19 +172,19 @@ export function Matrix({
           </Scatter>
         </ScatterChart>
       </ResponsiveContainer>
-      {/* quadrant captions — corner chips that stay legible under labels */}
+      {/* quadrant captions - corner chips that stay legible under labels */}
       <div className="pointer-events-none absolute inset-0 text-[10px] text-muted">
         <span className="absolute right-7 top-1 bg-surface/85 hairline rounded-full px-2 py-[2px]">
-          wonderful &amp; fairly priced — the sweet spot
+          wonderful &amp; fairly priced - the sweet spot
         </span>
         <span className="absolute left-10 top-1 bg-surface/85 hairline rounded-full px-2 py-[2px]">
-          wonderful but pricey — patience
+          wonderful but pricey - patience
         </span>
         <span className="absolute right-7 bottom-12 bg-surface/85 hairline rounded-full px-2 py-[2px]">
           cheap… for a reason?
         </span>
         <span className="absolute left-10 bottom-12 bg-surface/85 hairline rounded-full px-2 py-[2px]">
-          weak &amp; expensive — why own it?
+          weak &amp; expensive - why own it?
         </span>
       </div>
     </div>

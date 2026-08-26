@@ -3,7 +3,7 @@ import { getEtfData, isThrottleError } from "@/lib/yahoo";
 
 export const maxDuration = 30;
 
-// Warm-lambda memory cache — fund facts (MER, AUM, category) move slowly.
+// Warm-lambda memory cache - fund facts (MER, AUM, category) move slowly.
 const cache = new Map<string, { at: number; body: unknown }>();
 const TTL_MS = 12 * 60 * 60 * 1000;
 

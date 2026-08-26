@@ -2,7 +2,7 @@ import type { Currency, Holding } from "./types";
 import type { UniverseCountry } from "./universe";
 
 /**
- * Local-only persistence. Everything lives in THIS browser's localStorage —
+ * Local-only persistence. Everything lives in THIS browser's localStorage -
  * no server, no database, no account, nothing ever leaves the device.
  * Clearing the browser's site data (or the in-app "erase" button) removes it all.
  */
@@ -128,7 +128,7 @@ export function saveHoldings(m: Market, holdings: Holding[]): void {
   try {
     window.localStorage.setItem(HOLDINGS_KEY(m), JSON.stringify({ v: 2, holdings }));
   } catch {
-    /* storage full/blocked — stay silent, the app still works in-memory */
+    /* storage full/blocked - stay silent, the app still works in-memory */
   }
 }
 

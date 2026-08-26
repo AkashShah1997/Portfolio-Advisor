@@ -9,6 +9,7 @@ import { buildValuation } from "@/lib/valuation";
 import { buildJourney } from "@/lib/journey";
 import { strengthsAndRisks } from "@/lib/insights";
 import { describeSnowflake, snowflakeOf } from "@/lib/snowflake";
+import { loadChecklist, PREBUY_CHECKLIST, saveChecklist } from "@/lib/checklist";
 import { isEtfHolding } from "@/lib/etf";
 import { Badge, Card, InfoTip, Meter, Spinner } from "./ui";
 import { Snowflake } from "./Snowflake";
@@ -50,7 +51,7 @@ function ChecksBlock({ checks }: { checks: Check[] }) {
                     </span>
                     <span>
                       <span className="text-ink">{c.label}</span>{" "}
-                      <span className="text-ink-2">— {c.detail}</span>
+                      <span className="text-ink-2">- {c.detail}</span>
                       <span className="block text-[11px] text-muted italic">{c.philosophy}</span>
                     </span>
                   </li>
@@ -68,15 +69,15 @@ function RatioTable({ h }: { h: AnalyzedHolding }) {
   if (!rows.length) return null;
   const cur = (h.data?.quote.currency ?? h.holding.currency) as Currency;
   const cols: { key: string; label: string; g: string; fmt: (r: (typeof rows)[number]) => string }[] = [
-    { key: "revenue", label: "Revenue", g: "revenue", fmt: (r) => (r.revenue !== undefined ? compact(r.revenue, cur) : "—") },
-    { key: "netIncome", label: "Net income", g: "netIncome", fmt: (r) => (r.netIncome !== undefined ? compact(r.netIncome, cur) : "—") },
+    { key: "revenue", label: "Revenue", g: "revenue", fmt: (r) => (r.revenue !== undefined ? compact(r.revenue, cur) : "–") },
+    { key: "netIncome", label: "Net income", g: "netIncome", fmt: (r) => (r.netIncome !== undefined ? compact(r.netIncome, cur) : "–") },
     { key: "eps", label: "EPS", g: "eps", fmt: (r) => fmtNum(r.eps) },
     { key: "roe", label: "ROE", g: "roe", fmt: (r) => fmtPct(r.roe) },
     { key: "roce", label: "ROCE", g: "roce", fmt: (r) => fmtPct(r.roce) },
     { key: "netMargin", label: "Net margin", g: "netMargin", fmt: (r) => fmtPct(r.netMargin) },
     { key: "debtToEquity", label: "D/E", g: "d2e", fmt: (r) => fmtNum(r.debtToEquity) },
-    { key: "interestCoverage", label: "Int. cover", g: "icr", fmt: (r) => (r.interestCoverage !== undefined ? `${r.interestCoverage.toFixed(1)}x` : "—") },
-    { key: "fcf", label: "FCF", g: "fcf", fmt: (r) => (r.fcf !== undefined ? compact(r.fcf, cur) : "—") },
+    { key: "interestCoverage", label: "Int. cover", g: "icr", fmt: (r) => (r.interestCoverage !== undefined ? `${r.interestCoverage.toFixed(1)}x` : "–") },
+    { key: "fcf", label: "FCF", g: "fcf", fmt: (r) => (r.fcf !== undefined ? compact(r.fcf, cur) : "–") },
     { key: "approxPE", label: "P/E (yr-end)", g: "approxPE", fmt: (r) => fmtNum(r.approxPE, 1) },
   ];
   return (
@@ -113,6 +114,70 @@ function RatioTable({ h }: { h: AnalyzedHolding }) {
 
 function compact(v: number, currency: Currency): string {
   return fmtMoney(v, currency, true);
+}
+
+/**
+ * The pre-buy checklist: ten yes-or-no gates only YOU can answer - no data
+ * feed knows if you understand the business. Ticks persist on-device per
+ * symbol, so work done on a watchlist name survives until you buy (or pass).
+ */
+function PrebuyChecklist({ symbol }: { symbol: string }) {
+  const [checked, setChecked] = useState<Set<string>>(() => loadChecklist(symbol));
+  const [expanded, setExpanded] = useState(false);
+  const n = checked.size;
+  const tone = n >= 8 ? "text-success-text" : n >= 5 ? "text-[#8a6100]" : "text-muted";
+  const toggle = (id: string) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      saveChecklist(symbol, next);
+      return next;
+    });
+  };
+  return (
+    <div className="border-t border-grid pt-3">
+      <button
+        className="w-full text-left flex items-center justify-between gap-3"
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+      >
+        <span className="text-[11.5px] font-semibold text-muted uppercase tracking-wide">
+          Pre-buy checklist <InfoTip k="checklist" />
+        </span>
+        <span className="flex items-center gap-2">
+          <span className={`text-[12.5px] font-semibold tnum ${tone}`}>{n}/10</span>
+          <span className="text-muted text-[13px]" aria-hidden>
+            {expanded ? "▾" : "▸"}
+          </span>
+        </span>
+      </button>
+      <Collapse open={expanded}>
+        <p className="text-[12px] text-ink-2 mt-2 leading-snug">
+          Ten yes-or-no gates before any buy order. The data above can&apos;t answer these; only you can.
+          If you can&apos;t honestly tick 8, you&apos;re gambling, not investing. Ticks save on this device.
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {PREBUY_CHECKLIST.map((item) => (
+            <li key={item.id}>
+              <label className="flex gap-2 text-[12.5px] leading-snug cursor-pointer items-start">
+                <input
+                  type="checkbox"
+                  checked={checked.has(item.id)}
+                  onChange={() => toggle(item.id)}
+                  className="mt-0.5 accent-[var(--color-series-1)] shrink-0"
+                />
+                <span>
+                  <span className={checked.has(item.id) ? "text-ink" : "text-ink-2"}>{item.text}</span>
+                  <span className="block text-[11px] text-muted italic">{item.master}</span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </Collapse>
+    </div>
+  );
 }
 
 const PILLAR_G: Record<string, string> = {
@@ -171,7 +236,7 @@ export function StockCard({
     try {
       await navigator.clipboard.writeText(prompt);
     } catch {
-      /* clipboard unavailable — ignore */
+      /* clipboard unavailable - ignore */
     }
     setPromptCopied(true);
     setTimeout(() => setPromptCopied(false), 1800);
@@ -190,7 +255,7 @@ export function StockCard({
           </Badge>
         </div>
         <p className="text-[12.5px] text-ink-2 mt-1">
-          {row.error ?? "No data returned."} — check the Yahoo symbol and re-run.
+          {row.error ?? "No data returned."} - check the Yahoo symbol and re-run.
         </p>
       </Card>
     );
@@ -284,7 +349,7 @@ export function StockCard({
                   )}
                 </>
               )}
-              {isWatch && <span className="ml-2 text-muted">no capital committed — evaluating</span>}
+              {isWatch && <span className="ml-2 text-muted">no capital committed - evaluating</span>}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -307,7 +372,7 @@ export function StockCard({
       {/* verdict line */}
       <p className="text-[12.5px] text-ink-2 mt-2">
         {isEtf && scorecard.verdict === "INSUFFICIENT_DATA"
-          ? "Fund units aren't judged on the four stock pillars — open the ETFs tab for the fee-first fund analysis (MER, size, duplication, cheaper twins)."
+          ? "Fund units aren't judged on the four stock pillars - open the ETFs tab for the fee-first fund analysis (MER, size, duplication, cheaper twins)."
           : scorecard.verdictText}
       </p>
       {!open && scorecard.redFlags.length > 0 && (
@@ -326,7 +391,7 @@ export function StockCard({
           className="mt-1.5 text-[12px] text-series-1 hover:underline no-print"
           title="Copies a full analysis prompt (position + 5-yr ratios + scorecard) to paste into ChatGPT, Claude, Gemini…"
         >
-          {promptCopied ? "✓ Prompt copied — paste into any AI" : "📋 Copy AI prompt for this stock"}
+          {promptCopied ? "✓ Prompt copied - paste into any AI" : "📋 Copy AI prompt for this stock"}
         </button>
         {isWatch && onRemove && (
           <button
@@ -343,7 +408,7 @@ export function StockCard({
 
       <Collapse open={open}>
         <div className="mt-4 space-y-5">
-          {/* strengths & risks — every bullet restates a check the engine ran */}
+          {/* strengths & risks - every bullet restates a check the engine ran */}
           {insights && (insights.strengths.length > 0 || insights.risks.length > 0) && (
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
               <div>
@@ -393,7 +458,7 @@ export function StockCard({
               <div className="max-w-[260px] mx-auto md:mx-0 w-full">
                 <Snowflake axes={flake} size="sm" title={`${holding.yahooSymbol} snowflake`} />
                 <p className="text-[11px] text-muted text-center leading-snug">
-                  The snowflake <InfoTip k="snowflake" /> — {describeSnowflake(flake)}
+                  The snowflake <InfoTip k="snowflake" /> - {describeSnowflake(flake)}
                 </p>
               </div>
             )}
@@ -467,7 +532,7 @@ export function StockCard({
               q.price !== undefined &&
               (q.numberOfAnalystOpinions ?? 0) > 0 && (
                 <p className="text-[12px] text-muted mt-1.5 tnum">
-                  Analysts ({q.numberOfAnalystOpinions}) <InfoTip k="analyst" /> — 12-mo target{" "}
+                  Analysts ({q.numberOfAnalystOpinions}) <InfoTip k="analyst" /> - 12-mo target{" "}
                   <strong className="text-ink-2">{fmtMoney(q.targetMeanPrice, cur)}</strong>{" "}
                   <span className={q.targetMeanPrice >= q.price ? "text-success-text" : "text-status-critical"}>
                     ({q.targetMeanPrice >= q.price ? "+" : ""}
@@ -479,7 +544,7 @@ export function StockCard({
                       · lean “{RECO_LABEL[q.recommendationKey]}”
                     </>
                   )}{" "}
-                  <span className="italic">— context only; their horizon is 1 year, yours is 5.</span>
+                  <span className="italic">- context only; their horizon is 1 year, yours is 5.</span>
                 </p>
               )}
           </div>
@@ -493,7 +558,7 @@ export function StockCard({
           {/* charts */}
           <div className="grid md:grid-cols-2 gap-5">
             <div>
-              <div className="text-[12px] font-medium text-ink-2 mb-1">Price — 5 years (monthly)</div>
+              <div className="text-[12px] font-medium text-ink-2 mb-1">Price - 5 years (monthly)</div>
               <PriceLine prices={data.prices} currency={cur} />
             </div>
             <div>
@@ -517,6 +582,9 @@ export function StockCard({
               <p className="text-[11px] text-muted mt-2 italic">{scorecard.philosophyNote}</p>
             </div>
           </div>
+
+          {/* pre-buy checklist - the judgment gates no data feed can tick for you */}
+          {!isEtf && <PrebuyChecklist symbol={holding.yahooSymbol} />}
 
           {/* AI commentary */}
           {aiKey && (

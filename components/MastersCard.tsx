@@ -11,7 +11,7 @@ export function MastersCard({ defaultOpen = false }: { defaultOpen?: boolean }) 
         <summary className="cursor-pointer text-[14px] font-semibold text-ink select-none">
           The masters behind the checks{" "}
           <span className="text-[12px] font-normal text-muted">
-            — {INVESTORS.length} investors whose public principles this scorecard encodes
+            - {INVESTORS.length} investors whose public principles this scorecard encodes
           </span>
         </summary>
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5 mt-3">

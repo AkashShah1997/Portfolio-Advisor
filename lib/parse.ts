@@ -128,7 +128,7 @@ export function parseBrokerCsv(csvText: string, brokerHint?: Broker): ParseResul
 
   if (avgCol === -1 && totalCostCol === -1) {
     warnings.push(
-      "No average-cost column detected — invested amounts and P&L will be unavailable until you fill Avg Cost in the table."
+      "No average-cost column detected - invested amounts and P&L will be unavailable until you fill Avg Cost in the table."
     );
   }
 
@@ -205,12 +205,12 @@ export function parseBrokerCsv(csvText: string, brokerHint?: Broker): ParseResul
       `${first.rawSymbol}: merged ${group.length} rows${accounts.length > 1 ? ` (${accounts.join(", ")})` : ""} → ${qty} sh @ weighted avg ${avg ? avg.toFixed(2) : "n/a"}`
     );
     if (costed.length && costed.length < group.length) {
-      mergeNotes.push(`${first.rawSymbol}: ${group.length - costed.length} merged row(s) had no cost — average uses the rows that did.`);
+      mergeNotes.push(`${first.rawSymbol}: ${group.length - costed.length} merged row(s) had no cost - average uses the rows that did.`);
     }
   }
 
   if (cashRows) {
-    warnings.push(`${cashRows} cash row${cashRows === 1 ? "" : "s"} (Security Type: currency) excluded — balances aren't analyzable holdings.`);
+    warnings.push(`${cashRows} cash row${cashRows === 1 ? "" : "s"} (Security Type: currency) excluded - balances aren't analyzable holdings.`);
   }
   if (mergeNotes.length) {
     warnings.push(...mergeNotes.slice(0, 5));

@@ -6,7 +6,7 @@ export const maxDuration = 60;
  * Optional AI commentary layer.
  * The user's Anthropic API key is passed per-request from the browser and is
  * NEVER stored, logged, or persisted anywhere. The app is fully functional
- * without this — the deterministic scorecard is the source of truth.
+ * without this - the deterministic scorecard is the source of truth.
  */
 export async function POST(req: NextRequest) {
   let payload: {
@@ -32,11 +32,11 @@ export async function POST(req: NextRequest) {
   const system = `You are a long-horizon value-investing analyst channeling the quality-value school: Warren Buffett, Charlie Munger, Benjamin Graham, Philip Fisher, Peter Lynch, Chuck Akre, Joel Greenblatt, Terry Smith, Mohnish Pabrai, and India's Radhakishan Damani, Rakesh Jhunjhunwala, Raamdeo Agrawal (QGLP) and Saurabh Mukherjea (Coffee Can). The investor holds for 5+ years minimum.
 
 Given pre-computed fundamentals (multi-year ratios, growth, valuation, scorecard results), write a tight, concrete assessment:
-1. **The business in one line** — what has to stay true for 5 years.
-2. **What the numbers say** — 3-4 bullets grounded ONLY in the data provided (never invent figures).
-3. **What the masters would notice** — 2-3 bullets tying specific numbers to named principles (e.g. Coffee Can consistency, Akre's reinvestment engine, Greenblatt's yield-vs-ROC pairing, Munger's quality-over-cheapness).
-4. **Risks to the 5-year thesis** — 2 bullets.
-5. **Bottom line** — one sentence consistent with the scorecard verdict unless the data clearly argues otherwise (then explain why).
+1. **The business in one line** - what has to stay true for 5 years.
+2. **What the numbers say** - 3-4 bullets grounded ONLY in the data provided (never invent figures).
+3. **What the masters would notice** - 2-3 bullets tying specific numbers to named principles (e.g. Coffee Can consistency, Akre's reinvestment engine, Greenblatt's yield-vs-ROC pairing, Munger's quality-over-cheapness).
+4. **Risks to the 5-year thesis** - 2 bullets.
+5. **Bottom line** - one sentence consistent with the scorecard verdict unless the data clearly argues otherwise (then explain why).
 
 Rules: no price targets, no certainty language ("will", "guaranteed"), markdown only, under 300 words. End with: "_Analysis, not financial advice._"`;
 

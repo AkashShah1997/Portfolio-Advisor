@@ -15,7 +15,7 @@ import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 import { Stagger, StaggerItem } from "./anim";
 
 /**
- * The Coach — "I'm up 50% on this: trim, hold, buy the dip, or keep DCA-ing?"
+ * The Coach - "I'm up 50% on this: trim, hold, buy the dip, or keep DCA-ing?"
  * One stance per position from the app's own verdicts + live momentum + the
  * market regime, with concrete DCA plans (SIP for ETFs, tranche ladders for
  * stock dips). The ↻ button re-pulls momentum and the regime fresh.
@@ -24,7 +24,7 @@ import { Stagger, StaggerItem } from "./anim";
 type Mom = { stats: MomentumStats } | "loading" | "error";
 
 const pf = (v: number | undefined, d = 1) =>
-  v === undefined ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
+  v === undefined ? "–" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
 
 export function CoachPanel({
   rows,
@@ -185,7 +185,7 @@ export function CoachPanel({
     return (
       <Card className="p-4">
         <SectionTitle>Position coach</SectionTitle>
-        <p className="text-[13px] text-muted">Analyze a portfolio first — the coach works on your actual positions.</p>
+        <p className="text-[13px] text-muted">Analyze a portfolio first - the coach works on your actual positions.</p>
       </Card>
     );
   }
@@ -194,8 +194,8 @@ export function CoachPanel({
     <div className="space-y-4">
       <Card className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <SectionTitle sub="Per position: profit, weight, quality, valuation, live momentum and the market regime → one stance. Sizing and pacing, never market-timing — DCA is a strategy, not a consolation.">
-            Position coach — trim, hold, buy the dip, or DCA?
+          <SectionTitle sub="Per position: profit, weight, quality, valuation, live momentum and the market regime → one stance. Sizing and pacing, never market-timing - DCA is a strategy, not a consolation.">
+            Position coach - trim, hold, buy the dip, or DCA?
           </SectionTitle>
           <button
             onClick={refresh}
@@ -244,7 +244,7 @@ export function CoachPanel({
                         {m?.vs200d !== undefined && <span>{pf(m.vs200d)} vs 200-day</span>}
                         {m?.ret3m !== undefined && <span>{pf(m.ret3m)} · 3m</span>}
                         {mom[row.holding.yahooSymbol.toUpperCase()] === "error" && (
-                          <span className="text-muted">momentum unavailable — stance uses fundamentals only</span>
+                          <span className="text-muted">momentum unavailable - stance uses fundamentals only</span>
                         )}
                       </div>
                     </div>
@@ -291,7 +291,7 @@ export function CoachPanel({
       </Stagger>
 
       <p className="text-[11px] text-muted italic">
-        Stances are mechanical starting points from your own numbers — the currency here is discipline, not
+        Stances are mechanical starting points from your own numbers - the currency here is discipline, not
         prediction. Trims are for weight, adds are in tranches, DCA never skips a month. Not financial advice; taxes
         and your cash needs are yours to weigh.
       </p>

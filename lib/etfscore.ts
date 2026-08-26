@@ -3,17 +3,17 @@ import { catalogMer, categoryOf, type CatalogOption, type EtfCategory, type EtfK
 import { fundDataEmpty, type EtfData } from "./etf";
 
 /**
- * ETF assessment — "which to increase, which to reduce, and what's the
+ * ETF assessment - "which to increase, which to reduce, and what's the
  * cheaper twin". Passive funds are judged on the things that actually decide
  * long-run outcomes: cost (MER), what they track, duplication, concentration,
- * and size — NOT last quarter's return.
+ * and size - NOT last quarter's return.
  *
  * Verdicts:
- *   INCREASE — low-cost broad-market core: the "buy more, forever" bucket
- *   HOLD     — fine as it is
- *   SWITCH   — same exposure exists meaningfully cheaper (the MER play)
- *   REDUCE   — overweight niche/commodity, chronically expensive, or tiny fund
- *   UNKNOWN  — no fee/return data anywhere to judge with
+ *   INCREASE - low-cost broad-market core: the "buy more, forever" bucket
+ *   HOLD     - fine as it is
+ *   SWITCH   - same exposure exists meaningfully cheaper (the MER play)
+ *   REDUCE   - overweight niche/commodity, chronically expensive, or tiny fund
+ *   UNKNOWN  - no fee/return data anywhere to judge with
  */
 
 export type EtfVerdict = "INCREASE" | "HOLD" | "SWITCH" | "REDUCE" | "UNKNOWN";
@@ -80,7 +80,7 @@ export const ETF_VERDICT_META: Record<
   EtfVerdict,
   { label: string; icon: string; tone: "good" | "neutral" | "warning" | "serious" | "critical" | "muted" }
 > = {
-  INCREASE: { label: "Core — add-worthy", icon: "▲", tone: "good" },
+  INCREASE: { label: "Core - add-worthy", icon: "▲", tone: "good" },
   HOLD: { label: "Hold", icon: "●", tone: "neutral" },
   SWITCH: { label: "Cheaper twin exists", icon: "⇄", tone: "warning" },
   REDUCE: { label: "Reduce", icon: "▼", tone: "critical" },
@@ -165,10 +165,10 @@ export function assessEtf(
     if (cheapest.etf.symbol !== etf.symbol) {
       sw = true;
       reasons.push(
-        `Duplicates ${overlapWith.join(", ")} — same ${cat!.label.toLowerCase()} exposure; consolidating into the cheapest keeps it simple.`
+        `Duplicates ${overlapWith.join(", ")} - same ${cat!.label.toLowerCase()} exposure; consolidating into the cheapest keeps it simple.`
       );
     } else {
-      cautions.push(`Overlaps ${overlapWith.join(", ")} (same category) — you effectively own this index twice.`);
+      cautions.push(`Overlaps ${overlapWith.join(", ")} (same category) - you effectively own this index twice.`);
     }
   }
 
@@ -176,20 +176,20 @@ export function assessEtf(
     const best = alternatives[0];
     sw = true;
     reasons.push(
-      `Same exposure for less: ${best.symbol.replace(/\.(NS|TO)$/, "")} charges ~${pctS(best.mer)} vs ~${pctS(effMer)} here — keeps ≈${pctS(effMer - best.mer)}/yr of YOUR return.`
+      `Same exposure for less: ${best.symbol.replace(/\.(NS|TO)$/, "")} charges ~${pctS(best.mer)} vs ~${pctS(effMer)} here - keeps ≈${pctS(effMer - best.mer)}/yr of YOUR return.`
     );
   }
 
   if (band === "expensive") {
     reduce = true;
-    reasons.push(`MER ~${pctS(effMer!)} is expensive for a ${kind} fund — fees are the one certainty in investing.`);
+    reasons.push(`MER ~${pctS(effMer!)} is expensive for a ${kind} fund - fees are the one certainty in investing.`);
   } else if (band === "high") {
     cautions.push(`MER ~${pctS(effMer!)} sits on the high side for a ${kind} fund.`);
   }
 
   if (etf.aum !== undefined && etf.aum > 0 && etf.aum < SMALL_AUM[ctx.market].min) {
     cautions.push(
-      `Small fund (AUM below ${SMALL_AUM[ctx.market].label}) — wider spreads and a real chance of closure/merger.`
+      `Small fund (AUM below ${SMALL_AUM[ctx.market].label}) - wider spreads and a real chance of closure/merger.`
     );
   }
 
@@ -198,7 +198,7 @@ export function assessEtf(
     if (weightPct > cap) {
       reduce = true;
       reasons.push(
-        `${pctS(weightPct, 1)} of the portfolio in a ${kind === "commodity" ? "commodity" : "narrow/sector"} fund — ${
+        `${pctS(weightPct, 1)} of the portfolio in a ${kind === "commodity" ? "commodity" : "narrow/sector"} fund - ${
           kind === "commodity" ? "gold/silver is insurance, not the engine; the classic cap is ~5–10%" : "satellite bets earn ~10–15% at most"
         }.`
       );
@@ -214,7 +214,7 @@ export function assessEtf(
   ) {
     increase = true;
     reasons.push(
-      `Low-cost broad-market compounding machine (~${pctS(effMer)}/yr) — Bogle's default for money you'll not touch for years.`
+      `Low-cost broad-market compounding machine (~${pctS(effMer)}/yr) - Bogle's default for money you'll not touch for years.`
     );
   }
 
@@ -222,7 +222,7 @@ export function assessEtf(
     return {
       symbol: etf.symbol,
       verdict: "UNKNOWN",
-      headline: "Yahoo carries no fee or performance data for this fund — judge it from the AMC factsheet.",
+      headline: "Yahoo carries no fee or performance data for this fund - judge it from the AMC factsheet.",
       reasons: [],
       cautions,
       category: cat,
@@ -236,12 +236,12 @@ export function assessEtf(
   const verdict: EtfVerdict = reduce ? "REDUCE" : sw ? "SWITCH" : increase ? "INCREASE" : "HOLD";
   const headline =
     verdict === "REDUCE"
-      ? "Trim this one — the evidence below says the money works harder elsewhere."
+      ? "Trim this one - the evidence below says the money works harder elsewhere."
       : verdict === "SWITCH"
-        ? "Keep the exposure, lose the fee — a near-identical fund charges less."
+        ? "Keep the exposure, lose the fee - a near-identical fund charges less."
         : verdict === "INCREASE"
           ? "This is the kind of fund you add to on autopilot and judge once a decade."
-          : "Nothing here demands action — costs and sizing look sane.";
+          : "Nothing here demands action - costs and sizing look sane.";
 
   if (verdict === "HOLD" && !reasons.length) {
     reasons.push(

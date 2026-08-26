@@ -79,7 +79,7 @@ export function Projector({
 
   return (
     <Card className="p-4">
-      <SectionTitle sub="An illustration of what “buy right, sit tight” could mean — not a forecast. Real returns arrive lumpy; the plan is surviving the lumps without selling.">
+      <SectionTitle sub="An illustration of what “buy right, sit tight” could mean - not a forecast. Real returns arrive lumpy; the plan is surviving the lumps without selling.">
         The sit-tight projector
       </SectionTitle>
 
@@ -128,7 +128,7 @@ export function Projector({
       <p className="text-[11.5px] text-muted mt-2">
         Scenario return = value-weighted EPS growth of your scored holdings ({fmtPct(guess.base, 1)}{" "}
         base, clamped){guess.divYield > 0.0005 ? ` + ${fmtPct(guess.divYield, 1)} dividends reinvested` : ""}{" "}
-        — conservative runs it at 60%, optimistic at 125%.
+        - conservative runs it at 60%, optimistic at 125%.
       </p>
 
       <div className="grid md:grid-cols-[1fr_240px] gap-4 mt-4 items-start">
@@ -190,8 +190,8 @@ export function Projector({
             )}
           </div>
           <p className="text-[11px] text-muted italic leading-relaxed">
-            “The big money is not in the buying and selling, but in the waiting.” — Charlie Munger.
-            The projector&apos;s real output isn&apos;t the number — it&apos;s the cost of interrupting it.
+            “The big money is not in the buying and selling, but in the waiting.” - Charlie Munger.
+            The projector&apos;s real output isn&apos;t the number - it&apos;s the cost of interrupting it.
           </p>
         </div>
       </div>

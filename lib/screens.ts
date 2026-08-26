@@ -2,7 +2,7 @@ import type { Scorecard, StockData, Verdict } from "./types";
 import { buildValuation, type ValuationStatus } from "./valuation";
 
 /**
- * Long-term investor screeners — classic screens plus a raw-fundamentals
+ * Long-term investor screeners - classic screens plus a raw-fundamentals
  * custom builder, run over any set of scored stocks (scanned universes,
  * pasted custom lists, and your own holdings), entirely client-side.
  *
@@ -74,7 +74,7 @@ export function toMetricRow(
   return {
     symbol: data.symbol,
     name: q.name ?? opts.fallbackName ?? data.symbol,
-    sector: q.sector ?? opts.fallbackSector ?? "—",
+    sector: q.sector ?? opts.fallbackSector ?? "–",
     owned: !!opts.owned,
     watch: !!opts.watch,
     score: sc.totalScore,
@@ -179,7 +179,7 @@ const BASE_SCREENS: ScreenDef[] = [
     id: "magic-formula",
     name: "Magic Formula",
     master: "Joel Greenblatt",
-    blurb: "Good businesses (high return on capital) at cheap prices (high earnings yield) — ranked jointly.",
+    blurb: "Good businesses (high return on capital) at cheap prices (high earnings yield) - ranked jointly.",
     criteria: "Combined rank of earnings yield + avg ROCE (non-financials with both metrics)",
     apply: (rows) => {
       const usable = rows.filter((r) => !r.isFin && r.earningsYield !== undefined && r.roceAvg !== undefined);
@@ -198,7 +198,7 @@ const BASE_SCREENS: ScreenDef[] = [
     id: "qglp",
     name: "QGLP quality-growth",
     master: "Raamdeo Agrawal",
-    blurb: "Quality of business, Growth in earnings, Longevity of moat — at a reasonable Price.",
+    blurb: "Quality of business, Growth in earnings, Longevity of moat - at a reasonable Price.",
     criteria: "Quality pillar ≥ 65, growth pillar ≥ 55, PEG ≤ 1.5 (or price ≤ fair estimate)",
     apply: (rows) =>
       rows
@@ -244,7 +244,7 @@ const BASE_SCREENS: ScreenDef[] = [
   },
   {
     id: "garp",
-    name: "GARP — growth at a reasonable price",
+    name: "GARP - growth at a reasonable price",
     master: "Peter Lynch",
     blurb: "Pay for growth, never overpay: the PEG discipline.",
     criteria: "PEG ≤ 1.0 with EPS growth ≥ 10%",
@@ -257,7 +257,7 @@ const BASE_SCREENS: ScreenDef[] = [
     id: "buy-zone",
     name: "Quality in the buy zone",
     master: "Damani / Graham",
-    blurb: "Wonderful businesses currently priced with a margin of safety — the rarest list.",
+    blurb: "Wonderful businesses currently priced with a margin of safety - the rarest list.",
     criteria: "Scorecard ≥ 65 and price at/below the rough fair-value estimate",
     apply: (rows) =>
       rows
@@ -280,7 +280,7 @@ const SHORT_SCREEN_NAME: Record<string, string> = {
 };
 
 /**
- * How many of the classic screens each name passes right now — the "almost
+ * How many of the classic screens each name passes right now - the "almost
  * every buy list agrees" view. The Magic Formula is a pure ranking (it always
  * returns every usable name), so only its TOP 10 counts as a "pass".
  */
@@ -305,8 +305,8 @@ const CONSENSUS_SCREEN: ScreenDef = {
   id: "consensus",
   name: "Consensus picks",
   master: "all 8 screens, one shortlist",
-  blurb: "The names most of the classic buy-lists agree on at today's numbers — quality AND price AND balance sheet at once.",
-  criteria: `Passes ≥${CONSENSUS_MIN} of the 8 screens (Magic Formula counts its top 10) — ranked by how many agree`,
+  blurb: "The names most of the classic buy-lists agree on at today's numbers - quality AND price AND balance sheet at once.",
+  criteria: `Passes ≥${CONSENSUS_MIN} of the 8 screens (Magic Formula counts its top 10) - ranked by how many agree`,
   apply: (rows) => {
     const c = consensusOf(rows);
     return rows
@@ -329,7 +329,7 @@ const CONSENSUS_SCREEN: ScreenDef = {
 
 /**
  * Mid & small caps get their own hunting-ground screen: the SAME quality bars,
- * applied only to names below the large-cap line — where the next decade's
+ * applied only to names below the large-cap line - where the next decade's
  * large caps live. Deliberately NOT part of the consensus count (it's a size
  * subset of the quality screens, and would double-count them).
  */
@@ -337,7 +337,7 @@ const SMALLMID_SCREEN: ScreenDef = {
   id: "small-mid",
   name: "Mid & small-cap compounders",
   master: "Jhunjhunwala's hunting ground",
-  blurb: "Tomorrow's large caps are today's quality mid & small caps — same discipline, smaller names, stricter bars.",
+  blurb: "Tomorrow's large caps are today's quality mid & small caps - same discipline, smaller names, stricter bars.",
   criteria: "Mid/small by market cap · score ≥ 60 · zero red flags · ROCE ≥ 18% (ROE ≥ 15% for financials) · EPS growth ≥ 12% · not above fair value",
   apply: (rows) =>
     rows
@@ -365,7 +365,7 @@ export interface CustomFilter {
   maxD2E?: number; // skipped for financials
   minRevCagr?: number;
   minEpsCagr?: number;
-  minPE?: number; // "P/E at least" — filters out too-cheap-to-be-true value traps
+  minPE?: number; // "P/E at least" - filters out too-cheap-to-be-true value traps
   maxPE?: number;
   maxPEG?: number;
   maxPB?: number;

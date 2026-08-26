@@ -15,9 +15,9 @@ export interface Holding {
   avgCost: number; // in the stock's trading currency
   currency: Currency; // trading currency of the stock
   validated?: boolean;
-  watch?: boolean; // watchlist row — analyzed and scored, but carries no capital
-  buyDate?: string; // YYYY-MM — when the position was (roughly) built; user-set, else estimated
-  /** from the CSV's "Security Type" column when present — the authoritative ETF/stock flag */
+  watch?: boolean; // watchlist row - analyzed and scored, but carries no capital
+  buyDate?: string; // YYYY-MM - when the position was (roughly) built; user-set, else estimated
+  /** from the CSV's "Security Type" column when present - the authoritative ETF/stock flag */
   securityType?: SecurityType;
   /** account(s) the position sits in, e.g. "TFSA + RRSP" after a multi-account merge */
   account?: string;
@@ -100,7 +100,7 @@ export interface QuoteInfo {
   currentRatioNow?: number;
   debtToEquityNow?: number; // ratio (x), NOT percent
   payoutRatio?: number;
-  // sell-side context (12-month view — shown as context only, never the thesis)
+  // sell-side context (12-month view - shown as context only, never the thesis)
   targetMeanPrice?: number; // analyst consensus 12-mo price target
   recommendationKey?: string; // e.g. "strong_buy" | "buy" | "hold" | "underperform" | "sell"
   numberOfAnalystOpinions?: number;

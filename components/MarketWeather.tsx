@@ -6,9 +6,9 @@ import type { MacroPayload, MacroTone } from "@/lib/macro";
 import { Badge, Card, SectionTitle, Spinner } from "./ui";
 
 /**
- * Market weather — the macro situation as chips + ONE plain-words regime read.
+ * Market weather - the macro situation as chips + ONE plain-words regime read.
  * Context for posture (how greedy, how much margin of safety), never a timing
- * signal — and the card says so.
+ * signal - and the card says so.
  */
 
 const DOT: Record<MacroTone, string> = {
@@ -51,7 +51,7 @@ export function MarketWeather({ market }: { market: Market }) {
 
   return (
     <Card className="p-4">
-      <SectionTitle sub="Free public data, refreshed ~30 min — context for posture, never a timing signal.">
+      <SectionTitle sub="Free public data, refreshed ~30 min - context for posture, never a timing signal.">
         Market weather
       </SectionTitle>
       {(m === undefined || m === "loading") && (
@@ -61,7 +61,7 @@ export function MarketWeather({ market }: { market: Market }) {
       )}
       {m === "error" && (
         <p className="text-[12.5px] text-muted">
-          Couldn&apos;t fetch macro data right now (often Yahoo throttling) — the analysis tabs work fine without
+          Couldn&apos;t fetch macro data right now (often Yahoo throttling) - the analysis tabs work fine without
           it; check back in a minute.
         </p>
       )}
@@ -86,7 +86,7 @@ export function MarketWeather({ market }: { market: Market }) {
             </div>
             <p className="text-[12.5px] text-ink-2 mt-1.5 leading-snug">{m.regime.advice}</p>
             <p className="text-[10.5px] text-muted italic mt-1">
-              Macro is context, not a signal — your buy-below prices already encode the discipline.
+              Macro is context, not a signal - your buy-below prices already encode the discipline.
             </p>
           </div>
         </>

@@ -64,7 +64,7 @@ const FUNDS: Record<string, FundProfile> = {
     name: "Nippon India ETF Gold BeES",
     currency: "INR",
     family: "Nippon India Mutual Fund",
-    category: "Commodities — Gold",
+    category: "Commodities - Gold",
     mer: 0.0082,
     aum: 2.3e11,
     y1: 0.27,

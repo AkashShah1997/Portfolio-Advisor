@@ -4,7 +4,7 @@ import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Responsi
 import { SNOWFLAKE_AXES, type SnowflakeAxes } from "@/lib/snowflake";
 
 /**
- * The snowflake — 5-axis radar of the scorecard (Quality / Growth / Fortress /
+ * The snowflake - 5-axis radar of the scorecard (Quality / Growth / Fortress /
  * Value / Income), colored by overall health: green when rounded and strong,
  * blue when solid, orange when thin. Fuller and rounder is better.
  */

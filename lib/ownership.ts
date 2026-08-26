@@ -1,9 +1,9 @@
 /**
- * "Who owns this stock" — pure shapes and the mapper from Yahoo's
+ * "Who owns this stock" - pure shapes and the mapper from Yahoo's
  * quoteSummary ownership modules (fundOwnership / institutionOwnership /
  * majorHoldersBreakdown). Works fully for US and most Canadian listings;
  * for NSE stocks Yahoo's coverage is partial (often a handful of domestic
- * mutual funds) — the UI says so instead of pretending.
+ * mutual funds) - the UI says so instead of pretending.
  */
 
 export interface OwnershipEntry {

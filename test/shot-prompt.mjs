@@ -44,5 +44,5 @@ await page.waitForTimeout(300);
 const clip2 = await page.evaluate(() => navigator.clipboard.readText());
 if (!clip2.includes("holding I want analyzed")) throw new Error("per-stock prompt copy failed");
 
-console.log("PROMPTGEN E2E OK — prompt length:", preview.length);
+console.log("PROMPTGEN E2E OK - prompt length:", preview.length);
 await browser.close();

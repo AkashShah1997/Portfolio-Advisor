@@ -77,7 +77,7 @@ function ChartTip({
   );
 }
 
-/** 5-year monthly price line — single series, crosshair tooltip, no legend. */
+/** 5-year monthly price line - single series, crosshair tooltip, no legend. */
 export function PriceLine({ prices, currency }: { prices: PricePoint[]; currency: Currency | string }) {
   if (prices.length < 2) return <div className="text-muted text-[12px]">No price history available.</div>;
   const data = prices.map((p) => ({ x: p.date.slice(0, 7), close: p.close }));
@@ -119,7 +119,7 @@ export function PriceLine({ prices, currency }: { prices: PricePoint[]; currency
   );
 }
 
-/** Revenue vs Net income — two series, grouped columns, legend required. */
+/** Revenue vs Net income - two series, grouped columns, legend required. */
 export function RevenueEarnings({ years, currency }: { years: YearFinancials[]; currency: Currency | string }) {
   const rows = years
     .filter((y) => y.revenue !== undefined || y.netIncome !== undefined)

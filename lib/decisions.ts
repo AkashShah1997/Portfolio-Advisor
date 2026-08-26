@@ -2,7 +2,7 @@ import type { AnalyzedHolding } from "./types";
 import { buildValuation, type Valuation } from "./valuation";
 
 /**
- * The decision engine — turns each holding's evidence into ONE clear action
+ * The decision engine - turns each holding's evidence into ONE clear action
  * for a 5-year+ owner, with every reason shown. This is where "I've held this
  * for years and it's done nothing" gets a straight answer.
  *
@@ -31,25 +31,25 @@ export const ACTION_META: Record<
     label: "Consider exiting",
     tone: "critical",
     icon: "✕",
-    sub: "Fails the long-term tests — capital likely compounds faster elsewhere",
+    sub: "Fails the long-term tests - capital likely compounds faster elsewhere",
   },
   TRIM: {
     label: "Trim / stop adding",
     tone: "warning",
     icon: "▼",
-    sub: "Thesis weakening or price rich for the quality — no new money",
+    sub: "Thesis weakening or price rich for the quality - no new money",
   },
   HOLD: {
     label: "Hold",
     tone: "neutral",
     icon: "●",
-    sub: "Quality intact — sit tight and review on results",
+    sub: "Quality intact - sit tight and review on results",
   },
   ACCUMULATE: {
     label: "Accumulate",
     tone: "good",
     icon: "▲",
-    sub: "Quality business at a defensible price — where new money belongs",
+    sub: "Quality business at a defensible price - where new money belongs",
   },
   REVIEW: {
     label: "Judge separately",
@@ -78,7 +78,7 @@ export function decideRow(r: AnalyzedHolding): Decision {
   if (!sc || !data || sc.verdict === "INSUFFICIENT_DATA") {
     return {
       action: "REVIEW",
-      headline: "Not enough history to score mechanically — judge this one on its own terms.",
+      headline: "Not enough history to score mechanically - judge this one on its own terms.",
       reasons: [r.error ? `Data fetch failed: ${r.error}` : "Insufficient fundamental history (common for ETFs and new listings)."],
       deadMoney: false,
       valuation: sc && data ? buildValuation(data, sc) : ({ methods: [], mosTarget: 0.3, status: "UNKNOWN", assumptions: { discount: 0.1, terminal: 0.03 } } as Valuation),
@@ -109,17 +109,17 @@ export function decideRow(r: AnalyzedHolding): Decision {
     );
   if (flags) reasons.push(`${flags} red flag${flags > 1 ? "s" : ""}: ${sc.redFlags[0]}${flags > 1 ? " …" : ""}`);
   if (deadMoney)
-    reasons.push("Dead-money pattern: flat price AND flat earnings — the market isn't wrong to yawn here.");
+    reasons.push("Dead-money pattern: flat price AND flat earnings - the market isn't wrong to yawn here.");
 
   let action: Action;
   let headline: string;
 
   if (sc.verdict === "REVIEW_EXIT") {
     action = "EXIT";
-    headline = "Fails core quality tests. Re-examine why you own it — a leaking boat patches slowly.";
+    headline = "Fails core quality tests. Re-examine why you own it - a leaking boat patches slowly.";
   } else if (deadMoney && score < 60) {
     action = "EXIT";
-    headline = "Years of flat price on a flat business with a weak scorecard — classic dead money. Recycle into a compounder.";
+    headline = "Years of flat price on a flat business with a weak scorecard - classic dead money. Recycle into a compounder.";
   } else if (sc.verdict === "WATCH") {
     action = "TRIM";
     headline = "Thesis is weakening on the numbers. Stop adding; give it 2–4 quarters to prove itself, then decide.";
@@ -127,23 +127,23 @@ export function decideRow(r: AnalyzedHolding): Decision {
     action = "ACCUMULATE";
     headline =
       val.status === "BUY_ZONE"
-        ? "Wonderful business inside the buy zone — this is what the masters wait years for."
-        : "Wonderful business at a fair price — steady accumulation beats waiting for perfect.";
+        ? "Wonderful business inside the buy zone - this is what the masters wait years for."
+        : "Wonderful business at a fair price - steady accumulation beats waiting for perfect.";
   } else if (score >= 70) {
     action = "HOLD";
     headline = "Wonderful business, rich price. Hold what you own; add only on meaningful dips.";
   } else if (score >= 55) {
     action = "HOLD";
-    headline = "Solid but not exceptional. Hold and review annually — don't add until quality or price improves.";
+    headline = "Solid but not exceptional. Hold and review annually - don't add until quality or price improves.";
   } else {
     action = "TRIM";
     headline = "Below the quality bar without an outright failure. No new money; look for a stronger home for the next rupee/dollar.";
   }
 
-  // A flat-price + GROWING business is a coiled spring — never call it an exit on price alone.
+  // A flat-price + GROWING business is a coiled spring - never call it an exit on price alone.
   if (action === "EXIT" && !businessFlat && (epsCagr ?? 0) >= 0.1 && score >= 55) {
     action = "HOLD";
-    headline = "Price has lagged but the business keeps compounding — that's a valuation reset, not decay. Re-check the thesis, don't panic-sell.";
+    headline = "Price has lagged but the business keeps compounding - that's a valuation reset, not decay. Re-check the thesis, don't panic-sell.";
   }
 
   return { action, headline, reasons, deadMoney, priceCagr, spanYears, valuation: val };

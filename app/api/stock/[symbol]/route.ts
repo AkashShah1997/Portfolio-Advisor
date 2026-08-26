@@ -34,7 +34,7 @@ export async function GET(
     return NextResponse.json(
       {
         error: isThrottleError(message)
-          ? "Yahoo is rate-limiting right now — wait ~1 minute, then retry the failed names."
+          ? "Yahoo is rate-limiting right now - wait ~1 minute, then retry the failed names."
           : message,
         throttled: isThrottleError(message),
       },

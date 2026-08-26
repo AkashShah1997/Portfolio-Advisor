@@ -4,7 +4,7 @@ import { toBase } from "./portfolio";
 import { activeRows } from "./health";
 
 /**
- * The sit-tight projector — what "buy right, sit tight" could mean in numbers.
+ * The sit-tight projector - what "buy right, sit tight" could mean in numbers.
  *
  * Growth guesses are value-weighted from each holding's own EPS (fallback
  * revenue) CAGR, clamped hard, with a conservative scenario band. This is a

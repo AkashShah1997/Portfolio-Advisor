@@ -15,7 +15,7 @@ const TONE_CLS: Record<string, string> = {
 };
 
 /**
- * "Your action plan" — the whole analysis in a few plain sentences.
+ * "Your action plan" - the whole analysis in a few plain sentences.
  * Every line restates a decision the engines already made; the linked tabs
  * carry the full evidence.
  */
@@ -57,7 +57,7 @@ export function PlanCard({
         ))}
       </ul>
       <p className="text-[11px] text-muted italic mt-3">
-        Plain words, same engine — each line is the Decisions / ETFs analysis compressed, not a new opinion.
+        Plain words, same engine - each line is the Decisions / ETFs analysis compressed, not a new opinion.
         Not financial advice.
       </p>
     </Card>

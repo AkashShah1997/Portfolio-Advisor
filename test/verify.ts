@@ -2,7 +2,7 @@
  * Verification script: parser mappings, scorecard math, FX conversion.
  * Run: MOCK_DATA=1 npx tsx test/verify.ts
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { parseBrokerCsv } from "../lib/parse";
 import { mockHistory, mockStockData } from "../lib/mock";
 import { buildScorecard, computeRatios } from "../lib/scorecard";
@@ -28,6 +28,8 @@ import { buildPlan } from "../lib/plan";
 import { loadUiMode } from "../lib/store";
 import { buildMacroItems, mockMacro, readRegime, seriesStats, vixBand } from "../lib/macro";
 import { coachPosition, momentumFromCandles, sipPlan, STANCE_META, trancheLadder } from "../lib/coach";
+import { loadChecklist, PREBUY_CHECKLIST, saveChecklist } from "../lib/checklist";
+import { snowflakeLeaders } from "../lib/snowflake";
 import { maCrossings, maLenForInterval } from "../lib/history";
 import { benchCagrSince, buildAsOf, cutoffISO, runBacktest } from "../lib/backtest";
 import { computeFScore } from "../lib/scorecard";
@@ -1156,7 +1158,7 @@ console.log("\n== ETF detection & catalog ==");
     ETF_CATALOG.every((c) => c.options.length >= 2)
   );
 
-  // category matching — narrower before broader
+  // category matching - narrower before broader
   check("NIFTYBEES → Nifty 50 trackers", categoryOf("india", "NIFTYBEES.NS", "Nippon India ETF Nifty 50 BeES")?.key === "in-nifty50");
   check("JUNIORBEES → Next 50 (not Nifty 50)", categoryOf("india", "JUNIORBEES.NS", "Nippon India ETF Nifty Next 50 Junior BeES")?.key === "in-next50");
   check("BANKBEES → Bank (not Nifty 50)", categoryOf("india", "BANKBEES.NS", "Nippon India ETF Nifty Bank BeES")?.key === "in-bank");
@@ -1215,7 +1217,7 @@ console.log("\n== ETF verdict engine ==");
   check("annual fee = value × MER", Math.abs((aG.annualFee ?? 0) - 72600 * 0.0082) < 1);
   check("results sorted by weight (gold first)", out[0].symbol === "GOLDBEES.NS");
 
-  // duplication: two Nifty-50 funds — pricier one told to consolidate
+  // duplication: two Nifty-50 funds - pricier one told to consolidate
   const sbi = { ...mockEtfData("SETFNIF50.NS"), name: "SBI Nifty 50 ETF", category: "Large-Cap Index (Nifty 50)", mer: 0.0004 };
   const hdfc = { ...mockEtfData("HDFCNIFTY.NS"), name: "HDFC Nifty 50 ETF", category: "Large-Cap Index (Nifty 50)", mer: 0.0007 };
   const dup = assessAll(
@@ -1485,7 +1487,7 @@ console.log("\n== Market weather (macro) ==");
     us10y: { last: 41.2, ret1y: -0.05 },
   });
   check("macro items format sanely (index sub mentions 200-day, ^TNX ÷10 → %)", items.some((i) => i.key === "index" && /200-day/.test(i.sub)) && items.some((i) => i.key === "us10y" && i.value === "4.12%"));
-  check("missing series just drop their chip (no '—' junk chips)", !items.some((i) => i.key === "gold"));
+  check("missing series just drop their chip (no '–' junk chips)", !items.some((i) => i.key === "gold"));
 
   const m1 = mockMacro("india");
   check("mock macro deterministic; india=NORMAL, canada=EXPENSIVE_CALM (two demo regimes)", JSON.stringify(m1) === JSON.stringify({ ...mockMacro("india"), asOf: m1.asOf }) === false ? m1.regime.key === "NORMAL" && mockMacro("canada").regime.key === "EXPENSIVE_CALM" : m1.regime.key === "NORMAL" && mockMacro("canada").regime.key === "EXPENSIVE_CALM");
@@ -1610,7 +1612,7 @@ console.log("\n== The position coach (trim / hold / buy-dip / DCA) ==");
   const dipBuy = coachPosition({ ...baseIn, isEtf: false, action: "ACCUMULATE", verdict: "ADD_MORE", valStatus: "FAIR", pnlPct: 0.5, weightPct: 0.05, momentum: dip });
   check("quality stock on a pullback → buy the dip with a 3-tranche ladder", dipBuy.stance === "BUY_DIP" && dipBuy.dca?.style === "TRANCHES");
   const hold = coachPosition({ ...baseIn, isEtf: false, action: "HOLD", verdict: "HOLD", valStatus: "FAIR", pnlPct: 0.5, weightPct: 0.05, momentum: up });
-  check("+50% alone is NOT a sell signal — quality at fair price near highs → sit tight", hold.stance === "HOLD");
+  check("+50% alone is NOT a sell signal - quality at fair price near highs → sit tight", hold.stance === "HOLD");
   check("profit line always frames weight-not-profit", hold.points.some((p) => /never by itself a reason to sell/.test(p)));
 
   const ladder = trancheLadder(100, "INR");
@@ -1644,6 +1646,65 @@ console.log("\n== Analyst context fields (mock determinism) ==");
     "analyst fields are deterministic",
     JSON.stringify(q) === JSON.stringify(mockStockData("TCS.NS").quote)
   );
+}
+
+console.log("\n== Pre-buy checklist (the judgment gates) ==");
+{
+  check("exactly 10 gates", PREBUY_CHECKLIST.length === 10);
+  check("ids are unique", new Set(PREBUY_CHECKLIST.map((i) => i.id)).size === PREBUY_CHECKLIST.length);
+  check("every gate has text and a master attribution", PREBUY_CHECKLIST.every((i) => i.text.length > 10 && i.master.length > 3));
+  check("covers the canonical filters (moat, price discipline, sizing, why-cheap)",
+    ["moat", "price", "sizing", "whycheap", "tenyear"].every((id) => PREBUY_CHECKLIST.some((i) => i.id === id)));
+  // server-safe: no window in node - must degrade to empty, never throw
+  const server = loadChecklist("TCS.NS");
+  check("loadChecklist without a browser returns an empty Set", server instanceof Set && server.size === 0);
+  let threw = false;
+  try {
+    saveChecklist("TCS.NS", new Set(["moat"]));
+  } catch {
+    threw = true;
+  }
+  check("saveChecklist without a browser is a no-op, not a crash", !threw);
+}
+
+console.log("\n== Snowflake axis leaders (who carries each arm) ==");
+{
+  const mk = (sym: string, watch = false): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 5, avgCost: 100, currency: "INR", watch },
+      data,
+      scorecard: buildScorecard(data),
+      invested: 500,
+      currentValue: 900,
+    };
+  };
+  const rows = [mk("TCS.NS"), mk("RELIANCE.NS"), mk("ITC.NS"), mk("HDFCBANK.NS"), mk("WATCHME.NS", true)];
+  const leaders = snowflakeLeaders(rows, 3);
+  check("one entry per snowflake axis, in axis order", leaders.length === SNOWFLAKE_AXES.length && leaders.every((l, i) => l.key === SNOWFLAKE_AXES[i].key));
+  check("at most `top` leaders per axis", leaders.every((l) => l.leaders.length <= 3 && l.leaders.length > 0));
+  check("leaders sorted best-first on every axis", leaders.every((l) => l.leaders.every((x, i) => i === 0 || l.leaders[i - 1].score >= x.score)));
+  check("exchange suffixes stripped for display", leaders.every((l) => l.leaders.every((x) => !/\.(NS|BO|TO|V|NE)$/i.test(x.symbol))));
+  check("watchlist rows never carry an arm", leaders.every((l) => l.leaders.every((x) => x.symbol !== "WATCHME")));
+  const two = snowflakeLeaders(rows, 2);
+  check("top parameter respected", two.every((l) => l.leaders.length <= 2));
+}
+
+console.log("\n== SEC EDGAR fair-access UA & typography sweep ==");
+{
+  const edgarSrc = readFileSync("lib/edgar.ts", "utf8");
+  const uaLine = edgarSrc.split("\n").find((l) => l.includes("const UA"));
+  check("EDGAR User-Agent carries a contact address (SEC 403 fix)", !!uaLine && uaLine.includes("@"));
+  check("EDGAR UA names the app", !!uaLine && /PortfolioAdvisor/.test(uaLine));
+  // the whole application is em-dash-free (placeholders use en dash, prose uses hyphens)
+  const offenders: string[] = [];
+  for (const dir of ["lib", "components", "app"]) {
+    for (const f of readdirSync(dir, { recursive: true }) as string[]) {
+      if (!/\.(ts|tsx|css)$/.test(f)) continue;
+      if (readFileSync(`${dir}/${f}`, "utf8").includes("—")) offenders.push(`${dir}/${f}`);
+    }
+  }
+  check("no em dashes anywhere in the app", offenders.length === 0, offenders.join(", "));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL CHECKS PASSED");

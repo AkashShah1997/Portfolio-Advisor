@@ -11,14 +11,14 @@ import { Badge, Card, SectionTitle, Spinner } from "./ui";
 import { Stagger, StaggerItem } from "./anim";
 
 /**
- * Smart money — two honest lenses on what serious long-horizon capital does:
+ * Smart money - two honest lenses on what serious long-horizon capital does:
  *  1. Conviction moves from a curated bench of superinvestors (SEC 13F
- *     filings — free, official, up to 45 days delayed, US-listed longs only).
+ *     filings - free, official, up to 45 days delayed, US-listed longs only).
  *  2. Which mutual funds & institutions own a given stock (works across your
  *     holdings; partial coverage for NSE names on free data).
  */
 
-const dollars = (v?: number) => (v === undefined ? "—" : compactMoney(v, "USD"));
+const dollars = (v?: number) => (v === undefined ? "–" : compactMoney(v, "USD"));
 
 function MoveChip({
   m,
@@ -149,7 +149,7 @@ function InvestorCard({
 
       {inv.error && (
         <p className="text-[12px] text-ink-2 mt-1.5">
-          Couldn&apos;t read this filer right now ({inv.error}). SEC EDGAR occasionally throttles — reopen
+          Couldn&apos;t read this filer right now ({inv.error}). SEC EDGAR occasionally throttles - reopen
           the tab in a minute.
         </p>
       )}
@@ -167,7 +167,7 @@ function InvestorCard({
                 {inv.top.map((t) => (
                   <div key={t.cusip} className="grid grid-cols-[minmax(120px,220px)_1fr_auto] items-center gap-2 text-[12px]">
                     <span className="truncate">
-                      <strong>{t.ticker ?? "—"}</strong> <span className="text-ink-2">{t.issuer}</span>
+                      <strong>{t.ticker ?? "–"}</strong> <span className="text-ink-2">{t.issuer}</span>
                     </span>
                     <div className="h-[10px] bg-page rounded-r-[4px] overflow-hidden">
                       <div className="h-full rounded-r-[4px] bg-series-1" style={{ width: `${Math.min(100, t.weightPct * 250)}%` }} />
@@ -202,7 +202,7 @@ export function SmartMoney({
   market: Market;
   onAddWatch: (symbol: string) => Promise<boolean>;
 }) {
-  // one entry per filer — each card loads, fails and retries on its own.
+  // one entry per filer - each card loads, fails and retries on its own.
   // India view: 13Fs are US-only disclosures, so the bench is opt-in there
   // and "Who owns your stock" (which covers NSE names) leads instead.
   const [showBench, setShowBench] = useState(market !== "india");
@@ -221,7 +221,7 @@ export function SmartMoney({
     [rows]
   );
 
-  // fetch each filer independently, 3 at a time — cards appear as they arrive
+  // fetch each filer independently, 3 at a time - cards appear as they arrive
   useEffect(() => {
     if (!showBench) return; // India: don't fetch SEC filings until asked
     const missing = SUPERINVESTORS.filter(
@@ -340,8 +340,8 @@ export function SmartMoney({
               <tr key={f.organization} className="border-b border-grid/50">
                 <td className="py-1 pr-2 truncate max-w-[220px]">{f.organization}</td>
                 <td className="py-1 pr-2 tnum text-right">{fmtPct(f.pctHeld)}</td>
-                <td className="py-1 pr-2 tnum text-right">{f.value !== undefined ? compactMoney(f.value, cur) : "—"}</td>
-                <td className="py-1 tnum text-right text-muted">{f.reportDate ?? "—"}</td>
+                <td className="py-1 pr-2 tnum text-right">{f.value !== undefined ? compactMoney(f.value, cur) : "–"}</td>
+                <td className="py-1 tnum text-right text-muted">{f.reportDate ?? "–"}</td>
               </tr>
             ))}
           </tbody>
@@ -353,12 +353,12 @@ export function SmartMoney({
   return (
     // flex + explicit order: India leads with what covers NSE names (the
     // ownership feed); the US-only 13F bench is opt-in there. Canada leads
-    // with the bench — those ARE its investable listings.
+    // with the bench - those ARE its investable listings.
     <div className="flex flex-col gap-4">
       {/* India: the US bench is opt-in, with the honest reason */}
       {market === "india" && !showBench && (
         <Card className="p-4 order-2">
-          <SectionTitle sub="13F filings are a US disclosure — great for ideas, but none of these managers can hold your NSE names, and India has no free 13F equivalent. For Indian names, “Who owns your stock” above reads the ownership feed (promoters show under insiders); the exchange shareholding pattern has the authoritative list.">
+          <SectionTitle sub="13F filings are a US disclosure - great for ideas, but none of these managers can hold your NSE names, and India has no free 13F equivalent. For Indian names, “Who owns your stock” above reads the ownership feed (promoters show under insiders); the exchange shareholding pattern has the authoritative list.">
             US superinvestor bench (optional here)
           </SectionTitle>
           <button
@@ -373,12 +373,12 @@ export function SmartMoney({
       {/* superinvestor moves */}
       {showBench && (
       <Card className={`p-4 ${market === "india" ? "order-2" : ""}`}>
-        <SectionTitle sub="A hand-picked bench of long-horizon managers with decades-long public records, read straight from their official SEC 13F filings. Filings lag by up to 45 days and show US-listed long positions only — clone ideas, then do your own work.">
+        <SectionTitle sub="A hand-picked bench of long-horizon managers with decades-long public records, read straight from their official SEC 13F filings. Filings lag by up to 45 days and show US-listed long positions only - clone ideas, then do your own work.">
           Superinvestor conviction moves
         </SectionTitle>
         {loadingCount > 0 && (
           <p className="text-[13px] text-ink-2">
-            <Spinner /> Reading 13F filings from SEC EDGAR — {loaded.length} of {SUPERINVESTORS.length} in,
+            <Spinner /> Reading 13F filings from SEC EDGAR - {loaded.length} of {SUPERINVESTORS.length} in,
             cards appear as each filing arrives…
           </p>
         )}
@@ -473,9 +473,9 @@ export function SmartMoney({
       </div>
       )}
 
-      {/* who owns your stock — leads in the India view */}
+      {/* who owns your stock - leads in the India view */}
       <Card className={`p-4 ${market === "india" ? "order-1" : ""}`}>
-        <SectionTitle sub="Top mutual funds and institutions holding a stock, from the free ownership feed — full for US/Canadian listings, partial for NSE names (promoter stakes show under 'insiders').">
+        <SectionTitle sub="Top mutual funds and institutions holding a stock, from the free ownership feed - full for US/Canadian listings, partial for NSE names (promoter stakes show under 'insiders').">
           Who owns your stock
         </SectionTitle>
         <div className="flex flex-wrap items-center gap-2 text-[12.5px] no-print">
@@ -536,7 +536,7 @@ export function SmartMoney({
             </div>
             {isIndiaSym && (
               <p className="text-[11px] text-muted italic mt-2">
-                NSE coverage on the free feed is partial — treat this as a sample, and check the quarterly
+                NSE coverage on the free feed is partial - treat this as a sample, and check the quarterly
                 shareholding pattern on the exchange for the authoritative list.
               </p>
             )}
@@ -546,7 +546,7 @@ export function SmartMoney({
 
       <p className={`text-[11.5px] text-muted leading-relaxed ${market === "india" ? "order-4" : ""}`}>
         Sources: SEC EDGAR 13F filings (official, free) and Yahoo Finance ownership data (free,
-        unofficial). Smart-money positions are context, not instructions — Pabrai clones shamelessly,
+        unofficial). Smart-money positions are context, not instructions - Pabrai clones shamelessly,
         but he reads the filing first. Their size, mandates and hedges differ from yours.
       </p>
     </div>

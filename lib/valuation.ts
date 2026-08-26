@@ -1,14 +1,14 @@
 import type { Scorecard, StockData } from "./types";
 
 /**
- * Rough, mechanical intrinsic-value estimates — a sanity anchor, never a target.
+ * Rough, mechanical intrinsic-value estimates - a sanity anchor, never a target.
  *
  * Methods (only those the data supports are used; the blend is the MEDIAN):
- *  - Graham Number            √(22.5 × EPS × BVPS)               — Graham's conservative ceiling
- *  - Graham growth formula    EPS × (8.5 + 2g)                   — value of growth, capped
- *  - FCF discount (10y fade)  FCF/share grown g→terminal, PV'd   — Buffett's owner-earnings lens
- *  - P/E history anchor       EPS × own 5-yr average P/E         — Damani: price vs its own history
- *  - Justified P/B            BVPS × (ROE−g)/(r−g)               — financials only
+ *  - Graham Number            √(22.5 × EPS × BVPS)               - Graham's conservative ceiling
+ *  - Graham growth formula    EPS × (8.5 + 2g)                   - value of growth, capped
+ *  - FCF discount (10y fade)  FCF/share grown g→terminal, PV'd   - Buffett's owner-earnings lens
+ *  - P/E history anchor       EPS × own 5-yr average P/E         - Damani: price vs its own history
+ *  - Justified P/B            BVPS × (ROE−g)/(r−g)               - financials only
  *
  * Every number is derived from the same free Yahoo data the scorecard uses.
  * Growth is haircut 25% and clamped to 2–14%; discount rates are deliberately
@@ -104,7 +104,7 @@ export function buildValuation(data: StockData, sc: Scorecard): Valuation {
       id: "graham",
       label: "Graham Number",
       value: Math.sqrt(22.5 * eps * bvps),
-      note: `√(22.5 × EPS × book/share) — Graham's ceiling for a defensive buyer`,
+      note: `√(22.5 × EPS × book/share) - Graham's ceiling for a defensive buyer`,
     });
   }
 

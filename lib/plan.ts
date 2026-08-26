@@ -7,14 +7,14 @@ import { toBase } from "./portfolio";
 import { fmtMoney, fmtPct } from "./symbols";
 
 /**
- * The action plan — the entire analysis compressed into a few plain sentences:
+ * The action plan - the entire analysis compressed into a few plain sentences:
  * what to sell, what to stop adding to, where new money belongs, which ETF fee
  * to fix, and what just needs patience. No new judgments are made here: every
  * line restates a decision the engines already reached; details live in the
  * Decisions and ETFs tabs.
  *
  * Works fully offline: stock decisions come from the scorecard, ETF actions
- * from the curated fee table + price history — no extra network calls.
+ * from the curated fee table + price history - no extra network calls.
  */
 
 export interface PlanItem {
@@ -64,8 +64,8 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
       symbols: exits,
       text:
         exits.length === 1
-          ? `Consider selling ${list(exits)} — it fails the long-term quality tests; that money likely compounds faster elsewhere.`
-          : `Consider selling ${list(exits)} — they fail the long-term quality tests; that money likely compounds faster elsewhere.`,
+          ? `Consider selling ${list(exits)} - it fails the long-term quality tests; that money likely compounds faster elsewhere.`
+          : `Consider selling ${list(exits)} - they fail the long-term quality tests; that money likely compounds faster elsewhere.`,
       goTo: "decisions",
     });
   }
@@ -77,7 +77,7 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
       tone: "warning",
       icon: "▼",
       symbols: trims,
-      text: `Stop adding to ${list(trims)} — the numbers are weakening; give ${trims.length === 1 ? "it" : "them"} 2–4 quarters to prove the thesis before any new money.`,
+      text: `Stop adding to ${list(trims)} - the numbers are weakening; give ${trims.length === 1 ? "it" : "them"} 2–4 quarters to prove the thesis before any new money.`,
       goTo: "decisions",
     });
   }
@@ -110,8 +110,8 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
         symbols: [a.symbol],
         text:
           a.category?.kind === "commodity"
-            ? `${s} is ${over} — gold/silver is insurance, not the engine; the classic cap is ~5–10%.`
-            : `${s} deserves a trim — ${a.reasons[0]?.toLowerCase() ?? "it's costly for what it does"}`,
+            ? `${s} is ${over} - gold/silver is insurance, not the engine; the classic cap is ~5–10%.`
+            : `${s} deserves a trim - ${a.reasons[0]?.toLowerCase() ?? "it's costly for what it does"}`,
         goTo: "etfs",
       });
     } else if (a.verdict === "SWITCH" && a.alternatives[0]) {
@@ -121,7 +121,7 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
         tone: "warning",
         icon: "⇄",
         symbols: [a.symbol],
-        text: `${s}: the same exposure costs less in ${short(alt.symbol)} (~${fmtPct(alt.mer, 2)}/yr vs ~${fmtPct(a.effMer ?? 0, 2)}) — switching keeps ≈${fmtMoney(alt.savesPerYear, base, true)}/yr of your return (mind capital-gains tax).`,
+        text: `${s}: the same exposure costs less in ${short(alt.symbol)} (~${fmtPct(alt.mer, 2)}/yr vs ~${fmtPct(a.effMer ?? 0, 2)}) - switching keeps ≈${fmtMoney(alt.savesPerYear, base, true)}/yr of your return (mind capital-gains tax).`,
         goTo: "etfs",
       });
     }
@@ -137,7 +137,7 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
       tone: "good",
       icon: "▲",
       symbols: both,
-      text: `When you have new money, ${list(both)} ${both.length === 1 ? "is" : "are"} where it belongs — quality at a defensible price${coreEtfs.length ? " (and rock-bottom-fee index funds)" : ""}.`,
+      text: `When you have new money, ${list(both)} ${both.length === 1 ? "is" : "are"} where it belongs - quality at a defensible price${coreEtfs.length ? " (and rock-bottom-fee index funds)" : ""}.`,
       goTo: adds.length ? "decisions" : "etfs",
     });
   }
@@ -152,7 +152,7 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
       tone: "neutral",
       icon: "●",
       symbols: quiet,
-      text: `${list(quiet)} need${quiet.length === 1 ? "s" : ""} nothing — sitting tight IS the strategy.`,
+      text: `${list(quiet)} need${quiet.length === 1 ? "s" : ""} nothing - sitting tight IS the strategy.`,
       goTo: null,
     });
   }
@@ -164,7 +164,7 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
       tone: "muted",
       icon: "?",
       symbols: reviews,
-      text: `${list(reviews)} couldn't be scored (thin data) — judge ${reviews.length === 1 ? "it" : "them"} on ${reviews.length === 1 ? "its" : "their"} own terms.`,
+      text: `${list(reviews)} couldn't be scored (thin data) - judge ${reviews.length === 1 ? "it" : "them"} on ${reviews.length === 1 ? "its" : "their"} own terms.`,
       goTo: "decisions",
     });
   }
@@ -172,9 +172,9 @@ export function buildPlan(rows: AnalyzedHolding[], market: Market, fx: FxRates):
   const actionCount = items.filter((i) => i.tone === "critical" || i.tone === "warning").length;
   const summary =
     inv.length === 0
-      ? "Nothing to plan yet — import a portfolio first."
+      ? "Nothing to plan yet - import a portfolio first."
       : actionCount === 0
-        ? "Nothing needs action right now. A quiet plan is a feature, not a bug — check back after results season."
+        ? "Nothing needs action right now. A quiet plan is a feature, not a bug - check back after results season."
         : `${actionCount} thing${actionCount === 1 ? "" : "s"} worth acting on; everything else just needs patience.`;
 
   return { items, summary, actionCount };

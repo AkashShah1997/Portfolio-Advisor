@@ -49,6 +49,10 @@ if (!(await page.getByRole("button", { name: "Screeners" }).count() === 0)) thro
 // ---- portfolio snowflake in the action summary ----
 await page.waitForSelector("text=Portfolio snowflake", { timeout: 10000 });
 if (!(await page.locator("[data-testid=snowflake]").count())) throw new Error("portfolio snowflake missing");
+// ...and the per-axis leader rows under it (which stocks carry fortress/quality/income)
+await page.waitForSelector("text=Who carries each arm", { timeout: 10000 });
+const leaderBody = await page.locator("body").textContent();
+if (!/Fortress/.test(leaderBody) || !/Income/.test(leaderBody)) throw new Error("axis leader rows missing");
 
 // ---- ETF holdings are routed to the ETFs tab ----
 await page.waitForSelector("text=see the ETFs tab", { timeout: 10000 });
@@ -83,7 +87,7 @@ await page.waitForSelector("text=Screeners", { timeout: 5000 });
 
 // ---- allocation slice toggle (stocks-only / ETFs-only) ----
 await page.getByRole("button", { name: "Stocks", exact: true }).click();
-await page.waitForSelector("text=Sectors — stocks", { timeout: 5000 });
+await page.waitForSelector("text=Sectors - stocks", { timeout: 5000 });
 await page.getByRole("button", { name: "ETFs", exact: true }).last().click();
 const allocBody = await page.locator("body").textContent();
 if (!/NIFTYBEES/.test(allocBody)) throw new Error("ETF-only allocation slice missing NIFTYBEES");
@@ -111,6 +115,18 @@ await page.waitForSelector("text=12-mo target", { timeout: 10000 });
 await page.waitForSelector("text=F-Score", { timeout: 10000 });
 if ((await page.locator("[data-testid=snowflake]").count()) < 2) throw new Error("stock-card snowflake missing");
 if (!(await page.locator("[data-infotip=pe]").count())) throw new Error("info tooltips not wired in stock card");
+
+// ---- pre-buy checklist: ten judgment gates, ticks persist per symbol ----
+const chkHeader = page.locator("button[aria-expanded]").filter({ hasText: /Pre-buy checklist/ }).first();
+await chkHeader.waitFor({ timeout: 10000 });
+if (!/0\/10/.test(await chkHeader.textContent())) throw new Error("checklist should start at 0/10");
+await chkHeader.click();
+await page.waitForSelector("text=gambling, not investing", { timeout: 5000 });
+if ((await page.locator("label input[type=checkbox]").count()) < 10) throw new Error("checklist gates missing");
+await page.getByText("I can explain what this business sells").first().click(); // label click ticks the gate
+await page.waitForTimeout(400);
+if (!/1\/10/.test(await chkHeader.textContent())) throw new Error("tick did not update the checklist count");
+
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${shots}/04-card-open.png`, fullPage: true });
 
@@ -190,7 +206,7 @@ await page.screenshot({ path: `${shots}/08-screener-custom.png`, fullPage: true 
 
 // ---- ETFs tab: fee-first fund analysis ----
 await page.locator("button[aria-pressed]").filter({ hasText: /^ETFs/ }).first().click();
-await page.waitForSelector("text=Your ETFs — cost-first analysis", { timeout: 15000 });
+await page.waitForSelector("text=Your ETFs - cost-first analysis", { timeout: 15000 });
 await page.waitForSelector("text=Nippon India ETF Gold BeES", { timeout: 25000 });
 await page.waitForSelector("text=Nippon India ETF Nifty 50 BeES", { timeout: 25000 });
 await page.waitForSelector("text=Weighted MER", { timeout: 5000 });

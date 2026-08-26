@@ -1,13 +1,13 @@
 import type { AnalyzedHolding, PricePoint, YearRatios } from "./types";
 
 /**
- * The fundamentals journey — "how was the business when I bought it, and how
+ * The fundamentals journey - "how was the business when I bought it, and how
  * is it now?" Since broker holdings CSVs carry no purchase dates, the buy
  * month is ESTIMATED from your average cost against the 5-year price history
  * (the month whose close is nearest your avg cost), and you can override it.
  *
  * The point: separate the three very different reasons a stock "did nothing"
- * for 2–5 years —
+ * for 2–5 years -
  *   improving business + lagging price  → coiled spring (usually keep/add)
  *   flat business + flat price          → dead money (recycle)
  *   worsening business                  → the fall is deserved (exit review)
@@ -155,22 +155,22 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
   if (businessBetter && priceLagged) {
     verdict = {
       tone: "good",
-      line: "The business improved while the price went nowhere — a coiled spring, not dead money. This is exactly the kind of position a 2-year-minimum holder keeps (and often adds to).",
+      line: "The business improved while the price went nowhere - a coiled spring, not dead money. This is exactly the kind of position a 2-year-minimum holder keeps (and often adds to).",
     };
   } else if (businessBetter) {
     verdict = {
       tone: "good",
-      line: "Business and price have both compounded since you bought — the thesis is working. Keep sitting tight.",
+      line: "Business and price have both compounded since you bought - the thesis is working. Keep sitting tight.",
     };
   } else if (businessWorse && (priceCagrSince ?? 0) >= 0.05) {
     verdict = {
       tone: "warning",
-      line: "The price ran ahead while the fundamentals slipped — risk is quietly rising. Re-check the thesis before adding another rupee/dollar.",
+      line: "The price ran ahead while the fundamentals slipped - risk is quietly rising. Re-check the thesis before adding another rupee/dollar.",
     };
   } else if (businessWorse) {
     verdict = {
       tone: "critical",
-      line: "The fundamentals have deteriorated since you bought — the weak price is deserved, not a bargain. This is what an exit review is for.",
+      line: "The fundamentals have deteriorated since you bought - the weak price is deserved, not a bargain. This is what an exit review is for.",
     };
   } else {
     verdict = {

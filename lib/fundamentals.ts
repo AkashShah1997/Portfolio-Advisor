@@ -1,7 +1,7 @@
 import type { YearFinancials } from "./types";
 
 /**
- * Pure fundamentals mappers (no network, no server-only imports) — shared by
+ * Pure fundamentals mappers (no network, no server-only imports) - shared by
  * the Yahoo data layer and the test suite.
  */
 
@@ -77,7 +77,7 @@ export function mergeYears(rows: YearFinancials[]): YearFinancials[] {
 export const hasSubstance = (y: YearFinancials): boolean =>
   y.revenue !== undefined || y.netIncome !== undefined || y.totalAssets !== undefined;
 
-/** The 23 timeseries fields the scorecard actually uses — keeps the URL tiny. */
+/** The 23 timeseries fields the scorecard actually uses - keeps the URL tiny. */
 export const TS_KEYS = [
   "annualTotalRevenue",
   "annualGrossProfit",

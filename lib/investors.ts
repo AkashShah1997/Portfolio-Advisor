@@ -1,5 +1,5 @@
 /**
- * The masters behind the checks — fundamentally-driven, long-horizon investors
+ * The masters behind the checks - fundamentally-driven, long-horizon investors
  * whose public principles the scorecard encodes. Grouped for display.
  */
 
@@ -13,7 +13,7 @@ export const INVESTORS: Investor[] = [
   {
     name: "Warren Buffett",
     region: "Global",
-    principle: "Durable moats, owner earnings (FCF), low debt — a wonderful company at a fair price, held forever.",
+    principle: "Durable moats, owner earnings (FCF), low debt - a wonderful company at a fair price, held forever.",
   },
   {
     name: "Charlie Munger",
@@ -28,7 +28,7 @@ export const INVESTORS: Investor[] = [
   {
     name: "Philip Fisher",
     region: "Global",
-    principle: "Scuttlebutt research — ask customers, suppliers, competitors; buy outstanding growth and hold almost forever.",
+    principle: "Scuttlebutt research - ask customers, suppliers, competitors; buy outstanding growth and hold almost forever.",
   },
   {
     name: "Peter Lynch",
@@ -43,7 +43,7 @@ export const INVESTORS: Investor[] = [
   {
     name: "Joel Greenblatt",
     region: "Global",
-    principle: "The Magic Formula: pair a high earnings yield with a high return on capital — good business, cheap price.",
+    principle: "The Magic Formula: pair a high earnings yield with a high return on capital - good business, cheap price.",
   },
   {
     name: "Terry Smith",
@@ -53,7 +53,7 @@ export const INVESTORS: Investor[] = [
   {
     name: "Mohnish Pabrai",
     region: "Global",
-    principle: "Dhandho: heads I win, tails I don't lose much — low-risk bets sized with a margin of safety; clone the greats shamelessly.",
+    principle: "Dhandho: heads I win, tails I don't lose much - low-risk bets sized with a margin of safety; clone the greats shamelessly.",
   },
   {
     name: "Radhakishan Damani",
@@ -63,23 +63,23 @@ export const INVESTORS: Investor[] = [
   {
     name: "Rakesh Jhunjhunwala",
     region: "India",
-    principle: "Buy right, sit tight; ROCE and earnings growth are the engine; respect leverage — it kills more portfolios than bad picks.",
+    principle: "Buy right, sit tight; ROCE and earnings growth are the engine; respect leverage - it kills more portfolios than bad picks.",
   },
   {
     name: "Raamdeo Agrawal",
     region: "India",
-    principle: "QGLP — Quality of business & management, Growth in earnings, Longevity of the moat, at a reasonable Price.",
+    principle: "QGLP - Quality of business & management, Growth in earnings, Longevity of the moat, at a reasonable Price.",
   },
   {
     name: "Saurabh Mukherjea",
     region: "India",
-    principle: "Coffee Can investing: revenue growth ≥10% with ROCE ≥15% year after year — then leave it untouched for a decade.",
+    principle: "Coffee Can investing: revenue growth ≥10% with ROCE ≥15% year after year - then leave it untouched for a decade.",
   },
 ];
 
 /** Compact roster line used in generated prompts and the AI system prompt. */
 export const ROSTER_LINE =
-  "Warren Buffett, Charlie Munger, Benjamin Graham, Philip Fisher, Peter Lynch, Chuck Akre, Joel Greenblatt, Terry Smith, Mohnish Pabrai — and India's Radhakishan Damani, Rakesh Jhunjhunwala, Raamdeo Agrawal (QGLP) and Saurabh Mukherjea (Coffee Can)";
+  "Warren Buffett, Charlie Munger, Benjamin Graham, Philip Fisher, Peter Lynch, Chuck Akre, Joel Greenblatt, Terry Smith, Mohnish Pabrai - and India's Radhakishan Damani, Rakesh Jhunjhunwala, Raamdeo Agrawal (QGLP) and Saurabh Mukherjea (Coffee Can)";
 
 /** Named frameworks the scorecard borrows, for prompts. */
 export const FRAMEWORKS_LINE =

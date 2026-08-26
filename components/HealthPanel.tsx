@@ -48,7 +48,7 @@ export function HealthPanel({
         <SectionTitle sub="Construction-level tests the masters apply before looking at any single stock.">
           Portfolio health checks{" "}
           <span className="text-[12px] font-normal text-muted">
-            — {passCount}/{gradeable} passing
+            - {passCount}/{gradeable} passing
           </span>
         </SectionTitle>
         <Stagger mode="mount">
@@ -63,7 +63,7 @@ export function HealthPanel({
                     </span>
                     <span>
                       <span className="text-ink">{c.label}</span>{" "}
-                      <span className="text-ink-2">— {c.detail}</span>
+                      <span className="text-ink-2">- {c.detail}</span>
                       <span className="block text-[11px] text-muted italic">{c.principle}</span>
                     </span>
                   </li>
@@ -76,7 +76,7 @@ export function HealthPanel({
 
       <div className="space-y-4">
         <Card className="p-4">
-          <SectionTitle sub="Estimated from current prices and trailing yields — the only cash a minority owner sees before selling.">
+          <SectionTitle sub="Estimated from current prices and trailing yields - the only cash a minority owner sees before selling.">
             Dividend income
           </SectionTitle>
           <div className="flex items-baseline gap-2 flex-wrap">
@@ -108,7 +108,7 @@ export function HealthPanel({
           )}
           <p className="text-[11px] text-muted italic mt-3">
             “Do you know the only thing that gives me pleasure? It&apos;s to see my dividends coming
-            in.” — John D. Rockefeller (quoted approvingly by more than one master)
+            in.” - John D. Rockefeller (quoted approvingly by more than one master)
           </p>
         </Card>
 
@@ -121,7 +121,7 @@ export function HealthPanel({
             format={(v) => fmtMoney(v, base, true)}
           />
           <p className="text-[11.5px] text-ink-2 mt-2">
-            A 5-year horizon smooths FX noise, but structural currency moves compound too — INR has
+            A 5-year horizon smooths FX noise, but structural currency moves compound too - INR has
             historically depreciated against USD/CAD over long periods. Diversified earnings
             currencies are a quiet margin of safety.
           </p>

@@ -1,19 +1,19 @@
 import type { Market } from "./store";
 
 /**
- * Curated ETF alternatives catalog — the domain knowledge Yahoo can't provide:
+ * Curated ETF alternatives catalog - the domain knowledge Yahoo can't provide:
  * which funds track the SAME exposure, and what they charge.
  *
  * MER figures are hand-checked against public fund pages/aggregators as of
- * MER_ASOF and deliberately treated as APPROXIMATE everywhere they're shown —
+ * MER_ASOF and deliberately treated as APPROXIMATE everywhere they're shown -
  * fee schedules change; the UI always says "confirm on the fund page".
  * Where Yahoo returns a live expense ratio for a fund, the live number wins.
  *
  * kind drives both the MER banding and the verdict rules:
- *   core       — broad-market building blocks (Bogle's default)
- *   satellite  — narrower bets (sector/theme/factor/dividend)
- *   commodity  — gold/silver: insurance, not an engine
- *   bond       — fixed income
+ *   core       - broad-market building blocks (Bogle's default)
+ *   satellite  - narrower bets (sector/theme/factor/dividend)
+ *   commodity  - gold/silver: insurance, not an engine
+ *   bond       - fixed income
  */
 
 export const MER_ASOF = "mid-2026";
@@ -55,7 +55,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "HDFCGOLD.NS", name: "HDFC Gold ETF", mer: 0.0059 },
     ],
     note:
-      "Gold is portfolio insurance, not an engine — the masters cap it around 5–10%. For multi-year gold, also compare Sovereign Gold Bonds on the secondary market: zero annual fee plus 2.5%/yr interest (new issues are paused; liquidity varies).",
+      "Gold is portfolio insurance, not an engine - the masters cap it around 5–10%. For multi-year gold, also compare Sovereign Gold Bonds on the secondary market: zero annual fee plus 2.5%/yr interest (new issues are paused; liquidity varies).",
   },
   {
     key: "in-silver",
@@ -67,7 +67,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "SILVERBEES.NS", name: "Nippon India Silver ETF", mer: 0.0056 },
       { symbol: "SILVERIETF.NS", name: "ICICI Prudential Silver ETF", mer: 0.004 },
     ],
-    note: "Industrial-cycle commodity — more volatile than gold, same rule: a small slice at most.",
+    note: "Industrial-cycle commodity - more volatile than gold, same rule: a small slice at most.",
   },
   {
     key: "in-bank",
@@ -126,7 +126,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "MON100.NS", name: "Motilal Oswal NASDAQ 100 ETF", mer: 0.0058 },
       { symbol: "MAFANG.NS", name: "Mirae Asset NYSE FANG+ ETF", mer: 0.0066 },
     ],
-    note: "Overseas ETFs from India can trade at a premium/discount to NAV when RBI overseas-investment limits bind — check iNAV before buying.",
+    note: "Overseas ETFs from India can trade at a premium/discount to NAV when RBI overseas-investment limits bind - check iNAV before buying.",
   },
   {
     key: "in-nifty50",
@@ -140,7 +140,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "SETFNIF50.NS", name: "SBI Nifty 50 ETF", mer: 0.0004 },
       { symbol: "HDFCNIFTY.NS", name: "HDFC Nifty 50 ETF", mer: 0.0005 },
     ],
-    note: "The costs here are already tiny — liquidity (tight bid-ask spreads) matters as much as a basis point of MER. Nifty BeES is by far the most traded.",
+    note: "The costs here are already tiny - liquidity (tight bid-ask spreads) matters as much as a basis point of MER. Nifty BeES is by far the most traded.",
   },
 
   // ---------------- Canada ----------------
@@ -154,7 +154,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "KILO.TO", name: "Purpose Gold Bullion Fund", mer: 0.0028 },
       { symbol: "CGL.TO", name: "iShares Gold Bullion ETF", mer: 0.0055 },
     ],
-    note: "Gold is insurance, not an engine — a 5–10% cap is the classic rule.",
+    note: "Gold is insurance, not an engine - a 5–10% cap is the classic rule.",
   },
   {
     key: "ca-bond",
@@ -179,7 +179,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "XQQ.TO", name: "iShares NASDAQ 100 Index ETF (CAD-Hedged)", mer: 0.0039 },
       { symbol: "ZQQ.TO", name: "BMO NASDAQ 100 Equity Hedged to CAD Index ETF", mer: 0.0039 },
     ],
-    note: "Hedged (XQQ/ZQQ) vs unhedged (ZNQ) is a currency call, not a cost call — long holders often prefer unhedged.",
+    note: "Hedged (XQQ/ZQQ) vs unhedged (ZNQ) is a currency call, not a cost call - long holders often prefer unhedged.",
   },
   {
     key: "ca-dividend",
@@ -204,7 +204,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "ZSP.TO", name: "BMO S&P 500 Index ETF", mer: 0.0009 },
       { symbol: "XUS.TO", name: "iShares Core S&P 500 Index ETF", mer: 0.001 },
     ],
-    note: "US-listed VOO is cheaper still (~0.03%) but adds USD conversion costs and US estate-tax paperwork — usually only worth it for large accounts.",
+    note: "US-listed VOO is cheaper still (~0.03%) but adds USD conversion costs and US estate-tax paperwork - usually only worth it for large accounts.",
   },
   {
     key: "ca-allequity",
@@ -217,7 +217,7 @@ export const ETF_CATALOG: EtfCategory[] = [
       { symbol: "ZEQT.TO", name: "BMO All-Equity ETF", mer: 0.002 },
       { symbol: "VEQT.TO", name: "Vanguard All-Equity ETF Portfolio", mer: 0.0024 },
     ],
-    note: "One fund, the whole world, auto-rebalanced — the strongest 'own it for decades and do nothing' instrument on the TSX.",
+    note: "One fund, the whole world, auto-rebalanced - the strongest 'own it for decades and do nothing' instrument on the TSX.",
   },
   {
     key: "ca-intl",

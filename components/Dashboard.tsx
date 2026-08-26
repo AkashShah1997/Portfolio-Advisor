@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import type { AnalyzedHolding, Currency, FxRates, Holding, Scorecard, StockData, Verdict } from "@/lib/types";
 import { benchmarkCompare, portfolioSeries, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
-import { describeSnowflake, portfolioSnowflake } from "@/lib/snowflake";
+import { describeSnowflake, portfolioSnowflake, snowflakeLeaders } from "@/lib/snowflake";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
 import { loadUiMode, MARKET_META, saveUiMode, type Market, type UiMode } from "@/lib/store";
@@ -116,7 +116,7 @@ function BenchTip({
   if (!active || !payload?.length) return null;
   const val = (k: string) => {
     const v = payload.find((p) => p.dataKey === k)?.value;
-    return typeof v === "number" ? v.toFixed(0) : "—";
+    return typeof v === "number" ? v.toFixed(0) : "–";
   };
   return (
     <div className="bg-surface hairline rounded-lg px-3 py-2 shadow-sm text-[12px]">
@@ -192,6 +192,7 @@ export function Dashboard({
   const summary = useMemo(() => summarize(invRows, fx), [invRows, fx]);
   const series = useMemo(() => portfolioSeries(invRows, fx), [invRows, fx]);
   const pfFlake = useMemo(() => portfolioSnowflake(invRows, fx), [invRows, fx]);
+  const axisLeaders = useMemo(() => snowflakeLeaders(invRows), [invRows]);
 
   // ---- hero chart: value vs benchmark (indexed to 100) ----
   const [heroView, setHeroView] = useState<"value" | "bench">("value");
@@ -584,7 +585,7 @@ export function Dashboard({
                 </div>
                 <div className="text-[11px] text-muted text-right">
                   {heroView === "value"
-                    ? `your current holdings, valued over the last ${Math.round(series.length / 12)}y — not account history`
+                    ? `your current holdings, valued over the last ${Math.round(series.length / 12)}y - not account history`
                     : `both indexed to 100 at the common start · price only, dividends excluded on both sides`}
                 </div>
               </div>
@@ -670,7 +671,7 @@ export function Dashboard({
                 </>
               ) : benchRaw[benchSym] === "error" ? (
                 <p className="text-[12px] text-muted px-6 py-10">
-                  Couldn&apos;t fetch {meta.benchmark.label} history right now (often Yahoo throttling) — try again
+                  Couldn&apos;t fetch {meta.benchmark.label} history right now (often Yahoo throttling) - try again
                   in a minute.
                 </p>
               ) : (
@@ -719,7 +720,7 @@ export function Dashboard({
                   className={`ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 py-[1px] ${
                     tab === t.id ? "bg-white/25 text-white" : "bg-series-1/12 text-series-1"
                   }`}
-                  title={`${etfCount} ETF(s) held — analyzed on this tab`}
+                  title={`${etfCount} ETF(s) held - analyzed on this tab`}
                 >
                   {etfCount}
                 </span>
@@ -779,7 +780,7 @@ export function Dashboard({
                         No data
                       </Badge>
                       <span className="text-ink-2">
-                        {failed.map((r) => r.holding.yahooSymbol).join(", ")} — often Yahoo throttling; go back
+                        {failed.map((r) => r.holding.yahooSymbol).join(", ")} - often Yahoo throttling; go back
                         and re-analyze in a minute.
                       </span>
                     </div>
@@ -791,12 +792,32 @@ export function Dashboard({
                   </p>
                 </div>
                 {pfFlake && (
-                  <div className="w-full max-w-[260px] mx-auto md:mx-0">
+                  <div className="w-full max-w-[280px] mx-auto md:mx-0">
                     <Snowflake axes={pfFlake.axes} size="sm" title="portfolio snowflake" />
                     <p className="text-[11px] text-muted text-center leading-snug">
-                      Portfolio snowflake <InfoTip k="snowflake" /> — value-weighted across {pfFlake.covered} scored
+                      Portfolio snowflake <InfoTip k="snowflake" /> · value-weighted across {pfFlake.covered} scored
                       holding{pfFlake.covered === 1 ? "" : "s"}. {describeSnowflake(pfFlake.axes)}
                     </p>
+                    {/* who carries each arm */}
+                    <div className="mt-2 space-y-[3px]">
+                      <div className="text-[10.5px] text-muted uppercase tracking-wide">
+                        Who carries each arm
+                      </div>
+                      {axisLeaders.map((a) => (
+                        <div key={a.key} className="flex items-baseline gap-1.5 text-[10.5px] leading-tight">
+                          <span className="text-muted w-[52px] shrink-0">{a.label}</span>
+                          <span className="text-ink-2 min-w-0">
+                            {a.leaders.map((l, i) => (
+                              <span key={l.symbol}>
+                                {i > 0 && <span className="text-muted"> · </span>}
+                                <strong className="text-ink font-semibold">{l.symbol}</strong>{" "}
+                                <span className="tnum">{l.score}</span>
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -806,13 +827,13 @@ export function Dashboard({
             {uiMode === "all" && (
               <Card className="p-4">
                 <SectionTitle sub="Every holding placed by business quality + growth (up) vs valuation margin of safety (right). Bubble = weight. The masters live top-right. Watchlist names appear translucent.">
-                  Quality vs price — the Buffett matrix
+                  Quality vs price - the Buffett matrix
                 </SectionTitle>
                 <Matrix rows={rows} fx={fx} base={base} />
               </Card>
             )}
 
-            {/* allocation — narrowable to stocks-only or ETFs-only */}
+            {/* allocation - narrowable to stocks-only or ETFs-only */}
             <div className="grid lg:grid-cols-2 gap-4">
               <Card className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -838,11 +859,11 @@ export function Dashboard({
               </Card>
               <div className="space-y-4">
                 <Card className="p-4">
-                  <SectionTitle>Geography{allocFilter !== "all" ? ` — ${allocFilter}` : ""}</SectionTitle>
+                  <SectionTitle>Geography{allocFilter !== "all" ? ` - ${allocFilter}` : ""}</SectionTitle>
                   <StackedSplit items={allocSummary.byCountry} format={(v) => fmtMoney(v, base, true)} />
                 </Card>
                 <Card className="p-4">
-                  <SectionTitle>Sectors{allocFilter !== "all" ? ` — ${allocFilter}` : ""}</SectionTitle>
+                  <SectionTitle>Sectors{allocFilter !== "all" ? ` - ${allocFilter}` : ""}</SectionTitle>
                   <HBars items={allocSummary.bySector} format={(v) => fmtMoney(v, base, true)} maxBars={8} />
                 </Card>
               </div>
@@ -879,7 +900,7 @@ export function Dashboard({
             {/* stock cards */}
             <div>
               <SectionTitle sub="Click a card for the full 5-year breakdown: pillar scores, every check with evidence, intrinsic-value band, the since-you-bought fundamentals journey, ratio history, and charts.">
-                Holdings — deep dive
+                Holdings - deep dive
               </SectionTitle>
               <Stagger>
                 <div className="space-y-3">
@@ -944,7 +965,7 @@ export function Dashboard({
       </Switcher>
 
       <p className="text-[11.5px] text-muted leading-relaxed border-t border-grid pt-3">
-        FX: {fx.source} · Data: Yahoo Finance (free, unofficial; figures can lag or contain errors — verify before
+        FX: {fx.source} · Data: Yahoo Finance (free, unofficial; figures can lag or contain errors - verify before
         acting). Everything you import stays in this browser. This tool encodes public value-investing principles as
         arithmetic checks; it is analysis to support your own judgment, <strong>not financial advice</strong>, and it
         knows nothing about your taxes, cash needs, or risk tolerance.

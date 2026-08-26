@@ -3,10 +3,10 @@ import { buildScorecard } from "./scorecard";
 import type { Candle } from "./history";
 
 /**
- * Backtest — "would this engine have helped?" done honestly:
+ * Backtest - "would this engine have helped?" done honestly:
  *
  * We re-run the SAME scorecard as of a past cutoff using ONLY information that
- * existed then — fiscal years ending before the cutoff, the price on that day,
+ * existed then - fiscal years ending before the cutoff, the price on that day,
  * and valuation ratios rebuilt from those two (P/E-then, P/B-then, market
  * cap-then). Anything unknowable then (dividend yield, TTM fields, 52-week
  * range) is deliberately left blank, so those checks honestly go "n/a" instead
@@ -16,7 +16,7 @@ import type { Candle } from "./history";
  * Stated limits (shown in the UI, not hidden): a handful of names is a sanity
  * check, not statistics; returns are price-only (dividends excluded on both
  * sides); and the sample only contains names that still exist and that you
- * track — survivors. Free Yahoo data carries ~5-6 fiscal years, so cutoffs up
+ * track - survivors. Free Yahoo data carries ~5-6 fiscal years, so cutoffs up
  * to ~3 years back keep enough history (≥2 years) to score with.
  */
 
@@ -88,7 +88,7 @@ export function buildAsOf(data: StockData, cutoff: string): StockData | null {
       last.equity && last.equity > 0 && shares && shares > 0 ? priceThen / (last.equity / shares) : undefined,
     fcfTTM: last.fcf,
     totalDebtNow: last.totalDebt,
-    // unknowable then — left blank ON PURPOSE so those checks go n/a:
+    // unknowable then - left blank ON PURPOSE so those checks go n/a:
     // dividendYield, payoutRatio, pegRatio, roeTTM, profitMarginTTM,
     // revenue/earningsGrowthTTM, currentRatioNow, 52-week range, analyst fields
   };
@@ -194,14 +194,14 @@ function readout(buckets: BacktestBucket[], benchCagr: number | undefined, years
 
   if (qa !== undefined && wa !== undefined) {
     return qa > wa
-      ? `${yearsBack} year${yearsBack > 1 ? "s" : ""} ago, the engine's quality names went on to compound ${pctS(qa)}/yr while its warning list did ${pctS(wa)}/yr — the discipline pointed the right way on this sample.${bench}`
-      : `On this (small) sample the warning list (${pctS(wa)}/yr) actually beat the quality names (${pctS(qa)}/yr) since the cutoff — a useful humility check: a handful of names over ${yearsBack} year${yearsBack > 1 ? "s" : ""} proves little either way.${bench}`;
+      ? `${yearsBack} year${yearsBack > 1 ? "s" : ""} ago, the engine's quality names went on to compound ${pctS(qa)}/yr while its warning list did ${pctS(wa)}/yr - the discipline pointed the right way on this sample.${bench}`
+      : `On this (small) sample the warning list (${pctS(wa)}/yr) actually beat the quality names (${pctS(qa)}/yr) since the cutoff - a useful humility check: a handful of names over ${yearsBack} year${yearsBack > 1 ? "s" : ""} proves little either way.${bench}`;
   }
   if (qa !== undefined) {
     return `The names the engine rated quality ${yearsBack} year${yearsBack > 1 ? "s" : ""} ago compounded ${pctS(qa)}/yr since.${bench}`;
   }
   if (wa !== undefined) {
-    return `Only warning-list names had enough history to score at this cutoff — they returned ${pctS(wa)}/yr since.${bench}`;
+    return `Only warning-list names had enough history to score at this cutoff - they returned ${pctS(wa)}/yr since.${bench}`;
   }
-  return "Not enough pre-cutoff history to score anything — try a nearer cutoff, or analyze more names first.";
+  return "Not enough pre-cutoff history to score anything - try a nearer cutoff, or analyze more names first.";
 }

@@ -6,7 +6,7 @@
  * Reality checks baked in:
  *  - 13Fs cover US-listed long positions only, filed up to 45 days after
  *    quarter end. They can't show shorts, hedges, or non-US books.
- *  - Values are full USD (per the SEC's post-2022 rules — we only read the
+ *  - Values are full USD (per the SEC's post-2022 rules - we only read the
  *    two most recent filings, so no thousands-scaling is needed).
  *  - Option positions (putCall) are excluded from conviction math.
  */
@@ -25,7 +25,7 @@ export const SUPERINVESTORS: Superinvestor[] = [
     cik: "0001067983",
     name: "Berkshire Hathaway",
     manager: "Warren Buffett",
-    blurb: "The reference compounder — durable moats held for decades.",
+    blurb: "The reference compounder - durable moats held for decades.",
     record: "~20%/yr over ~60 years",
   },
   {
@@ -67,7 +67,7 @@ export const SUPERINVESTORS: Superinvestor[] = [
     cik: "0001061768",
     name: "Baupost Group",
     manager: "Seth Klarman",
-    blurb: "Margin of Safety, literally — price discipline above all.",
+    blurb: "Margin of Safety, literally - price discipline above all.",
     record: "~40 years of risk-first value",
   },
   {

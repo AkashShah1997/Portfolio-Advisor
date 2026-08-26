@@ -28,7 +28,7 @@ export { HISTORY_RANGES } from "./history";
 export type { Candle, HistoryRange } from "./history";
 
 /**
- * Yahoo data layer — hardened for the real world.
+ * Yahoo data layer - hardened for the real world.
  *
  * Free Yahoo endpoints fail in three characteristic ways: rate limiting
  * (429/999/"Too Many Requests"), the cookie/crumb handshake breaking
@@ -44,7 +44,7 @@ export type { Candle, HistoryRange } from "./history";
  *     quoteSummary statement history, first one that yields rows wins.
  *  3. Quotes fall back to the chart endpoint's metadata (also crumb-free)
  *     when the quote/crumb handshake fails.
- *  4. Schema validation is disabled on library calls — a new Yahoo field must
+ *  4. Schema validation is disabled on library calls - a new Yahoo field must
  *     never turn a valid response into an error.
  */
 
@@ -237,7 +237,7 @@ export async function getStockData(symbol: string): Promise<StockData> {
     quote.fiftyTwoWeekHigh = q.fiftyTwoWeekHigh;
     quote.fiftyTwoWeekLow = q.fiftyTwoWeekLow;
   } catch (e) {
-    errors.push(`Quote endpoint failed (${(e as Error).message.slice(0, 80)}) — used chart fallback.`);
+    errors.push(`Quote endpoint failed (${(e as Error).message.slice(0, 80)}) - used chart fallback.`);
     try {
       Object.assign(quote, await politely(() => quoteViaChart(symbol)));
     } catch (e2) {
@@ -424,7 +424,7 @@ export async function getOwnership(symbol: string): Promise<OwnershipPayload> {
 /**
  * Fund-level data for an ETF: expense ratio (MER), AUM, category, trailing &
  * annual returns, risk stats, top holdings and sector weights. Coverage is
- * strong for US/Canadian ETFs, partial for NSE ETFs — absent fields stay
+ * strong for US/Canadian ETFs, partial for NSE ETFs - absent fields stay
  * undefined and the caller says so honestly.
  */
 export async function getEtfData(symbol: string): Promise<EtfData> {
@@ -435,9 +435,9 @@ export async function getEtfData(symbol: string): Promise<EtfData> {
   try {
     qs = await politely(() => yf.quoteSummary(symbol, { modules: FULL as never }, NO_VALIDATE));
   } catch (e) {
-    // Many NSE listings reject the fund modules wholesale — fall back to basics
+    // Many NSE listings reject the fund modules wholesale - fall back to basics
     // so the client can still merge in the curated fee table + price history.
-    note = `Fund modules unavailable (${(e as Error).message.slice(0, 60)}) — basic data only.`;
+    note = `Fund modules unavailable (${(e as Error).message.slice(0, 60)}) - basic data only.`;
     qs = await politely(() =>
       yf.quoteSummary(symbol, { modules: ["price", "defaultKeyStatistics", "summaryDetail"] as never }, NO_VALIDATE)
     );

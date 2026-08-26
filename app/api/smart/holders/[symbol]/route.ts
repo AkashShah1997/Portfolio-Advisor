@@ -3,7 +3,7 @@ import { getOwnership, isThrottleError } from "@/lib/yahoo";
 
 export const maxDuration = 30;
 
-// Warm-lambda memory cache — ownership data moves quarterly.
+// Warm-lambda memory cache - ownership data moves quarterly.
 const cache = new Map<string, { at: number; body: unknown }>();
 const TTL_MS = 12 * 3600 * 1000;
 

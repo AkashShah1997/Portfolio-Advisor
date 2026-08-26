@@ -11,7 +11,7 @@ import { Badge, Card, SectionTitle } from "./ui";
 import { Stagger, StaggerItem } from "./anim";
 
 /**
- * The decision board — the straight answer to "I've held this for years and
+ * The decision board - the straight answer to "I've held this for years and
  * it's done nothing": every holding sorted into Exit / Trim / Accumulate /
  * Hold with the full evidence trail, and the capital involved in each pile.
  */
@@ -74,7 +74,7 @@ export function DecisionBoard({
             {fmtMoney(accVal, base, true)}
           </div>
           <div className="text-[11.5px] text-muted">
-            worth accumulating — recycle exits here or via the screeners
+            worth accumulating - recycle exits here or via the screeners
           </div>
         </Card>
       </div>
@@ -183,10 +183,10 @@ export function DecisionBoard({
                           <button
                             onClick={() => void copyDecisionPrompt(r)}
                             className="text-[12px] text-series-1 hover:underline mt-2 no-print"
-                            title="Copies a buy/hold/sell decision prompt with all the data — paste into any AI for a second opinion"
+                            title="Copies a buy/hold/sell decision prompt with all the data - paste into any AI for a second opinion"
                           >
                             {copied === r.holding.id
-                              ? "✓ copied — paste into any AI"
+                              ? "✓ copied - paste into any AI"
                               : "⚖ Second opinion: copy decision prompt"}
                           </button>
                         </div>
@@ -198,7 +198,7 @@ export function DecisionBoard({
 
               {a === "EXIT" && items.length > 0 && (
                 <p className="text-[12px] text-ink-2 mt-3 italic">
-                  Selling is half a decision. The other half — where the money goes — lives in the{" "}
+                  Selling is half a decision. The other half - where the money goes - lives in the{" "}
                   <strong>upgrade candidates below</strong> and the <strong>Screeners</strong> tab. Mind
                   taxes and friction; a great business having a bad year is a buy, not a sell.
                 </p>
@@ -208,7 +208,7 @@ export function DecisionBoard({
         })}
 
       <p className="text-[11.5px] text-muted italic">
-        Decisions are mechanical readings of public numbers on a 5-year horizon — a disciplined starting
+        Decisions are mechanical readings of public numbers on a 5-year horizon - a disciplined starting
         point, not advice. You know your taxes, cash needs and conviction; the board doesn&apos;t.
       </p>
     </div>

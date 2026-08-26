@@ -32,7 +32,7 @@ export function guessYahooSymbol(
 ): string {
   let s = rawSymbol.toUpperCase().trim();
   if (!s) return s;
-  // Already has a Yahoo-style suffix — trust it.
+  // Already has a Yahoo-style suffix - trust it.
   if (/\.(NS|BO|TO|V|NE|CN)$/.test(s)) return s;
 
   if (broker === "zerodha") {
@@ -57,7 +57,7 @@ export const CURRENCY_SYMBOL: Record<Currency, string> = {
 };
 
 export function fmtMoney(v: number | undefined | null, currency: Currency, compact = false): string {
-  if (v === undefined || v === null || Number.isNaN(v)) return "—";
+  if (v === undefined || v === null || Number.isNaN(v)) return "–";
   const sym = CURRENCY_SYMBOL[currency];
   const sign = v < 0 ? "-" : "";
   const abs = Math.abs(v);
@@ -80,11 +80,11 @@ export function fmtMoney(v: number | undefined | null, currency: Currency, compa
 }
 
 export function fmtPct(v: number | undefined | null, digits = 1): string {
-  if (v === undefined || v === null || Number.isNaN(v)) return "—";
+  if (v === undefined || v === null || Number.isNaN(v)) return "–";
   return `${(v * 100).toFixed(digits)}%`;
 }
 
 export function fmtNum(v: number | undefined | null, digits = 2): string {
-  if (v === undefined || v === null || Number.isNaN(v)) return "—";
+  if (v === undefined || v === null || Number.isNaN(v)) return "–";
   return v.toFixed(digits);
 }

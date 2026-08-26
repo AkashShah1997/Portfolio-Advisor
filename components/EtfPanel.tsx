@@ -18,7 +18,7 @@ import { fmtMoney, fmtPct } from "@/lib/symbols";
 import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 
 /**
- * The ETFs tab — fee-first fund analysis: what each held ETF costs, what that
+ * The ETFs tab - fee-first fund analysis: what each held ETF costs, what that
  * compounds into, which to increase / reduce, and the cheaper same-index twin
  * (the MER comparison). Stock pillars don't apply to fund units; this is the
  * Bogle lens instead of the Buffett lens.
@@ -30,7 +30,7 @@ const short = (sym: string) => sym.replace(/\.(NS|BO|TO|V)$/i, "");
 
 /** AUM in the fund's own currency, without a pointless ".00". */
 function fmtAum(v: number | undefined, currency: string | undefined, fallback: Currency): string {
-  if (v === undefined) return "—";
+  if (v === undefined) return "–";
   const cur = (currency === "INR" || currency === "CAD" || currency === "USD" ? currency : fallback) as Currency;
   return fmtMoney(v, cur, true).replace(/\.00(?=\s|$)/, "");
 }
@@ -155,7 +155,7 @@ export function EtfPanel({
   // Held funds, valued in base currency. When Yahoo's fund feed fails (or
   // returns a shell), we still analyze: identity/price from the quote we
   // already fetched, returns from its own price history, MER from the curated
-  // table — labeled "limited data", never a dead card.
+  // table - labeled "limited data", never a dead card.
   const held = useMemo<{ input: HeldEtfInput; row: AnalyzedHolding }[]>(() => {
     const out: { input: HeldEtfInput; row: AnalyzedHolding }[] = [];
     for (const r of etfRows) {
@@ -193,7 +193,7 @@ export function EtfPanel({
     return m;
   }, [assessments]);
 
-  // extras (inspected, not held) — assessed alone so they can't fake overlaps
+  // extras (inspected, not held) - assessed alone so they can't fake overlaps
   const extraAssessed = useMemo(
     () =>
       extras
@@ -241,8 +241,8 @@ export function EtfPanel({
     <div className="space-y-4">
       {/* header / summary */}
       <Card className="p-4">
-        <SectionTitle sub="Fund units are judged the Bogle way — on fees, breadth, duplication and size — not on stock pillars. MERs come from Yahoo when available, else from a curated table (approximate).">
-          Your ETFs — cost-first analysis
+        <SectionTitle sub="Fund units are judged the Bogle way - on fees, breadth, duplication and size - not on stock pillars. MERs come from Yahoo when available, else from a curated table (approximate).">
+          Your ETFs - cost-first analysis
         </SectionTitle>
         {etfRows.length === 0 ? (
           <p className="text-[13px] text-ink-2">
@@ -258,7 +258,7 @@ export function EtfPanel({
             </span>
             <span>
               Weighted MER <InfoTip k="mer" />{" "}
-              <strong className="text-ink tnum">{wMer !== undefined ? fmtPct(wMer, 2) : "—"}</strong>
+              <strong className="text-ink tnum">{wMer !== undefined ? fmtPct(wMer, 2) : "–"}</strong>
             </span>
             <span>
               Est. fund fees <strong className="text-ink tnum">{fmtMoney(annualFees, base, true)}</strong>/yr{" "}
@@ -273,7 +273,7 @@ export function EtfPanel({
         )}
         {anyThrottled && (
           <p className="text-[12px] text-[#8a6100] mt-2">
-            Yahoo rate-limited some fund lookups — switch tabs and back in a minute to retry.
+            Yahoo rate-limited some fund lookups - switch tabs and back in a minute to retry.
           </p>
         )}
       </Card>
@@ -319,14 +319,14 @@ export function EtfPanel({
             <div className="flex flex-wrap gap-x-7 gap-y-3 mt-3">
               <FundStat
                 label={`MER${a.merSource === "catalog" ? " (approx)" : ""}`}
-                value={a.effMer !== undefined ? fmtPct(a.effMer, 2) : "—"}
+                value={a.effMer !== undefined ? fmtPct(a.effMer, 2) : "–"}
                 sub={bm.label}
                 tipKey="mer"
                 tone={bm.tone === "neutral" ? undefined : bm.tone}
               />
               <FundStat
                 label="Your fees"
-                value={a.annualFee !== undefined ? `${fmtMoney(a.annualFee, base, true)}/yr` : "—"}
+                value={a.annualFee !== undefined ? `${fmtMoney(a.annualFee, base, true)}/yr` : "–"}
                 sub={a.drag10y !== undefined ? `≈ ${fmtMoney(a.drag10y, base, true)} over 10y` : undefined}
                 tipKey="feeDrag"
               />
@@ -406,7 +406,7 @@ export function EtfPanel({
                   </table>
                 </div>
                 <p className="text-[11px] text-muted italic mt-1.5">
-                  MERs approximate as of {MER_ASOF} — confirm on the fund page before switching. Selling to switch
+                  MERs approximate as of {MER_ASOF} - confirm on the fund page before switching. Selling to switch
                   can trigger capital-gains tax; weigh that against the fee saved.
                 </p>
               </div>
@@ -414,7 +414,7 @@ export function EtfPanel({
 
             {f.degraded && (
               <p className="text-[11px] text-muted italic mt-2">
-                Yahoo&apos;s fund feed had little for this listing — fee from the curated table (approx, as of{" "}
+                Yahoo&apos;s fund feed had little for this listing - fee from the curated table (approx, as of{" "}
                 {MER_ASOF}), returns computed from its own price history (dividends excluded). The verdict logic
                 is unchanged.
               </p>
@@ -459,8 +459,8 @@ export function EtfPanel({
                 ) : (
                   <span className="text-[#8a6100]">
                     {st === "throttled"
-                      ? "Yahoo rate-limited this lookup — switch tabs and back in a minute to retry."
-                      : "No fund data from Yahoo and this symbol isn't in the curated table — check it on the AMC's page."}
+                      ? "Yahoo rate-limited this lookup - switch tabs and back in a minute to retry."
+                      : "No fund data from Yahoo and this symbol isn't in the curated table - check it on the AMC's page."}
                   </span>
                 )}
               </div>
@@ -471,8 +471,8 @@ export function EtfPanel({
       {/* no ETFs → starter table */}
       {etfRows.length === 0 && (
         <Card className="p-4">
-          <SectionTitle sub={`The boring, brilliant defaults — broad indices at rock-bottom fees (approximate MERs as of ${MER_ASOF}).`}>
-            Classic low-cost building blocks — {meta.label}
+          <SectionTitle sub={`The boring, brilliant defaults - broad indices at rock-bottom fees (approximate MERs as of ${MER_ASOF}).`}>
+            Classic low-cost building blocks - {meta.label}
           </SectionTitle>
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
@@ -490,7 +490,7 @@ export function EtfPanel({
                   <tr key={c.key} className="border-b border-grid/50 align-top">
                     <td className="py-2 pr-3 font-medium">{c.label}</td>
                     <td className="py-2 pr-3 text-ink-2">
-                      {c.options.slice(0, 3).map((o) => `${short(o.symbol)} — ${o.name}`).join(" · ")}
+                      {c.options.slice(0, 3).map((o) => `${short(o.symbol)} - ${o.name}`).join(" · ")}
                     </td>
                     <td className="py-2 text-right tnum whitespace-nowrap">
                       {c.options.slice(0, 3).map((o) => fmtPct(o.mer, 2)).join(" / ")}
@@ -505,7 +505,7 @@ export function EtfPanel({
 
       {/* inspect any ETF */}
       <Card className="p-4">
-        <SectionTitle sub="Fetch the fee, size, returns and holdings of any fund before you buy it — same analysis, no position needed.">
+        <SectionTitle sub="Fetch the fee, size, returns and holdings of any fund before you buy it - same analysis, no position needed.">
           Inspect any ETF
         </SectionTitle>
         <div className="flex flex-wrap items-end gap-2">
@@ -543,7 +543,7 @@ export function EtfPanel({
               <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-ink-2 tnum mt-1.5">
                 <span>
                   MER{a.merSource === "catalog" ? " (approx)" : ""}{" "}
-                  <strong className="text-ink">{a.effMer !== undefined ? fmtPct(a.effMer, 2) : "—"}</strong>{" "}
+                  <strong className="text-ink">{a.effMer !== undefined ? fmtPct(a.effMer, 2) : "–"}</strong>{" "}
                   <span className="text-muted">({bm.label})</span>
                 </span>
                 <span>
@@ -566,16 +566,16 @@ export function EtfPanel({
         )}
         {extras.some((s) => (funds[s] === "error" || funds[s] === "throttled") && !catalogMer(s)) && (
           <p className="text-[12px] text-[#8a6100] mt-2">
-            Some lookups failed — check the symbol (funds need the exchange suffix, e.g. .NS / .TO) or retry in a
+            Some lookups failed - check the symbol (funds need the exchange suffix, e.g. .NS / .TO) or retry in a
             minute.
           </p>
         )}
       </Card>
 
       <p className="text-[11px] text-muted italic">
-        Verdicts are mechanical starting points from public fee/size/duplication facts — not personal advice. MERs
+        Verdicts are mechanical starting points from public fee/size/duplication facts - not personal advice. MERs
         marked “approx” come from a hand-checked table (as of {MER_ASOF}); live Yahoo figures are used when present.
-        Switching funds can realize capital gains — weigh tax against fees before acting.
+        Switching funds can realize capital gains - weigh tax against fees before acting.
       </p>
     </div>
   );

@@ -15,7 +15,7 @@ import { Badge, Card, SectionTitle, Spinner } from "./ui";
 import { EASE, Stagger, StaggerItem } from "./anim";
 
 /**
- * Upgrade ideas — the "remove weeds, water flowers" panel. Scan state is owned
+ * Upgrade ideas - the "remove weeds, water flowers" panel. Scan state is owned
  * by the dashboard and shared with the Screeners tab; results are cached on
  * this device for 24h, so a scan only fetches what's missing or stale.
  */
@@ -119,7 +119,7 @@ export function DiscoverPanel({
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <SectionTitle sub="Scores the market universe (~100–150 widely-traded names per market) with the exact same scorecard — so weeds and flowers are judged by one standard. Results are cached on this device for 24h; a scan only fetches what's missing. Candidates, not recommendations.">
+        <SectionTitle sub="Scores the market universe (~100–150 widely-traded names per market) with the exact same scorecard - so weeds and flowers are judged by one standard. Results are cached on this device for 24h; a scan only fetches what's missing. Candidates, not recommendations.">
           Scan the market for stronger businesses
         </SectionTitle>
         <div className="flex flex-wrap items-center gap-2">
@@ -182,7 +182,7 @@ export function DiscoverPanel({
         {scan?.status === "running" && (
           <div className="mt-3">
             <div className="flex items-center gap-2 text-[12.5px] text-ink-2">
-              <Spinner /> Scoring {country} — {scan.done}/{scan.total} fetched (free Yahoo data, gently
+              <Spinner /> Scoring {country} - {scan.done}/{scan.total} fetched (free Yahoo data, gently
               throttled; results appear as they land)
             </div>
             <div className="h-[6px] rounded-full bg-page hairline overflow-hidden mt-2">
@@ -200,7 +200,7 @@ export function DiscoverPanel({
           <div className="flex flex-wrap items-center gap-2 mt-3 text-[12.5px] bg-status-warning/10 border border-status-warning/40 rounded-lg px-3 py-2">
             <span className="text-[#8a6100]">
               {scan.failed.length} name{scan.failed.length === 1 ? "" : "s"} failed
-              {scan.throttled ? " — Yahoo was rate-limiting; wait ~1 minute" : ""} (
+              {scan.throttled ? " - Yahoo was rate-limiting; wait ~1 minute" : ""} (
               {scan.failed.slice(0, 5).join(", ")}
               {scan.failed.length > 5 ? "…" : ""})
             </span>
@@ -223,7 +223,7 @@ export function DiscoverPanel({
       {/* Upgrade ideas for weak holdings */}
       {weak.length > 0 && (
         <Card className="p-4">
-          <SectionTitle sub="“Selling your flowers and watering your weeds” is Lynch's cardinal sin — this flips it: for each holding the screener distrusts, same-market businesses that currently screen far stronger.">
+          <SectionTitle sub="“Selling your flowers and watering your weeds” is Lynch's cardinal sin - this flips it: for each holding the screener distrusts, same-market businesses that currently screen far stronger.">
             Upgrade candidates for your weakest holdings
           </SectionTitle>
           <div className="space-y-3">
@@ -273,7 +273,7 @@ export function DiscoverPanel({
             })}
           </div>
           <p className="text-[11px] text-muted mt-3 italic">
-            Swapping means selling — mind taxes, friction, and whether the weakness is temporary (a
+            Swapping means selling - mind taxes, friction, and whether the weakness is temporary (a
             great business having a bad year is a buy, not a sell).
           </p>
         </Card>
@@ -347,7 +347,7 @@ export function DiscoverPanel({
           </Stagger>
           {buyZoneOnly && shown.length === 0 && (
             <p className="text-[12.5px] text-muted">
-              Nothing in the scanned universe is in the buy zone right now — Damani would call that a
+              Nothing in the scanned universe is in the buy zone right now - Damani would call that a
               signal in itself. Patience is a position.
             </p>
           )}

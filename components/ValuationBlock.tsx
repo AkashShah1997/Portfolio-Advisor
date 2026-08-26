@@ -10,7 +10,7 @@ import { EASE } from "./anim";
 
 /**
  * Intrinsic-value strip: a price-vs-value band with buy zone, fair band,
- * your average cost, and the current price — plus the methods behind it.
+ * your average cost, and the current price - plus the methods behind it.
  */
 export function ValuationBlock({
   data,
@@ -30,7 +30,7 @@ export function ValuationBlock({
       <div className="rounded-lg bg-page hairline p-3">
         <div className="text-[12px] font-semibold text-ink-2 mb-1">Intrinsic value (rough)</div>
         <p className="text-[12px] text-muted">
-          Not enough fundamental data for a mechanical estimate — common for ETFs, very new
+          Not enough fundamental data for a mechanical estimate - common for ETFs, very new
           listings, or sparse coverage. Judge this one qualitatively.
         </p>
       </div>
@@ -140,7 +140,7 @@ export function ValuationBlock({
         {val.assumptions.growth !== undefined
           ? ` (growth ${fmtPct(val.assumptions.growth)}, discount ${fmtPct(val.assumptions.discount, 0)})`
           : ""}
-        . A sanity anchor, not a target — Buffett: “It is better to be approximately right than precisely wrong.”
+        . A sanity anchor, not a target - Buffett: “It is better to be approximately right than precisely wrong.”
       </p>
     </div>
   );

@@ -62,7 +62,7 @@ export function ImportPanel({
         />
       </div>
       <p className="text-[11.5px] text-muted mt-3">
-        🔒 The file is parsed in your browser and saved to <strong>this device only</strong> — it is
+        🔒 The file is parsed in your browser and saved to <strong>this device only</strong> - it is
         never uploaded anywhere. Only stock <em>symbols</em> go out, to fetch public price data.
       </p>
     </div>

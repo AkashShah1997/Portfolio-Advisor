@@ -3,7 +3,7 @@ import { getSmartMoves } from "@/lib/edgar";
 
 export const maxDuration = 60;
 
-/** Superinvestor 13F conviction moves — free SEC EDGAR data, cached 6h in-process. */
+/** Superinvestor 13F conviction moves - free SEC EDGAR data, cached 6h in-process. */
 export async function GET() {
   try {
     return NextResponse.json(await getSmartMoves());

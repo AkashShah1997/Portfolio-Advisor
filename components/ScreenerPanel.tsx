@@ -26,7 +26,7 @@ import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 import { EASE } from "./anim";
 
 /**
- * Long-term screeners — classic screens (Two-year keepers, Coffee Can, Magic
+ * Long-term screeners - classic screens (Two-year keepers, Coffee Can, Magic
  * Formula, QGLP, GARP, fortress, dividends, buy-zone) plus a raw-fundamentals
  * custom builder, run over the scanned market universe, any pasted list, and
  * your own holdings.
@@ -106,7 +106,7 @@ export function ScreenerPanel({
     return c;
   }, [dataset]);
 
-  // the "almost every buy list" strip — top names by screen agreement
+  // the "almost every buy list" strip - top names by screen agreement
   const topConsensus = useMemo(() => {
     if (!dataset.length) return [];
     const c = consensusOf(dataset);
@@ -160,7 +160,7 @@ export function ScreenerPanel({
     }
   };
 
-  const num = (v: number | undefined, d = 1) => (v === undefined ? "—" : v.toFixed(d));
+  const num = (v: number | undefined, d = 1) => (v === undefined ? "–" : v.toFixed(d));
   const setC = (k: keyof CustomFilter, raw: string, scale = 1) =>
     setCustom((c) => ({ ...c, [k]: raw === "" ? undefined : Number(raw) / scale }));
 
@@ -168,7 +168,7 @@ export function ScreenerPanel({
     <div className="space-y-4">
       {/* dataset status */}
       <Card className="p-4">
-        <SectionTitle sub="Screens run over your holdings + the scanned market universe + any pasted list — every name scored by the same 4-pillar engine, cached on this device for 24h. The ponds now cover the Nifty 500, the full TSX Composite and the S&P 500 + MidCap 400 — a big FIRST scan takes a while (progress saves as it goes; stop and resume freely), and refreshes only fetch what's missing or stale.">
+        <SectionTitle sub="Screens run over your holdings + the scanned market universe + any pasted list - every name scored by the same 4-pillar engine, cached on this device for 24h. The ponds now cover the Nifty 500, the full TSX Composite and the S&P 500 + MidCap 400 - a big FIRST scan takes a while (progress saves as it goes; stop and resume freely), and refreshes only fetch what's missing or stale.">
           Screening universe
         </SectionTitle>
         <div className="flex flex-wrap items-center gap-2">
@@ -227,7 +227,7 @@ export function ScreenerPanel({
           <div className="flex flex-wrap items-center gap-2 mt-3 text-[12.5px] bg-status-warning/10 border border-status-warning/40 rounded-lg px-3 py-2">
             <span className="text-[#8a6100]">
               {totalFailed} name{totalFailed === 1 ? "" : "s"} failed to fetch
-              {anyThrottled ? " — Yahoo was rate-limiting; wait ~1 minute" : ""}.
+              {anyThrottled ? " - Yahoo was rate-limiting; wait ~1 minute" : ""}.
             </span>
             {scanKeys
               .filter((k) => (scans[k]?.failed.length ?? 0) > 0)
@@ -263,7 +263,7 @@ export function ScreenerPanel({
         {/* custom list scan */}
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <label className="text-[12px] text-ink-2 flex-1 min-w-[260px]">
-            Scan your own list (any Yahoo symbols — comma / space separated, ≤100)
+            Scan your own list (any Yahoo symbols - comma / space separated, ≤100)
             <input
               value={customList}
               onChange={(e) => setCustomList(e.target.value)}
@@ -316,14 +316,14 @@ export function ScreenerPanel({
       {/* active screen */}
       <Card className="p-4">
         {active !== "custom" && screen && (
-          <SectionTitle sub={`${screen.blurb} — ${screen.criteria}.`}>
+          <SectionTitle sub={`${screen.blurb} - ${screen.criteria}.`}>
             {screen.name} <span className="text-[12px] font-normal text-muted">· {screen.master}</span>
           </SectionTitle>
         )}
         {active === "custom" && (
           <>
             <SectionTitle sub="Blank = no constraint. Percentages are annual. ROCE uses ROE for financials; D/E and interest cover are skipped for financials. “P/E at least” filters out too-cheap-to-be-true traps.">
-              Custom screen — raw fundamentals, your thresholds
+              Custom screen - raw fundamentals, your thresholds
             </SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 mb-3 text-[12.5px]">
               {(
@@ -389,12 +389,12 @@ export function ScreenerPanel({
             </div>
             <p className="text-[11.5px] text-muted mb-3">
               A sensible “minimum 2-year hold” template: score ≥ 60 · EPS CAGR ≥ 8% · interest cover ≥ 4 ·
-              max red flags 0 · no loss years — or just use the <strong>Two-year keepers</strong> preset.
+              max red flags 0 · no loss years - or just use the <strong>Two-year keepers</strong> preset.
             </p>
           </>
         )}
 
-        {/* size filter — applies to every screen */}
+        {/* size filter - applies to every screen */}
         {dataset.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mb-3 text-[12.5px]">
             <span className="text-ink-2">
@@ -422,14 +422,14 @@ export function ScreenerPanel({
 
         {dataset.length === 0 ? (
           <p className="text-[13px] text-muted">
-            Scan a market (or paste a list) above to populate the screens — your own analyzed holdings are
+            Scan a market (or paste a list) above to populate the screens - your own analyzed holdings are
             included automatically.
           </p>
         ) : results.length === 0 ? (
           <p className="text-[13px] text-muted">
             {capFilter !== "all" && allResults.length > 0
-              ? `Nothing ${capFilter}-cap passes this screen right now — ${allResults.length} name${allResults.length === 1 ? "" : "s"} pass at other sizes.`
-              : "Nothing passes right now. Damani would call that information, not failure — patience is a position."}
+              ? `Nothing ${capFilter}-cap passes this screen right now - ${allResults.length} name${allResults.length === 1 ? "" : "s"} pass at other sizes.`
+              : "Nothing passes right now. Damani would call that information, not failure - patience is a position."}
           </p>
         ) : (
           <>
@@ -501,7 +501,7 @@ export function ScreenerPanel({
                         </td>
                         <td className="py-2 pr-3 text-right">
                           <span className={`tnum ${(r.mos ?? -1) >= 0 ? "text-success-text" : "text-ink-2"}`} title={vs.label}>
-                            {r.mos === undefined ? "—" : `${r.mos >= 0 ? "-" : "+"}${fmtNum(Math.abs(r.mos) * 100, 0)}%`}
+                            {r.mos === undefined ? "–" : `${r.mos >= 0 ? "-" : "+"}${fmtNum(Math.abs(r.mos) * 100, 0)}%`}
                           </span>
                         </td>
                         <td className="py-2 pr-2">
@@ -540,7 +540,7 @@ export function ScreenerPanel({
         )}
         <p className="text-[11px] text-muted italic mt-3">
           “vs fair value”: −20% means the price sits 20% BELOW the rough mechanical estimate (a margin of
-          safety), + means above it. Screens are starting points — read the business before the checklist.
+          safety), + means above it. Screens are starting points - read the business before the checklist.
           High score ≠ buy signal.
         </p>
       </Card>

@@ -95,7 +95,7 @@ export function Spinner() {
 }
 
 /**
- * InfoTip — the ⓘ beside a metric. Hover or keyboard-focus opens a small card
+ * InfoTip - the ⓘ beside a metric. Hover or keyboard-focus opens a small card
  * explaining what the ratio means and which direction is better (from
  * lib/glossary). Rendered through a portal with fixed positioning so it never
  * gets clipped by scrollable tables or card overflow. Fully accessible: the

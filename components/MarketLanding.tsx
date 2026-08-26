@@ -41,7 +41,7 @@ export function MarketLanding({
         <p className="text-[14.5px] text-ink-2 mt-4 max-w-xl mx-auto leading-relaxed">
           Pick a market, import that broker&apos;s CSV, and get Buffett · Damani · Jhunjhunwala-school
           analysis: what to <strong className="text-ink">sell</strong>, what to{" "}
-          <strong className="text-ink">accumulate</strong>, what to buy instead — on a 5-year horizon.
+          <strong className="text-ink">accumulate</strong>, what to buy instead - on a 5-year horizon.
         </p>
       </motion.div>
 
@@ -103,7 +103,7 @@ export function MarketLanding({
         animate={{ opacity: 1 }}
         transition={{ delay: 0.55, duration: 0.5 }}
       >
-        🔒 Everything is saved <strong>only in this browser</strong> — no accounts, no database, no
+        🔒 Everything is saved <strong>only in this browser</strong> - no accounts, no database, no
         cloud. Free Yahoo Finance data, no API keys. Analysis to support your judgment,{" "}
         <strong>not financial advice</strong>.
       </motion.p>
