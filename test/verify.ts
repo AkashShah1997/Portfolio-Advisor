@@ -31,7 +31,9 @@ import { coachPosition, momentumFromCandles, sipPlan, STANCE_META, trancheLadder
 import { loadChecklist, PREBUY_CHECKLIST, saveChecklist } from "../lib/checklist";
 import { snowflakeLeaders } from "../lib/snowflake";
 import { BUCKET_META, hedgeShare, runStress, STRESS_SCENARIOS, stressBucketOf } from "../lib/stress";
-import { maCrossings, maLenForInterval } from "../lib/history";
+import { maCrossings, maLenForInterval, regressionChannel, swingLevels } from "../lib/history";
+import { buildSwot } from "../lib/swot";
+import { PEER_METRICS, sectorPeers } from "../lib/peers";
 import { benchCagrSince, buildAsOf, cutoffISO, runBacktest } from "../lib/backtest";
 import { computeFScore } from "../lib/scorecard";
 import type { Candle } from "../lib/history";
@@ -1777,6 +1779,122 @@ console.log("\n== Plain-language glossary for the new features ==");
   check("the hedge entry carries the 1980 warning", /28 years/.test(METRIC_INFO.hedge.better));
   check("the stress entry frames it as sizing, not prediction", /not a prediction/.test(METRIC_INFO.stress.better));
 }
+
+console.log("\n== Pre-built trendlines (regression channel + auto S/R) ==");
+{
+  // 3 years of daily candles compounding at ~20%/yr with a sine wobble
+  const mk = (n: number, growth: number, wobble = 0.06): Candle[] => {
+    const out: Candle[] = [];
+    const start = new Date("2023-01-02").getTime();
+    for (let i = 0; i < n; i++) {
+      const base = 100 * Math.exp((growth / 365) * i); // one CALENDAR day per bar
+      const close = base * (1 + wobble * Math.sin(i / 17));
+      const d = new Date(start + i * 24 * 3600 * 1000);
+      out.push({
+        time: d.toISOString().slice(0, 10),
+        open: close * 0.995,
+        high: close * 1.01,
+        low: close * 0.99,
+        close,
+      });
+    }
+    return out;
+  };
+  const candles = mk(756, Math.log(1.2)); // exact 20%/yr in log space
+  const ch = regressionChannel(candles)!;
+  check("channel exists on 3y of dailies", !!ch);
+  check("fitted growth recovers ~20%/yr", ch.cagr !== undefined && Math.abs(ch.cagr - 0.2) < 0.05, `got ${ch.cagr}`);
+  check("upper rail above mid above lower, at both ends", ch.upper[0].value > ch.mid[0].value && ch.mid[0].value > ch.lower[0].value && ch.upper[1].value > ch.lower[1].value);
+  check("band position is a 0..1 fraction", ch.position === undefined || (ch.position >= 0 && ch.position <= 1));
+  check("too few bars → null, honestly", regressionChannel(candles.slice(0, 20)) === null);
+
+  const zig: Candle[] = [];
+  const startZ = new Date("2025-01-01").getTime();
+  for (let i = 0; i < 120; i++) {
+    // oscillate between ~80 support and ~100 resistance, touching each repeatedly
+    const c = 90 + 10 * Math.sin(i / 6);
+    const d = new Date(startZ + i * 24 * 3600 * 1000);
+    zig.push({ time: d.toISOString().slice(0, 10), open: c, high: c + 0.6, low: c - 0.6, close: c });
+  }
+  const levels = swingLevels(zig);
+  check("finds the repeated ~100 resistance and ~80 support", levels.some((l) => Math.abs(l.price - 100.6) < 3) && levels.some((l) => Math.abs(l.price - 79.4) < 3), JSON.stringify(levels));
+  check("respects maxLevels and sorts by price", swingLevels(zig, { maxLevels: 2 }).length <= 2 && levels.every((l, i) => i === 0 || levels[i - 1].price <= l.price));
+  check("levels carry touch counts ≥ 1", levels.every((l) => l.touches >= 1));
+}
+
+console.log("\n== SWOT (rule-based, evidence attached) ==");
+{
+  const data = mockStockData("TCS.NS");
+  const sc = buildScorecard(data);
+  const val = buildValuation(data, sc);
+  const swot = buildSwot({ scorecard: sc, data, valuation: val, capTier: "large" });
+  check("every quadrant renders at least one line", swot.strengths.length >= 1 && swot.weaknesses.length >= 1 && swot.opportunities.length >= 1 && swot.threats.length >= 1);
+  check("quadrants are capped at 5", [swot.strengths, swot.weaknesses, swot.opportunities, swot.threats].every((a) => a.length <= 5));
+  const dipSwot = buildSwot({
+    scorecard: sc,
+    data,
+    valuation: val,
+    momentum: { pctFromHigh: -0.2, vs200d: -0.08, ret3m: -0.1 },
+    capTier: "small",
+    regime: "EXPENSIVE_CALM",
+    weightPct: 0.22,
+  });
+  check("quality on a dip becomes an opportunity", val.status !== "PRICEY" ? dipSwot.opportunities.some((o) => /on sale/i.test(o.text)) : true);
+  check("downtrend, small-cap size, calm-highs regime and concentration all land as threats",
+    dipSwot.threats.some((t) => /downtrend/i.test(t.text)) &&
+    dipSwot.threats.some((t) => /small caps/i.test(t.text)) &&
+    (dipSwot.threats.some((t) => /margin of safety/i.test(t.text)) || dipSwot.threats.length >= 5) &&
+    (dipSwot.threats.some((t) => /heavyweight/i.test(t.text)) || dipSwot.threats.length >= 5));
+  check("empty buckets get an honest line, never silence", (() => {
+    const bare = buildSwot({ scorecard: { ...sc, checks: [], redFlags: [], totalScore: 50, fscore: undefined }, data: { ...data, quote: { ...data.quote, dividendYield: undefined, targetMeanPrice: undefined } } });
+    return bare.strengths.length === 1 && /Nothing stands out/.test(bare.strengths[0].text) && bare.threats.length >= 1;
+  })());
+}
+
+console.log("\n== Sector peers from the scanned universe ==");
+{
+  const mkPeer = (symbol: string, over: Partial<MetricRow>): MetricRow => ({
+    symbol,
+    name: symbol,
+    sector: "Technology",
+    owned: false,
+    watch: false,
+    score: 60,
+    verdict: "HOLD",
+    valStatus: "FAIR",
+    isFin: false,
+    redFlags: 0,
+    lossYears: 0,
+    pillarQuality: 60,
+    pillarFortress: 60,
+    pillarGrowth: 60,
+    pillarValuation: 60,
+    ...over,
+  } as MetricRow);
+  const self = mkPeer("AAA.NS", { score: 80, roeAvg: 0.24, pe: 30, pb: 6, revCagr: 0.2, roceAvg: 0.3, divYield: 0.01 });
+  const uni = [
+    mkPeer("BBB.NS", { score: 70, roeAvg: 0.18, pe: 25, pb: 5, revCagr: 0.12, roceAvg: 0.2, divYield: 0.02 }),
+    mkPeer("CCC.NS", { score: 60, roeAvg: 0.12, pe: 20, pb: 4, revCagr: 0.08, roceAvg: 0.15, divYield: 0.015 }),
+    mkPeer("DDD.NS", { score: 50, roeAvg: 0.08, pe: 15, pb: 2, revCagr: 0.05, roceAvg: 0.1, divYield: 0.03 }),
+    mkPeer("EEE.NS", { score: 40, roeAvg: 0.05, pe: 12, pb: 1.5, revCagr: 0.02, roceAvg: 0.06, divYield: 0.04 }),
+    mkPeer("ZZZ.NS", { sector: "Energy", score: 90 }),
+  ];
+  const st = sectorPeers(self, uni)!;
+  check("sector isolated (Energy outsider excluded)", !!st && st.n === 5 && st.peers.every((p) => p.sector === "Technology"));
+  const roe = st.ranks.find((r) => r.key === "roeAvg")!;
+  check("ROE: rank 1 of 5, beats the median", roe.rank === 1 && roe.of === 5 && roe.better);
+  const pe = st.ranks.find((r) => r.key === "pe")!;
+  check("P/E: lower-is-better direction respected (priciest ranks last)", pe.rank === 5 && !pe.better);
+  check("median math (ROE median = 0.12)", Math.abs((roe.median ?? 0) - 0.12) < 1e-9);
+  check("read is honest: strong on quality but expensive → 4 of 7, no 'leader' crown", /4 of 7/.test(st.read) && !/sector leader/i.test(st.read));
+  const leader = mkPeer("AAA.NS", { score: 80, roeAvg: 0.24, pe: 14, pb: 1.8, revCagr: 0.2, roceAvg: 0.3, divYield: 0.05 });
+  check("cheap AND strong → crowned a sector leader", /sector leader/i.test(sectorPeers(leader, uni)!.read));
+  check("peers listed best-score first with self included", st.peers[0].symbol === "AAA.NS");
+  check("fewer than 4 peers → null (a median of two is a coin flip)", sectorPeers(self, uni.slice(0, 2)) === null);
+  check("every peer metric declares its direction", PEER_METRICS.every((m) => typeof m.higherBetter === "boolean"));
+}
+
+console.log("\n== Pre-buy checklist (the judgment gates) ==");
 
 console.log("\n== Pre-buy checklist (the judgment gates) ==");
 {

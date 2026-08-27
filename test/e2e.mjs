@@ -180,6 +180,34 @@ if (await addBtn.count()) {
 }
 
 // ---- screeners tab (shares the scan) ----
+// ---- deep analysis: full-page per-stock view (SWOT, sector peers, chart, everything) ----
+await page.locator("button[aria-pressed]").filter({ hasText: /^Overview/ }).first().click();
+await page.waitForTimeout(500);
+await page.locator("text=Deep analysis →").first().click(); // from the first stock card
+await page.waitForSelector("text=SWOT", { timeout: 15000 });
+await page.waitForSelector("text=Strengths", { timeout: 5000 });
+await page.waitForSelector("text=Threats", { timeout: 5000 });
+await page.waitForSelector("text=Sector comparison", { timeout: 5000 });
+await page.waitForSelector("text=Coach's call on YOUR position", { timeout: 15000 }); // held, non-ETF
+await page.waitForSelector("text=Full breakdown", { timeout: 5000 });
+await page.waitForSelector("[data-testid=price-chart] canvas", { timeout: 25000 });
+await page.waitForSelector("text=Trend channel", { timeout: 5000 });
+await page.waitForSelector("text=up the channel", { timeout: 15000 }); // auto-channel read line
+const ddBody = await page.locator("body").textContent();
+if (!/Sector median|Not enough scanned peers/.test(ddBody)) throw new Error("peer comparison section missing");
+if (!/every line carries its evidence/.test(ddBody)) throw new Error("SWOT honesty framing missing");
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/26-deepdive.png`, fullPage: true });
+
+// ---- deep-dive ANY stock: search a symbol you don't hold ----
+await page.getByLabel("Deep-dive any stock").fill("DMART");
+await page.getByRole("button", { name: "Analyze", exact: true }).click();
+await page.waitForSelector("text=DMART.NS", { timeout: 30000 });
+await page.waitForSelector("text=Entry plan", { timeout: 20000 }); // not held → entry discipline, not position management
+await page.waitForSelector("text=add to watchlist", { timeout: 5000 });
+await page.getByRole("button", { name: /Back to the dashboard/ }).click();
+await page.waitForSelector("text=Action summary", { timeout: 10000 });
+
 // Screeners now live inside the Ideas tab (default view)
 await page.locator("button[aria-pressed]").filter({ hasText: /^Ideas/ }).first().click();
 await page.waitForSelector("text=two ways to find the next name", { timeout: 5000 });

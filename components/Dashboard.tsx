@@ -37,6 +37,7 @@ import { PlanCard } from "./PlanCard";
 import { MarketWeather } from "./MarketWeather";
 import { BacktestPanel } from "./BacktestPanel";
 import { StressTest } from "./StressTest";
+import { DeepDive } from "./DeepDive";
 import { isEtfHolding } from "@/lib/etf";
 import { PromptGenerator } from "./PromptGenerator";
 import { MastersCard } from "./MastersCard";
@@ -185,6 +186,8 @@ export function Dashboard({
   const [ideasView, setIdeasView] = useState<IdeasView>("screeners");
   const [checkupView, setCheckupView] = useState<CheckupView>("health");
   const [chartFocus, setChartFocus] = useState<string | undefined>(undefined);
+  // deep analysis: full-page view for one symbol (null = closed; "" = open with search only)
+  const [deepDive, setDeepDive] = useState<string | null>(null);
   // the Buffett matrix collapses to a header until wanted; choice remembered on-device
   const [matrixOpen, setMatrixOpen] = useState(false);
   useEffect(() => {
@@ -461,6 +464,21 @@ export function Dashboard({
     [rows]
   );
 
+  // merged scan universe (all countries + custom) - powers the deep-dive sector comparison
+  const universe = useMemo(() => {
+    const seen = new Map<string, MetricRow>();
+    for (const key of [...meta.countries, "Custom"]) {
+      const s = scans[key];
+      if (s?.results) {
+        for (const r of s.results) {
+          const k = r.symbol.toUpperCase();
+          if (!seen.has(k)) seen.set(k, r);
+        }
+      }
+    }
+    return [...seen.values()];
+  }, [scans, meta.countries]);
+
   const hydrate = useCallback(async (symbol: string): Promise<Hydrated | null> => {
     try {
       const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}`);
@@ -560,6 +578,13 @@ export function Dashboard({
       <div className="flex flex-wrap items-center gap-2 no-print">
         <button onClick={onBack} className="text-[13px] text-series-1 hover:underline mr-auto">
           ← Edit holdings / re-import
+        </button>
+        <button
+          onClick={() => setDeepDive("")}
+          className="bg-surface hairline rounded-lg px-3 py-1 text-[13px] hover:bg-page font-medium text-series-1"
+          title="Full-page analysis for ANY India/Canada stock: SWOT, sector comparison, advanced chart, every check"
+        >
+          🔬 Deep-dive any stock
         </button>
         <label className="text-[12px] text-ink-2">
           Sort cards{" "}
@@ -737,6 +762,23 @@ export function Dashboard({
         </div>
       </Card>
 
+      {deepDive !== null ? (
+        <DeepDive
+          symbol={deepDive || null}
+          rows={rows}
+          universe={universe}
+          market={market}
+          fx={fx}
+          base={base}
+          aiKey={aiKey}
+          aiModel={aiModel}
+          hydrate={hydrate}
+          onBack={() => setDeepDive(null)}
+          onChangeSymbol={(s) => setDeepDive(s)}
+          onAddWatch={addWatch}
+        />
+      ) : (
+        <>
       {/* tab bar + simple/all toggle */}
       <div className="flex items-center gap-2 sticky top-[66px] z-30 no-print max-w-full">
       <div className="flex gap-1 bg-surface hairline rounded-xl p-1 w-fit max-w-full overflow-x-auto elev-1">
@@ -787,8 +829,8 @@ export function Dashboard({
         className="shrink-0 bg-surface hairline rounded-xl px-3 py-1.5 text-[12px] font-medium text-ink-2 hover:text-ink elev-1"
         title={
           uiMode === "simple"
-            ? "Show every tool: screeners, smart money, charting, health, projector"
-            : "Back to the simple three-tab view"
+            ? "Show every tool: Ideas (screeners + smart money), Checkup (health + stress + backtest), charting"
+            : "Back to the simple four-tab view"
         }
       >
         {uiMode === "simple" ? "All tools ▸" : "◂ Simple"}
@@ -977,6 +1019,7 @@ export function Dashboard({
                         onRemove={r.holding.watch ? () => removeRow(r.holding.id) : undefined}
                         onPatchHolding={(patch) => patchHolding(r.holding.id, patch)}
                         onGoDecisions={() => goTo("decisions")}
+                        onDeepDive={(s) => setDeepDive(s)}
                       />
                     </StaggerItem>
                   ))}
@@ -1067,6 +1110,8 @@ export function Dashboard({
 
         {tab === "coach" && <CoachPanel rows={rows} market={market} fx={fx} />}
       </Switcher>
+        </>
+      )}
 
       <p className="text-[11.5px] text-muted leading-relaxed border-t border-grid pt-3">
         FX: {fx.source} · Data: Yahoo Finance (free, unofficial; figures can lag or contain errors - verify before

@@ -239,6 +239,26 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     what: "Investing a fixed amount on a fixed schedule (SIP), or a pre-planned tranche ladder into dips - so the plan decides when to buy, not your mood.",
     better: "The evidence: automatic, price-blind buying beats waiting for the perfect entry for almost everyone, because time in the market beats timing it. Boost below the 200-day average; never skip a month because it 'feels high'.",
   },
+  swot: {
+    name: "SWOT (rule-based)",
+    what: "Strengths and Weaknesses describe the BUSINESS (what the app's own checks proved or failed); Opportunities and Threats describe the SITUATION (price vs value, trend, company size, market weather, your own position size). Every line carries its evidence.",
+    better: "It's a thinking frame, not a verdict: a great business (many strengths) can still be a bad buy (threats side: priced for perfection). Like the portals' SWOT widgets it's rule-based - the difference is you can see every rule.",
+  },
+  sectorRank: {
+    name: "Sector comparison (from your scan)",
+    what: "This stock against every SAME-SECTOR name in the market scan cached on your device: the sector median for ROE, ROCE, growth, P/E, P/B and yield, plus this stock's rank on each. The honest version of 'industry P/E' - you can see exactly who the 'industry' is.",
+    better: "Beating the median on quality yardsticks (ROE, ROCE, growth) matters most for a long-term holder; a P/E above the sector median is fine IF the quality rank justifies it. Run a market scan to widen the peer set.",
+  },
+  channel: {
+    name: "Trend channel (auto-drawn)",
+    what: "A best-fit straight line through the price on a LOG scale (straight in log space = steady compounding), with rails 2 standard deviations above and below. The label shows the growth rate the trend implies and where today's price sits inside the band.",
+    better: "Near the LOWER rail = cheap versus its own multi-year trend; near the UPPER rail = stretched. For a 5-year holder it's a patience tool - it says 'wait' or 'this dip is normal', never 'buy now'.",
+  },
+  autosr: {
+    name: "Support & resistance (auto-drawn)",
+    what: "Price levels the market has actually respected: swing highs and lows that stood out for weeks, clustered together. More touches = a stronger level. Drawn automatically from the same chart data.",
+    better: "Neither is a signal. Long-term buyers use them for tranche placement: staggering buys near tested support beats one buy at a random price. A clean break ABOVE old resistance often turns it into new support.",
+  },
   stress: {
     name: "Crash stress test",
     what: "A fire drill: it takes real past crashes (2000, 2008, 2020, 2022, and gold's own 1980 winter) and applies the damage each TYPE of investment took back then to what you hold today. You see your total before and after, which holdings get hit hardest, how long recovery took, and what happened to people who kept buying.",

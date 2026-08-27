@@ -91,6 +91,18 @@ lagging price (coiled spring - keep), flat business + flat price (dead money - r
 deteriorating business (the fall is deserved - exit review). The same chip appears on the Decisions
 board.
 
+**Deep analysis** - a full page for ANY India/Canada stock (every stock card has a "Deep analysis"
+button, and "Deep-dive any stock" in the toolbar takes a bare NSE/TSX code - DMART gets .NS tried
+automatically). One screen collects everything the tabs know plus the portal-style extras, powered
+honestly: a **rule-based SWOT** with the evidence printed on every line (Strengths/Weaknesses = the
+business per the checks; Opportunities/Threats = the situation - price vs value, trend, size, market
+weather, even your own concentration); **sector comparison from YOUR OWN scan** (medians and ranks
+for ROE, ROCE, growth, P/E, P/B, yield against the scanned universe - the honest version of
+"industry P/E", where you can see exactly who the industry is); the **Coach's call** for held
+positions or an **entry plan** (fair estimate, buy-below, tranche ladder) for names you don't own;
+the **advanced chart**; **who owns it** (promoters/insiders, institutions, top funds); and the full
+stock card opened - checks, intrinsic band, snowflake, journey, F-Score, pre-buy checklist.
+
 **Coach** - the "I'm up 50% on this: now what?" screen. Every position gets ONE stance - **Trim a
 slice / Sit tight / Buy the dip / Keep DCA-ing / Exit review** - from your profit and weight, the
 quality verdict, valuation, **live momentum** (distance from the 52-week high, vs the 200-day
@@ -185,7 +197,11 @@ caps, expensive stocks at P/E ≥ 40), and the card shows your total before/afte
 positions, how long recovery took, and **what kept-running SIPs did** through each bottom. A fire
 drill for position sizing with its limits printed on it - arithmetic on the past, not a prediction.
 
-**Chart** - TradingView-style charting (built on TradingView's open-source `lightweight-charts`):
+**Chart** - TradingView-style charting (built on TradingView's open-source `lightweight-charts`),
+now with **pre-built long-term trendlines**: a log-scale **regression trend channel** (best-fit
+compounding line ±2σ rails, with a plain-words read - "trend +14%/yr · 22% up the channel (near
+the cheap rail)") and **auto support/resistance** drawn from clustered swing points the market
+actually respected (S×3 = support touched 3 times). Both toggle on/off next to:
 candles or area, 6M→Max ranges (daily/weekly/monthly), volume, **two-click trendline drawing**, and
 the value-investor twist - **your average cost, the fair-value estimate and the buy-below level
 drawn on the price axis**. The moving averages are **day-equivalent on every range** (the "200-day
@@ -282,7 +298,9 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # the mid/small screen, theme store, the position coach,
                                      # MA crossings, allocation buckets, the pre-buy checklist,
                                      # snowflake axis leaders, the SEC UA contact rule, the crash
-                                     # stress test, hard-asset chips, concentration analogs (390+ checks)
+                                     # stress test, hard-asset chips, concentration analogs, the
+                                     # regression channel + auto S/R, rule-based SWOT, sector peers
+                                     # from the scan cache (420+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

@@ -203,6 +203,8 @@ export function StockCard({
   onRemove,
   onPatchHolding,
   onGoDecisions,
+  onDeepDive,
+  defaultOpen = false,
 }: {
   row: AnalyzedHolding;
   aiKey?: string;
@@ -210,8 +212,10 @@ export function StockCard({
   onRemove?: () => void;
   onPatchHolding?: (patch: Partial<Holding>) => void;
   onGoDecisions?: () => void;
+  onDeepDive?: (symbol: string) => void;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [ai, setAi] = useState<{ loading: boolean; text?: string; error?: string }>({ loading: false });
   const [promptCopied, setPromptCopied] = useState(false);
   const { holding, data, scorecard } = row;
@@ -399,6 +403,18 @@ export function StockCard({
         </ul>
       )}
       <div className="flex flex-wrap gap-x-4 items-center">
+        {onDeepDive && !isEtf && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeepDive(holding.yahooSymbol);
+            }}
+            className="mt-1.5 text-[12px] font-medium text-series-1 hover:underline no-print"
+            title="Full-page analysis: SWOT, sector comparison, advanced chart with auto trendlines, every check"
+          >
+            🔬 Deep analysis →
+          </button>
+        )}
         <button
           onClick={copyPrompt}
           className="mt-1.5 text-[12px] text-series-1 hover:underline no-print"

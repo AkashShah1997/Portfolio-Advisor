@@ -23,14 +23,16 @@ import {
   HISTORY_RANGES,
   maCrossings,
   maLenForInterval,
+  regressionChannel,
   sma,
+  swingLevels,
   type HistoryPayload,
   type HistoryRange,
 } from "@/lib/history";
 import { buildValuation } from "@/lib/valuation";
 import { VERDICT_META } from "@/lib/portfolio";
 import { currencyForSymbol, fmtMoney, fmtNum, fmtPct } from "@/lib/symbols";
-import { Badge, Card, SectionTitle, Spinner } from "./ui";
+import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 
 /**
  * TradingView-style price chart (built on TradingView's open-source
@@ -85,6 +87,9 @@ export function ChartPanel({ rows, focusSymbol }: { rows: AnalyzedHolding[]; foc
   const [sma200, setSma200] = useState(true); // long-term default: both MAs on, crosses visible
   const [showVol, setShowVol] = useState(true);
   const [showLevels, setShowLevels] = useState(true);
+  // pre-built long-term trendlines: log-regression channel + auto support/resistance
+  const [showChannel, setShowChannel] = useState(true);
+  const [showSR, setShowSR] = useState(true);
   const [drawMode, setDrawMode] = useState(false);
   const [drawings, setDrawings] = useState<{ a: TrendPoint; b: TrendPoint }[]>([]);
   const [pending, setPending] = useState<TrendPoint | null>(null);
@@ -130,6 +135,15 @@ export function ChartPanel({ rows, focusSymbol }: { rows: AnalyzedHolding[]; foc
   const valuation = useMemo(
     () => (row?.data && row.scorecard ? buildValuation(row.data, row.scorecard) : undefined),
     [row]
+  );
+  // pre-built long-term trendlines, recomputed per range
+  const channel = useMemo(
+    () => (payload && showChannel ? regressionChannel(payload.candles) : null),
+    [payload, showChannel]
+  );
+  const srLevels = useMemo(
+    () => (payload && showSR ? swingLevels(payload.candles) : []),
+    [payload, showSR]
   );
 
   // ---- data fetch ----
@@ -340,6 +354,40 @@ export function ChartPanel({ rows, focusSymbol }: { rows: AnalyzedHolding[]; foc
       allSeriesRef.current.push(s);
     }
 
+    // auto-drawn log-regression trend channel (mid + ±2σ rails)
+    if (channel) {
+      const rail = (pts: { time: string; value: number }[], style: LineStyle, width: 1 | 2, color: string) => {
+        const s = chart.addSeries(LineSeries, {
+          color,
+          lineWidth: width,
+          lineStyle: style,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        s.setData(pts.map((p) => ({ time: p.time as Time, value: p.value })));
+        allSeriesRef.current.push(s);
+      };
+      const railColor = isDark ? "rgba(150, 148, 255, 0.75)" : "rgba(90, 84, 214, 0.65)";
+      rail(channel.mid, LineStyle.Dashed, 1, railColor);
+      rail(channel.upper, LineStyle.Solid, 1, railColor);
+      rail(channel.lower, LineStyle.Solid, 1, railColor);
+    }
+
+    // auto support/resistance from clustered swing points
+    if (showSR && srLevels.length) {
+      for (const lvl of srLevels) {
+        main.createPriceLine({
+          price: lvl.price,
+          color: isDark ? "#8f8d86" : "#a29f97",
+          lineWidth: 1,
+          lineStyle: LineStyle.SparseDotted,
+          axisLabelVisible: true,
+          title: `${lvl.kind === "resistance" ? "R" : lvl.kind === "support" ? "S" : "S/R"}×${lvl.touches}`,
+        });
+      }
+    }
+
     // value-investor levels on the price axis
     if (showLevels) {
       if (row && !row.holding.watch && row.holding.avgCost > 0) {
@@ -379,7 +427,7 @@ export function ChartPanel({ rows, focusSymbol }: { rows: AnalyzedHolding[]; foc
       fitKeyRef.current = fitKey;
       chart.timeScale().fitContent();
     }
-  }, [payload, kind, sma50, sma200, showVol, showLevels, drawings, row, valuation, isDark]);
+  }, [payload, kind, sma50, sma200, showVol, showLevels, drawings, row, valuation, isDark, channel, showSR, srLevels]);
 
   const last = payload?.candles[payload.candles.length - 1];
   const first = payload?.candles[0];
@@ -493,6 +541,14 @@ export function ChartPanel({ rows, focusSymbol }: { rows: AnalyzedHolding[]; foc
           <input type="checkbox" checked={showLevels} onChange={(e) => setShowLevels(e.target.checked)} className="accent-[#2a78d6]" />
           Value levels
         </label>
+        <label className="inline-flex items-center gap-1.5 text-ink-2">
+          <input type="checkbox" checked={showChannel} onChange={(e) => setShowChannel(e.target.checked)} className="accent-[#2a78d6]" />
+          Trend channel <InfoTip k="channel" />
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-ink-2">
+          <input type="checkbox" checked={showSR} onChange={(e) => setShowSR(e.target.checked)} className="accent-[#2a78d6]" />
+          Auto S/R <InfoTip k="autosr" />
+        </label>
 
         <span className="ml-auto flex items-center gap-2">
           <button
@@ -541,6 +597,14 @@ export function ChartPanel({ rows, focusSymbol }: { rows: AnalyzedHolding[]; foc
           <span className="text-[11px] text-muted">
             {payload.interval === "1d" ? "daily" : payload.interval === "1wk" ? "weekly" : "monthly"} bars
             {payload.mock ? " · demo data" : ""}
+          </span>
+        )}
+        {channel && channel.cagr !== undefined && (
+          <span className="text-[11px] text-ink-2">
+            trend {channel.cagr >= 0 ? "+" : ""}
+            {fmtPct(channel.cagr)}/yr
+            {channel.position !== undefined &&
+              ` · ${Math.round(channel.position * 100)}% up the channel${channel.position <= 0.25 ? " (near the cheap rail)" : channel.position >= 0.75 ? " (stretched)" : ""}`}
           </span>
         )}
         {loading && <Spinner />}
