@@ -10,7 +10,7 @@ import { buildValuation } from "@/lib/valuation";
 import { buildJourney } from "@/lib/journey";
 import { strengthsAndRisks } from "@/lib/insights";
 import { describeSnowflake, snowflakeOf } from "@/lib/snowflake";
-import { loadChecklist, PREBUY_CHECKLIST, saveChecklist } from "@/lib/checklist";
+import { buildChecklistPrompt, PREBUY_CHECKLIST } from "@/lib/checklist";
 import { isEtfHolding } from "@/lib/etf";
 import { Badge, Card, InfoTip, Meter, Spinner } from "./ui";
 import { Snowflake } from "./Snowflake";
@@ -118,65 +118,55 @@ function compact(v: number, currency: Currency): string {
 }
 
 /**
- * The pre-buy checklist: ten yes-or-no gates only YOU can answer - no data
- * feed knows if you understand the business. Ticks persist on-device per
- * symbol, so work done on a watchlist name survives until you buy (or pass).
+ * The pre-buy gates - ten yes/no questions no data feed can answer, because
+ * they are about the BUSINESS, not the ticker. Rather than asking you to
+ * self-grade, this builds a research prompt for any AI: it must answer each
+ * gate YES / NO / UNKNOWN with the deciding fact and a source.
  */
-function PrebuyChecklist({ symbol }: { symbol: string }) {
-  const [checked, setChecked] = useState<Set<string>>(() => loadChecklist(symbol));
-  const [expanded, setExpanded] = useState(false);
-  const n = checked.size;
-  const tone = n >= 8 ? "text-success-text" : n >= 5 ? "text-[#8a6100]" : "text-muted";
-  const toggle = (id: string) => {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      saveChecklist(symbol, next);
-      return next;
-    });
+function PrebuyGates({
+  symbol,
+  name,
+  sector,
+  industry,
+  price,
+  appFacts,
+}: {
+  symbol: string;
+  name?: string;
+  sector?: string;
+  industry?: string;
+  price?: string;
+  appFacts: string[];
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const prompt = buildChecklistPrompt({ symbol, name, sector, industry, price, appFacts });
+    try {
+      await navigator.clipboard.writeText(prompt);
+    } catch {
+      /* clipboard blocked - ignore */
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2200);
   };
   return (
     <div className="border-t border-grid pt-3">
+      <div className="text-[11.5px] font-semibold text-muted uppercase tracking-wide">
+        Pre-buy gates <InfoTip k="checklist" />
+      </div>
+      <p className="text-[12.5px] text-ink-2 mt-1 leading-snug">
+        {PREBUY_CHECKLIST.length} yes/no questions the numbers above can&apos;t answer: moat, competition,
+        management, governance, capital allocation, why the opportunity exists. Copy the prompt into any AI and it
+        answers each one <strong className="text-ink">YES / NO / UNKNOWN</strong> with the deciding fact and a
+        source, plus the bear case in three lines. Fewer than 8 clean YES answers means small position or skip.
+      </p>
       <button
-        className="w-full text-left flex items-center justify-between gap-3"
-        onClick={() => setExpanded(!expanded)}
-        aria-expanded={expanded}
+        onClick={copy}
+        className="mt-2 bg-surface hairline rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-series-1 hover:bg-page no-print"
       >
-        <span className="text-[11.5px] font-semibold text-muted uppercase tracking-wide">
-          Pre-buy checklist <InfoTip k="checklist" />
-        </span>
-        <span className="flex items-center gap-2">
-          <span className={`text-[12.5px] font-semibold tnum ${tone}`}>{n}/10</span>
-          <span className="text-muted text-[13px]" aria-hidden>
-            {expanded ? "▾" : "▸"}
-          </span>
-        </span>
+        {copied ? "✓ Prompt copied - paste into any AI" : `📋 Copy the ${PREBUY_CHECKLIST.length}-gate research prompt`}
       </button>
-      <Collapse open={expanded}>
-        <p className="text-[12px] text-ink-2 mt-2 leading-snug">
-          Ten yes-or-no gates before any buy order. The data above can&apos;t answer these; only you can.
-          If you can&apos;t honestly tick 8, you&apos;re gambling, not investing. Ticks save on this device.
-        </p>
-        <ul className="mt-2 space-y-1.5">
-          {PREBUY_CHECKLIST.map((item) => (
-            <li key={item.id}>
-              <label className="flex gap-2 text-[12.5px] leading-snug cursor-pointer items-start">
-                <input
-                  type="checkbox"
-                  checked={checked.has(item.id)}
-                  onChange={() => toggle(item.id)}
-                  className="mt-0.5 accent-[var(--color-series-1)] shrink-0"
-                />
-                <span>
-                  <span className={checked.has(item.id) ? "text-ink" : "text-ink-2"}>{item.text}</span>
-                  <span className="block text-[11px] text-muted italic">{item.master}</span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </Collapse>
     </div>
   );
 }
@@ -631,8 +621,23 @@ export function StockCard({
             </div>
           </div>
 
-          {/* pre-buy checklist - the judgment gates no data feed can tick for you */}
-          {!isEtf && <PrebuyChecklist symbol={holding.yahooSymbol} />}
+          {/* pre-buy gates - a research prompt, because these need facts, not self-grading */}
+          {!isEtf && (
+            <PrebuyGates
+              symbol={holding.yahooSymbol}
+              name={q.name}
+              sector={q.sector}
+              industry={q.industry}
+              price={fmtMoney(q.price, cur)}
+              appFacts={[
+                `App scorecard: ${scorecard.totalScore}/100 (${VERDICT_META[scorecard.verdict].label})`,
+                `5y revenue CAGR ${fmtPct(scorecard.cagr.revenue)}, EPS CAGR ${fmtPct(scorecard.cagr.eps)}`,
+                `P/E ${fmtNum(q.trailingPE, 1)}${scorecard.avgPE ? ` vs own 5y avg ${fmtNum(scorecard.avgPE, 1)}` : ""}, P/B ${fmtNum(q.priceToBook, 1)}`,
+                ...(scorecard.fscore ? [`Piotroski F-Score ${scorecard.fscore.score}/${scorecard.fscore.of}`] : []),
+                ...(scorecard.redFlags.length ? [`Red flags already found: ${scorecard.redFlags.join("; ")}`] : []),
+              ]}
+            />
+          )}
 
           {/* AI commentary */}
           {aiKey && (

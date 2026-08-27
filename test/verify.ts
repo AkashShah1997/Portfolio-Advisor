@@ -25,14 +25,14 @@ import { assessAll, feeDrag, merBandOf } from "../lib/etfscore";
 import { mockEtfData } from "../lib/mocketf";
 import { mockInvestorMoves } from "../lib/mock";
 import { buildPlan } from "../lib/plan";
-import { loadUiMode } from "../lib/store";
 import { buildMacroItems, mockMacro, readRegime, seriesStats, vixBand } from "../lib/macro";
 import { coachPosition, momentumFromCandles, sipPlan, STANCE_META, trancheLadder } from "../lib/coach";
-import { loadChecklist, PREBUY_CHECKLIST, saveChecklist } from "../lib/checklist";
+import { buildChecklistPrompt, PREBUY_CHECKLIST } from "../lib/checklist";
 import { snowflakeLeaders } from "../lib/snowflake";
 import { BUCKET_META, hedgeShare, runStress, STRESS_SCENARIOS, stressBucketOf } from "../lib/stress";
 import { maCrossings, maLenForInterval, regressionChannel, swingLevels } from "../lib/history";
 import { buildSwot } from "../lib/swot";
+import { buildGoldSignals, GOLD_CONTEXT, GOLD_CONTEXT_ASOF, GOLD_HOWTO, mockGold, readGold } from "../lib/gold";
 import { PEER_METRICS, sectorPeers } from "../lib/peers";
 import { benchCagrSince, buildAsOf, cutoffISO, runBacktest } from "../lib/backtest";
 import { computeFScore } from "../lib/scorecard";
@@ -1400,7 +1400,6 @@ console.log("\n== The action plan (plain words) ==");
   const calm = buildPlan([mkStock("TCS.NS", 25, 3600)], "india", fxInr);
   check("calm portfolio says so out loud", /patience|Nothing needs action/.test(calm.summary));
 
-  check("uiMode store is server-safe (defaults to simple)", loadUiMode() === "simple");
 }
 
 console.log("\n== Cap tiers & the mid/small-cap screen ==");
@@ -1780,6 +1779,67 @@ console.log("\n== Plain-language glossary for the new features ==");
   check("the stress entry frames it as sizing, not prediction", /not a prediction/.test(METRIC_INFO.stress.better));
 }
 
+console.log("\n== The gold desk ==");
+{
+  const india = mockGold("india");
+  const canada = mockGold("canada");
+  check("both markets produce a read", !!india.read.headline && !!canada.read.headline);
+  check("gold priced in the local unit (₹/10g for India, C$/oz for Canada)",
+    india.local?.label.includes("10g") === true && india.local?.value.startsWith("₹") === true &&
+    canada.local?.label.includes("C$") === true);
+  check("local 1y return compounds metal x currency (rupee weaker → beats USD move)",
+    (india.local?.ret1y ?? 0) > 0.27 && (canada.local?.ret1y ?? 0) < 0.27);
+
+  const keys = india.items.map((i) => i.key);
+  check("the real-yield signal leads the list", keys[0] === "realYield");
+  check("covers real yield + trend, dollar, gold trend, stretch, currency, miners",
+    ["realYield", "realTrend", "dxy", "goldTrend", "stretch", "fx", "miners"].every((k) => keys.includes(k)));
+  check("context rows (ratio, central banks) are NOT scored",
+    india.items.filter((i) => i.key === "gsRatio" || i.key === "centralBanks").every((i) => !i.scored));
+  check("tally only counts scored, known signals",
+    india.tally.scored === india.items.filter((i) => i.scored && i.state !== "unknown").length &&
+    india.tally.tailwinds + india.tally.headwinds <= india.tally.scored);
+
+  // missing FRED data must degrade honestly, never be faked from the nominal yield
+  const noReal = buildGoldSignals("india", { gold: { last: 3390, ret1y: 0.2, above200dma: true } }, {});
+  const ry = noReal.find((i) => i.key === "realYield")!;
+  check("no FRED → real yield reports UNKNOWN and drops out of the tally", ry.state === "unknown" && !ry.scored && /missing/.test(ry.detail));
+
+  // direction of the two biggest drivers
+  const cheapMoney = buildGoldSignals("india", { dxy: { last: 95, ret1y: -0.08, above200dma: false } }, { latest: 0.4, chg6m: -0.5 });
+  check("low AND falling real yields both read as tailwinds",
+    cheapMoney.find((i) => i.key === "realYield")!.state === "tailwind" &&
+    cheapMoney.find((i) => i.key === "realTrend")!.state === "tailwind");
+  check("a soft dollar is a tailwind", cheapMoney.find((i) => i.key === "dxy")!.state === "tailwind");
+  const tightMoney = buildGoldSignals("india", { dxy: { last: 110, ret1y: 0.09, above200dma: true } }, { latest: 2.8, chg6m: 0.6 });
+  check("high AND rising real yields both read as headwinds",
+    tightMoney.find((i) => i.key === "realYield")!.state === "headwind" &&
+    tightMoney.find((i) => i.key === "realTrend")!.state === "headwind");
+  check("a strong dollar is a headwind", tightMoney.find((i) => i.key === "dxy")!.state === "headwind");
+
+  // the verdicts
+  check("mostly tailwinds → a window to top up", readGold(cheapMoney).read.key === "TAILWIND");
+  check("mostly headwinds → lean against", readGold(tightMoney).read.key === "HEADWIND");
+  check("stretched at the top rail overrides a mildly good tally", readGold(cheapMoney, 0.92).read.key === "STRETCHED");
+  check("YOUR sleeve overrides everything: full sleeve → no more, whatever the macro",
+    readGold(cheapMoney, 0.1, 0.12).read.key === "SLEEVE_FULL" && /concentration, not protection/.test(readGold(cheapMoney, 0.1, 0.12).read.advice));
+  check("an under-filled sleeve does NOT trigger the override", readGold(cheapMoney, 0.4, 0.03).read.key === "TAILWIND");
+  check("every verdict repeats the insurance framing somewhere",
+    [readGold(cheapMoney).read, readGold(tightMoney).read, readGold(cheapMoney, 0.92).read].every((r) => /sleeve|insurance|5-10%/.test(r.advice)));
+  check("the 1980 warning survives in the stretched read", /28 years/.test(readGold(cheapMoney, 0.92).read.advice));
+
+  // market mechanics, dated and honest
+  check("India how-to states SGBs are discontinued and names the ETF route",
+    /DISCONTINUED/.test(GOLD_HOWTO.india.lines.join(" ")) && /GOLDBEES/.test(GOLD_HOWTO.india.lines.join(" ")));
+  check("India how-to warns on digital gold and jewellery costs",
+    /unregulated/.test(GOLD_HOWTO.india.lines.join(" ")) && /making charges/.test(GOLD_HOWTO.india.lines.join(" ")));
+  check("Canada how-to covers hedged vs unhedged and registered accounts",
+    /hedged/i.test(GOLD_HOWTO.canada.lines.join(" ")) && /TFSA|RRSP/.test(GOLD_HOWTO.canada.lines.join(" ")));
+  check("Canada how-to says miners are not gold", /Miner ETFs are NOT gold/.test(GOLD_HOWTO.canada.lines.join(" ")));
+  check("structural facts are dated and sourced", GOLD_CONTEXT.length >= 3 && GOLD_CONTEXT.every((f) => f.source.length > 8) && /2026/.test(GOLD_CONTEXT_ASOF));
+  check("central-bank fact is framed as backdrop, not a timing signal", /not a reason to buy today/.test(GOLD_CONTEXT[0].text));
+}
+
 console.log("\n== Pre-built trendlines (regression channel + auto S/R) ==");
 {
   // 3 years of daily candles compounding at ~20%/yr with a sine wobble
@@ -1894,25 +1954,29 @@ console.log("\n== Sector peers from the scanned universe ==");
   check("every peer metric declares its direction", PEER_METRICS.every((m) => typeof m.higherBetter === "boolean"));
 }
 
-console.log("\n== Pre-buy checklist (the judgment gates) ==");
-
-console.log("\n== Pre-buy checklist (the judgment gates) ==");
+console.log("\n== Pre-buy gates (the research prompt) ==");
 {
   check("exactly 10 gates", PREBUY_CHECKLIST.length === 10);
   check("ids are unique", new Set(PREBUY_CHECKLIST.map((i) => i.id)).size === PREBUY_CHECKLIST.length);
-  check("every gate has text and a master attribution", PREBUY_CHECKLIST.every((i) => i.text.length > 10 && i.master.length > 3));
-  check("covers the canonical filters (moat, price discipline, sizing, why-cheap)",
-    ["moat", "price", "sizing", "whycheap", "tenyear"].every((id) => PREBUY_CHECKLIST.some((i) => i.id === id)));
-  // server-safe: no window in node - must degrade to empty, never throw
-  const server = loadChecklist("TCS.NS");
-  check("loadChecklist without a browser returns an empty Set", server instanceof Set && server.size === 0);
-  let threw = false;
-  try {
-    saveChecklist("TCS.NS", new Set(["moat"]));
-  } catch {
-    threw = true;
-  }
-  check("saveChecklist without a browser is a no-op, not a crash", !threw);
+  check("every gate says what an AI should go and look up", PREBUY_CHECKLIST.every((i) => i.text.length > 10 && i.master.length > 3 && i.lookFor.length > 15));
+  check("covers the canonical filters (moat, governance, capital, why-cheap, 10-year)",
+    ["moat", "governance", "capital", "whycheap", "tenyear"].every((id) => PREBUY_CHECKLIST.some((i) => i.id === id)));
+
+  const prompt = buildChecklistPrompt({
+    symbol: "TCS.NS",
+    name: "Tata Consultancy Services",
+    sector: "Technology",
+    price: "₹3,712",
+    appFacts: ["App scorecard: 86/100 (Hold)", "P/E 19.0 vs own 5y avg 17.9"],
+  });
+  check("prompt names the company and ticker", /Tata Consultancy Services/.test(prompt) && /TCS\.NS/.test(prompt));
+  check("prompt carries all 10 gates with their look-for lines", PREBUY_CHECKLIST.every((g) => prompt.includes(g.text)) && (prompt.match(/Look for:/g) ?? []).length === 10);
+  check("prompt forbids guessing: demands YES / NO / UNKNOWN", /YES \/ NO \/ UNKNOWN/.test(prompt) && /UNKNOWN whenever you cannot find real evidence/.test(prompt));
+  check("prompt demands a fact and a source per line", /the source in brackets/.test(prompt) && /with a number or a date/.test(prompt));
+  check("prompt bans price targets and advice", /do not give investment advice/i.test(prompt) && /No price targets/.test(prompt));
+  check("prompt passes through the numbers the app already computed", /86\/100/.test(prompt) && /own 5y avg 17\.9/.test(prompt));
+  check("prompt asks for the score, the unknowns and the bear case", /SCORE:/.test(prompt) && /BIGGEST UNKNOWNS/.test(prompt) && /BEAR CASE/.test(prompt));
+  check("prompt states the 8-of-10 bar", /Fewer than 8 YES/.test(prompt));
 }
 
 console.log("\n== Snowflake axis leaders (who carries each arm) ==");

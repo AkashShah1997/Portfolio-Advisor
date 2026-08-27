@@ -48,8 +48,9 @@ export function DeepDive({
   rows: AnalyzedHolding[];
   universe: MetricRow[];
   market: Market;
-  fx: FxRates;
-  base: Currency;
+  /** absent when the deep dive runs standalone, before any portfolio is loaded */
+  fx?: FxRates;
+  base?: Currency;
   aiKey?: string;
   aiModel?: string;
   hydrate: (symbol: string) => Promise<Hydrated | null>;
@@ -173,7 +174,7 @@ export function DeepDive({
   );
   const capTier = row ? capTierOf(row.data?.quote.marketCap, row.holding.yahooSymbol) : undefined;
   const weightPct = useMemo(() => {
-    if (!held) return undefined;
+    if (!held || !fx) return undefined;
     const total = rows
       .filter((r) => !r.holding.watch)
       .reduce((a, r) => a + toBase(r.currentValue ?? r.invested, r.holding.currency, fx), 0);
@@ -265,7 +266,7 @@ export function DeepDive({
 
   const [addedWatch, setAddedWatch] = useState(false);
   const q = row?.data?.quote;
-  const cur = (q?.currency ?? row?.holding.currency ?? base) as Currency;
+  const cur = (q?.currency ?? row?.holding.currency ?? base ?? "USD") as Currency;
   const vm = row?.scorecard ? VERDICT_META[row.scorecard.verdict] : undefined;
   const external404 = symbol && !held && external[symbol] === "error";
   const loading = symbol && !row && !external404;
@@ -308,6 +309,12 @@ export function DeepDive({
             Examples: {market === "india" ? "DMART, TITAN.NS, HDFCBANK" : "CNR, SHOP.TO, BN"} - a bare code gets{" "}
             {market === "india" ? ".NS" : ".TO"} tried first.
           </p>
+          {!rows.length && (
+            <p className="text-[12px] text-muted mt-2 leading-snug">
+              No portfolio needed. Import one later and the same page adds your position, weight and the coach&apos;s
+              call on top; scan the market and it adds sector medians and peer ranks.
+            </p>
+          )}
         </Card>
       )}
 

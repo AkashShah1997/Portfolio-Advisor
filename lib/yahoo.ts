@@ -15,6 +15,13 @@ import {
 } from "./macro";
 import type { Market } from "./store";
 import {
+  buildGoldPayload,
+  GOLD_SYMBOLS,
+  mockGold,
+  type GoldPayload,
+  type RealYield,
+} from "./gold";
+import {
   hasSubstance,
   mapStatementHistory,
   mapYearRow,
@@ -479,6 +486,88 @@ export async function gatherMacro(market: Market, fresh = false): Promise<MacroP
   );
   const payload = buildMacroPayload(market, stats, errors);
   if (payload.items.length) macroCache.set(market, { at: Date.now(), payload });
+  return payload;
+}
+
+// ---------------------------------------------------------------------------
+// The gold desk
+// ---------------------------------------------------------------------------
+
+const goldCache = new Map<Market, { at: number; payload: GoldPayload }>();
+let realCache: { at: number; value: RealYield } | null = null;
+
+/**
+ * 10-year TIPS yield from FRED's keyless CSV endpoint (no API key, no signup).
+ * Gold's single most important input, so it gets its own fetch - and its own
+ * honest failure: if FRED is unreachable the signal reports UNKNOWN rather
+ * than being faked from the nominal yield.
+ */
+async function fetchRealYield(): Promise<RealYield> {
+  if (realCache && Date.now() - realCache.at < 6 * 3600 * 1000) return realCache.value;
+  try {
+    const res = await fetch("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10", {
+      headers: { "User-Agent": "PortfolioAdvisor/2.6 (personal research tool)" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(9000),
+    });
+    if (!res.ok) throw new Error(`FRED HTTP ${res.status}`);
+    const rows = (await res.text())
+      .trim()
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => line.split(","))
+      .map(([date, v]) => ({ date, v: Number(v) }))
+      .filter((r) => r.date && Number.isFinite(r.v));
+    if (!rows.length) throw new Error("FRED returned no usable rows");
+    const last = rows[rows.length - 1];
+    // ~126 business days back = 6 months
+    const prior = rows[Math.max(0, rows.length - 1 - 126)];
+    const value: RealYield = {
+      latest: last.v,
+      chg6m: prior ? last.v - prior.v : undefined,
+      asOf: last.date,
+    };
+    realCache = { at: Date.now(), value };
+    return value;
+  } catch {
+    return {};
+  }
+}
+
+export async function gatherGold(market: Market, fresh = false): Promise<GoldPayload> {
+  if (MOCK_ENABLED) return mockGold(market);
+  const hit = goldCache.get(market);
+  if (!fresh && hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.payload;
+
+  const stats: Record<string, SeriesStats> = {};
+  const errors: string[] = [];
+  let goldCandles: Candle[] | undefined;
+
+  const [, real] = await Promise.all([
+    Promise.all(
+      GOLD_SYMBOLS[market].map(async ({ key, symbol }) => {
+        try {
+          const h = await getHistory(symbol, "1y");
+          stats[key] = seriesStats(h.candles);
+        } catch (e) {
+          errors.push(`${symbol}: ${(e as Error).message.slice(0, 60)}`);
+        }
+      })
+    ),
+    fetchRealYield(),
+  ]);
+  if (!real.latest) errors.push("FRED real-yield series unavailable");
+
+  // 5 years of gold for the long-term regression channel
+  try {
+    const long = await getHistory("GC=F", "5y");
+    goldCandles = long.candles;
+  } catch (e) {
+    errors.push(`GC=F 5y: ${(e as Error).message.slice(0, 60)}`);
+  }
+
+  const payload = buildGoldPayload(market, stats, real, goldCandles, errors);
+  if (payload.items.length) goldCache.set(market, { at: Date.now(), payload });
   return payload;
 }
 

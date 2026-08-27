@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadUiFlag, saveUiFlag, type Market } from "@/lib/store";
+import type { Market } from "@/lib/store";
 import type { MacroPayload, MacroTone } from "@/lib/macro";
 import type { AnalyzedHolding, FxRates } from "@/lib/types";
 import { hedgeShare } from "@/lib/stress";
 import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
-
-/** The chips shown in the compact view - the three that set posture fastest. */
-const COMPACT_KEYS = ["index", "vix", "goldLocal"];
 
 /**
  * Market weather - the macro situation as chips + ONE plain-words regime read.
@@ -43,21 +40,6 @@ export function MarketWeather({
 }) {
   const [state, setState] = useState<Record<string, MacroPayload | "loading" | "error">>({});
   const inFlight = useRef<Set<string>>(new Set());
-
-  // compact by default; the choice is remembered on-device
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    void (async () => {
-      await Promise.resolve();
-      setOpen(loadUiFlag("weatherOpen", false));
-    })();
-  }, []);
-  const toggleOpen = () => {
-    setOpen((prev) => {
-      saveUiFlag("weatherOpen", !prev);
-      return !prev;
-    });
-  };
 
   // the hedge sleeve - independent of the macro fetch, computed from holdings
   const hedge = useMemo(() => (rows && fx ? hedgeShare(rows, fx) : null), [rows, fx]);
@@ -129,15 +111,7 @@ export function MarketWeather({
       {m !== undefined && typeof m !== "string" && (
         <>
           <div className="flex flex-wrap gap-x-5 gap-y-2.5 items-start">
-            {(open
-              ? m.items
-              : m.items.filter(
-                  (it) =>
-                    COMPACT_KEYS.includes(it.key) ||
-                    // no local-gold chip (fetch gap)? fall back to world gold
-                    (it.key === "gold" && !m.items.some((x) => x.key === "goldLocal"))
-                )
-            ).map((it) => (
+            {m.items.map((it) => (
               <div key={it.key} className="min-w-[128px]">
                 <div className="text-[11px] text-muted flex items-center gap-1.5">
                   <span className={`inline-block w-[7px] h-[7px] rounded-full ${DOT[it.tone]}`} aria-hidden />
@@ -148,13 +122,6 @@ export function MarketWeather({
               </div>
             ))}
             {m.mock && <Badge tone="muted">demo data</Badge>}
-            <button
-              onClick={toggleOpen}
-              aria-expanded={open}
-              className="text-[12px] text-series-1 hover:underline self-center no-print"
-            >
-              {open ? "◂ Compact view" : `Full weather (${m.items.length} readings) ▸`}
-            </button>
           </div>
           <div className="mt-3 bg-page hairline rounded-xl px-3 py-2.5">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">

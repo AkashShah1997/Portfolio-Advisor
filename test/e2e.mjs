@@ -36,26 +36,27 @@ await page.waitForSelector("text=NIFTY 50", { timeout: 15000 });
 await page.waitForSelector("text=India VIX", { timeout: 10000 });
 await page.waitForSelector("text=Nothing extreme in the weather", { timeout: 10000 }); // mock india regime
 await page.waitForSelector("text=Macro is context, not a signal", { timeout: 5000 });
-// compact by default: 3 posture chips + hedge line, the rest behind "Full weather"
+// every reading is visible - no compact mode
 await page.waitForSelector("text=Gold in ₹ (10g)", { timeout: 10000 });
 await page.waitForSelector("text=Your hedge sleeve", { timeout: 5000 });
-if (await page.locator("text=Gold/silver ratio").count()) throw new Error("weather should start compact");
-await page.getByRole("button", { name: /Full weather/ }).click();
-await page.waitForSelector("text=Silver", { timeout: 5000 });
 await page.waitForSelector("text=Gold/silver ratio", { timeout: 5000 });
+await page.waitForSelector("text=Silver", { timeout: 5000 });
 await page.waitForSelector("text=Brent oil", { timeout: 5000 });
-await page.getByRole("button", { name: /Compact view/ }).click(); // collapse back for clean screenshots
-await page.waitForTimeout(300);
+if (await page.getByRole("button", { name: /Full weather|Compact view/ }).count())
+  throw new Error("weather compact toggle should be gone");
 
-// ---- SIMPLE MODE (default): plain-words action plan, three tabs ----
+// ---- the plain-words action plan, and the full tab row (no simple mode) ----
 await page.waitForSelector("text=Your action plan", { timeout: 10000 });
 const planText = await page.locator("body").textContent();
 if (!/worth acting on|Nothing needs action/.test(planText)) throw new Error("plan summary missing");
 if (!/sitting tight IS the strategy/.test(planText)) throw new Error("plan hold line missing");
 if (!/insurance, not the engine|same exposure costs less/.test(planText)) throw new Error("plan ETF line missing");
-if (await page.locator("text=the Buffett matrix").count()) throw new Error("matrix should be hidden in simple mode");
-if (!(await page.getByRole("button", { name: "Ideas" }).count() === 0)) throw new Error("Ideas tab should be hidden in simple mode");
-if (!(await page.getByRole("button", { name: "Checkup" }).count() === 0)) throw new Error("Checkup tab should be hidden in simple mode");
+for (const t of ["Overview", "Coach", "Decisions", "Ideas", "ETFs", "Gold", "Checkup", "Chart"]) {
+  if (!(await page.locator("button[aria-pressed]").filter({ hasText: new RegExp(`^${t}`) }).count()))
+    throw new Error(`tab missing from the row: ${t}`);
+}
+if (await page.getByRole("button", { name: /All tools|◂ Simple/ }).count())
+  throw new Error("the simple/all toggle should be gone");
 
 // ---- portfolio snowflake in the action summary ----
 await page.waitForSelector("text=Portfolio snowflake", { timeout: 10000 });
@@ -90,12 +91,6 @@ await page.waitForTimeout(800);
 await page.evaluate(() => window.scrollTo(0, 0));
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/03-overview.png`, fullPage: true });
-
-// ---- switch to the full toolbench ----
-await page.getByRole("button", { name: /All tools/ }).click();
-await page.waitForSelector("text=the Buffett matrix", { timeout: 10000 });
-await page.waitForSelector("text=Ideas", { timeout: 5000 });
-await page.waitForSelector("text=Checkup", { timeout: 5000 });
 
 // ---- the Buffett matrix collapses to a header until wanted ----
 const matrixHeader = page.locator("button[aria-expanded]").filter({ hasText: /Buffett matrix/ }).first();
@@ -146,16 +141,13 @@ await page.waitForSelector("text=Decision board says", { timeout: 10000 }); // s
 if ((await page.locator("[data-testid=snowflake]").count()) < 2) throw new Error("stock-card snowflake missing");
 if (!(await page.locator("[data-infotip=pe]").count())) throw new Error("info tooltips not wired in stock card");
 
-// ---- pre-buy checklist: ten judgment gates, ticks persist per symbol ----
-const chkHeader = page.locator("button[aria-expanded]").filter({ hasText: /Pre-buy checklist/ }).first();
-await chkHeader.waitFor({ timeout: 10000 });
-if (!/0\/10/.test(await chkHeader.textContent())) throw new Error("checklist should start at 0/10");
-await chkHeader.click();
-await page.waitForSelector("text=gambling, not investing", { timeout: 5000 });
-if ((await page.locator("label input[type=checkbox]").count()) < 10) throw new Error("checklist gates missing");
-await page.getByText("I can explain what this business sells").first().click(); // label click ticks the gate
-await page.waitForTimeout(400);
-if (!/1\/10/.test(await chkHeader.textContent())) throw new Error("tick did not update the checklist count");
+// ---- pre-buy gates: a research prompt for any AI, not a self-graded checklist ----
+await page.waitForSelector("text=Pre-buy gates", { timeout: 10000 });
+await page.waitForSelector("text=Copy the 10-gate research prompt", { timeout: 5000 });
+if (await page.locator("label input[type=checkbox]").count())
+  throw new Error("the self-graded checkboxes should be gone");
+const gatesBody = await page.locator("body").textContent();
+if (!/YES \/ NO \/ UNKNOWN/.test(gatesBody)) throw new Error("gates framing missing");
 
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${shots}/04-card-open.png`, fullPage: true });
@@ -180,6 +172,25 @@ if (await addBtn.count()) {
 }
 
 // ---- screeners tab (shares the scan) ----
+// ---- the gold desk: macro drivers, your sleeve, how to actually buy it ----
+await page.locator("button[aria-pressed]").filter({ hasText: /^Gold/ }).first().click();
+await page.waitForSelector("text=The gold desk", { timeout: 15000 });
+await page.waitForSelector("text=US 10-yr REAL yield", { timeout: 15000 });
+await page.waitForSelector("text=Your gold sleeve", { timeout: 10000 });
+await page.waitForSelector("text=Buying gold in India", { timeout: 10000 });
+await page.waitForSelector("text=What governments are doing", { timeout: 10000 });
+const goldBody = await page.locator("body").textContent();
+if (!/helping · .* against/.test(goldBody)) throw new Error("gold tally missing");
+if (!/insurance, not an engine/.test(goldBody)) throw new Error("gold insurance framing missing");
+if (!/28 years/.test(goldBody)) throw new Error("the 1980 gold warning should be on this tab");
+if (!/DISCONTINUED/.test(goldBody)) throw new Error("SGB status missing from the India how-to");
+if (!/Central-bank demand/.test(goldBody)) throw new Error("central-bank context row missing");
+if (!/GOLDBEES/.test(goldBody)) throw new Error("held gold sleeve should name GOLDBEES");
+await page.getByRole("button", { name: /↻ Refresh/ }).click();
+await page.waitForSelector("text=/refreshed \\d/", { timeout: 30000 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${shots}/27-gold.png`, fullPage: true });
+
 // ---- deep analysis: full-page per-stock view (SWOT, sector peers, chart, everything) ----
 await page.locator("button[aria-pressed]").filter({ hasText: /^Overview/ }).first().click();
 await page.waitForTimeout(500);
@@ -399,6 +410,22 @@ await page.getByRole("button", { name: /Canada/ }).first().click();
 await page.waitForSelector("text=Your Canada portfolio", { timeout: 10000 });
 await page.waitForSelector("text=Wealthsimple holdings CSV", { timeout: 5000 });
 await page.screenshot({ path: `${shots}/13-canada.png`, fullPage: true });
+
+// ---- deep-dive straight from the FIRST screen, with no portfolio loaded ----
+await page.waitForSelector("text=Just want to research one stock?", { timeout: 5000 });
+await page.getByRole("button", { name: /Deep-dive any stock/ }).click();
+await page.waitForSelector("text=any stock, whole story", { timeout: 10000 });
+await page.waitForSelector("text=No portfolio needed", { timeout: 5000 });
+await page.getByLabel("Deep-dive any stock").fill("SHOP.TO");
+await page.getByRole("button", { name: "Analyze", exact: true }).click();
+await page.waitForSelector("text=SWOT", { timeout: 40000 });
+await page.waitForSelector("text=Entry plan", { timeout: 20000 });
+const soloBody = await page.locator("body").textContent();
+if (!/Sector comparison/.test(soloBody)) throw new Error("standalone deep dive missing sector section");
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${shots}/28-deepdive-standalone.png`, fullPage: true });
+await page.getByRole("button", { name: /Back to the dashboard/ }).click();
+await page.waitForSelector("text=Your Canada portfolio", { timeout: 10000 });
 
 console.log("E2E OK");
 if (errors.length) {

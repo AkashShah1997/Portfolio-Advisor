@@ -18,7 +18,7 @@ import { benchmarkCompare, portfolioSeries, summarize, toBase, VERDICT_META } fr
 import { describeSnowflake, portfolioSnowflake, snowflakeLeaders } from "@/lib/snowflake";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
-import { loadUiFlag, loadUiMode, MARKET_META, saveUiFlag, saveUiMode, type Market, type UiMode } from "@/lib/store";
+import { loadUiFlag, MARKET_META, saveUiFlag, type Market } from "@/lib/store";
 import { candidatesFor, parseCustomSymbols, type CandidateStock, type UniverseCountry } from "@/lib/universe";
 import { toMetricRow, type MetricRow } from "@/lib/screens";
 import {
@@ -37,6 +37,7 @@ import { PlanCard } from "./PlanCard";
 import { MarketWeather } from "./MarketWeather";
 import { BacktestPanel } from "./BacktestPanel";
 import { StressTest } from "./StressTest";
+import { GoldPanel } from "./GoldPanel";
 import { DeepDive } from "./DeepDive";
 import { isEtfHolding } from "@/lib/etf";
 import { PromptGenerator } from "./PromptGenerator";
@@ -73,6 +74,7 @@ const TABS = [
   { id: "decisions", label: "Decisions" },
   { id: "ideas", label: "Ideas" },
   { id: "etfs", label: "ETFs" },
+  { id: "gold", label: "Gold" },
   { id: "checkup", label: "Checkup" },
   { id: "chart", label: "Chart" },
 ] as const;
@@ -108,9 +110,6 @@ function SubTabs<T extends string>({
     </div>
   );
 }
-
-/** Simple mode shows only the tabs that answer "what should I do?" */
-const SIMPLE_TABS: readonly TabId[] = ["overview", "coach", "decisions", "etfs"];
 
 function SeriesTip({
   active,
@@ -208,13 +207,6 @@ export function Dashboard({
     if (t === "checkup" && (sub === "health" || sub === "stress" || sub === "backtest")) setCheckupView(sub);
     setTab(t);
   };
-  const [uiMode, setUiModeState] = useState<UiMode>(() => loadUiMode());
-  const setUiMode = (m: UiMode) => {
-    setUiModeState(m);
-    saveUiMode(m);
-    if (m === "simple" && !SIMPLE_TABS.includes(tab)) setTab("overview");
-  };
-  const visibleTabs = uiMode === "simple" ? TABS.filter((t) => SIMPLE_TABS.includes(t.id)) : TABS;
   const [portfolioAi, setPortfolioAi] = useState<{ loading: boolean; text?: string; error?: string }>({
     loading: false,
   });
@@ -782,7 +774,7 @@ export function Dashboard({
       {/* tab bar + simple/all toggle */}
       <div className="flex items-center gap-2 sticky top-[66px] z-30 no-print max-w-full">
       <div className="flex gap-1 bg-surface hairline rounded-xl p-1 w-fit max-w-full overflow-x-auto elev-1">
-        {visibleTabs.map((t) => (
+        {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -824,17 +816,6 @@ export function Dashboard({
           </button>
         ))}
       </div>
-      <button
-        onClick={() => setUiMode(uiMode === "simple" ? "all" : "simple")}
-        className="shrink-0 bg-surface hairline rounded-xl px-3 py-1.5 text-[12px] font-medium text-ink-2 hover:text-ink elev-1"
-        title={
-          uiMode === "simple"
-            ? "Show every tool: Ideas (screeners + smart money), Checkup (health + stress + backtest), charting"
-            : "Back to the simple four-tab view"
-        }
-      >
-        {uiMode === "simple" ? "All tools ▸" : "◂ Simple"}
-      </button>
       </div>
 
       <Switcher id={tab}>
@@ -918,8 +899,8 @@ export function Dashboard({
               </div>
             </Card>
 
-            {/* the Buffett matrix (full toolbench only; collapsed until wanted) */}
-            {uiMode === "all" && (
+            {/* the Buffett matrix - collapsed until wanted */}
+            {(
               <Card className="p-4">
                 <button
                   className="w-full text-left flex items-start justify-between gap-3"
@@ -975,11 +956,11 @@ export function Dashboard({
               </div>
             </div>
 
-            {/* AI prompt generator (full toolbench only; collapses itself) */}
-            {uiMode === "all" && <PromptGenerator rows={rows} summary={summary} fx={fx} baseCurrency={base} />}
+            {/* AI prompt generator - collapses itself */}
+            {<PromptGenerator rows={rows} summary={summary} fx={fx} baseCurrency={base} />}
 
             {/* portfolio AI */}
-            {uiMode === "all" && aiKey && (
+            {aiKey && (
               <Card className="p-4">
                 <SectionTitle sub="Claude reviews allocation, concentration and the verdict mix through the three masters' lens.">
                   AI portfolio review
@@ -1079,6 +1060,8 @@ export function Dashboard({
         {tab === "etfs" && (
           <EtfPanel rows={rows} market={market} fx={fx} portfolioTotal={summary.totalCurrent} />
         )}
+
+        {tab === "gold" && <GoldPanel market={market} rows={invRows} fx={fx} base={base} />}
 
         {tab === "checkup" && (
           <div className="space-y-4">

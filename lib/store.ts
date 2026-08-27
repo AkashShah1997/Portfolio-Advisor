@@ -59,8 +59,6 @@ export function marketOfHolding(h: Holding): Market {
 
 const HOLDINGS_KEY = (m: Market) => `pa.v2.holdings.${m}`;
 const MARKET_KEY = "pa.v2.market";
-const UIMODE_KEY = "pa.v2.uimode";
-
 const THEME_KEY = "pa.v2.theme";
 
 export type Theme = "light" | "dark";
@@ -85,27 +83,6 @@ export function applyTheme(t: Theme): void {
   if (t === "dark") document.documentElement.dataset.theme = "dark";
   else document.documentElement.removeAttribute("data-theme");
   window.dispatchEvent(new CustomEvent("pa-theme", { detail: t }));
-}
-
-/** Simple (3 tabs, plain words) vs the full toolbench. Saved on-device. */
-export type UiMode = "simple" | "all";
-
-export function loadUiMode(): UiMode {
-  if (!canStore()) return "simple";
-  try {
-    return window.localStorage.getItem(UIMODE_KEY) === "all" ? "all" : "simple";
-  } catch {
-    return "simple";
-  }
-}
-
-export function saveUiMode(m: UiMode): void {
-  if (!canStore()) return;
-  try {
-    window.localStorage.setItem(UIMODE_KEY, m);
-  } catch {
-    /* ignore */
-  }
 }
 
 const canStore = () => typeof window !== "undefined" && !!window.localStorage;
@@ -193,7 +170,6 @@ export function eraseAll(): void {
   try {
     for (const m of MARKETS) window.localStorage.removeItem(HOLDINGS_KEY(m));
     window.localStorage.removeItem(MARKET_KEY);
-    window.localStorage.removeItem(UIMODE_KEY);
   } catch {
     /* ignore */
   }

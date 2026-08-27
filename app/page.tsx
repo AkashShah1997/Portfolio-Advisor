@@ -19,10 +19,11 @@ import { TopBar } from "@/components/TopBar";
 import { MarketLanding } from "@/components/MarketLanding";
 import { ImportScreen } from "@/components/ImportScreen";
 import { Dashboard } from "@/components/Dashboard";
+import { DeepDive } from "@/components/DeepDive";
 import { Card, SectionTitle, Spinner } from "@/components/ui";
 import { EASE, MotionRoot } from "@/components/anim";
 
-type Step = "import" | "analyzing" | "done";
+type Step = "import" | "analyzing" | "done" | "deepdive";
 
 const SAMPLES: Record<Market, Array<[string, string, number, number]>> = {
   india: [
@@ -76,6 +77,7 @@ export default function Home() {
   const [aiKey, setAiKey] = useState("");
   const [aiModel, setAiModel] = useState("claude-sonnet-4-5");
   const [showAi, setShowAi] = useState(false);
+  const [ddSymbol, setDdSymbol] = useState<string | null>(null);
   const abortRef = useRef(false);
 
   // boot: restore market + holdings from this device
@@ -92,6 +94,36 @@ export default function Home() {
     setHoldingsBy((prev) => ({ ...prev, [m]: holdings }));
     saveHoldings(m, holdings);
   }, []);
+
+  /** Fetch one symbol's full payload - powers the standalone deep dive. */
+  const hydrateSymbol = useCallback(async (symbol: string) => {
+    try {
+      const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}`);
+      const j = (await res.json()) as { data?: StockData; scorecard?: Scorecard };
+      if (!res.ok || !j.data || !j.scorecard) return null;
+      return { data: j.data, scorecard: j.scorecard };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const addWatchFromDeepDive = (m: Market) => async (symbol: string) => {
+    if (holdingsBy[m].some((h) => h.yahooSymbol.toUpperCase() === symbol.toUpperCase())) return false;
+    persistHoldings(m, [
+      ...holdingsBy[m],
+      {
+        id: nextId(),
+        broker: MARKET_META[m].broker,
+        rawSymbol: symbol,
+        yahooSymbol: symbol,
+        quantity: 0,
+        avgCost: 0,
+        currency: currencyForSymbol(symbol),
+        watch: true,
+      },
+    ]);
+    return true;
+  };
 
   const chooseMarket = (m: Market) => {
     setMarket(m);
@@ -263,6 +295,24 @@ export default function Home() {
                     onLoadSample={() => loadSample(market)}
                     onAnalyze={() => void analyze(market)}
                     onErase={() => eraseMarket(market)}
+                    onDeepDive={() => setStepBy((prev) => ({ ...prev, [market]: "deepdive" }))}
+                  />
+                </motion.div>
+              )}
+
+              {step === "deepdive" && (
+                <motion.div key={`${market}-deepdive`} {...stepAnim}>
+                  <DeepDive
+                    symbol={ddSymbol}
+                    rows={[]}
+                    universe={[]}
+                    market={market}
+                    aiKey={aiKey.startsWith("sk-ant-") ? aiKey : undefined}
+                    aiModel={aiModel}
+                    hydrate={hydrateSymbol}
+                    onBack={() => setStepBy((prev) => ({ ...prev, [market]: "import" }))}
+                    onChangeSymbol={setDdSymbol}
+                    onAddWatch={addWatchFromDeepDive(market)}
                   />
                 </motion.div>
               )}

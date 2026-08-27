@@ -264,6 +264,11 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     what: "A fire drill: it takes real past crashes (2000, 2008, 2020, 2022, and gold's own 1980 winter) and applies the damage each TYPE of investment took back then to what you hold today. You see your total before and after, which holdings get hit hardest, how long recovery took, and what happened to people who kept buying.",
     better: "There is no better or worse - it's not a prediction. The one question it answers: if your portfolio fell this much next year, would you panic-sell at the bottom? If yes, your position sizes are the problem, and the cheap time to fix them is NOW, while markets are calm.",
   },
+  goldDesk: {
+    name: "The gold desk read",
+    what: "A tally of the forces that actually move gold, each marked as helping or hurting: the US 10-year REAL yield and its direction (gold pays no interest, so inflation-protected bond yields are its opportunity cost - the single biggest driver), the US dollar (gold is priced in it), gold vs its own 200-day average, where it sits in its 5-year trend channel, your own currency (a weaker rupee or loonie adds to your local gold return), and miners as sector confirmation.",
+    better: "More helping than hurting is a reason to FILL an under-filled 5-10% sleeve steadily - never to exceed it. The read is deliberately blunt about its limits: it paces an insurance purchase, it does not time a trade, and your existing sleeve size overrides every signal on this page.",
+  },
   hedge: {
     name: "Hedge sleeve (gold & silver funds)",
     what: "The slice of your portfolio sitting in gold and silver funds. Think of it as insurance: it tends to hold value when stock markets and currencies fall, but it pays no dividend, builds no products, and compounds nothing.",
@@ -300,9 +305,9 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     better: "Lower is more diversified. Below 0.10 reads as genuinely spread out; above 0.18 means a few names quietly dominate - your portfolio is more concentrated than its length suggests.",
   },
   checklist: {
-    name: "Pre-buy checklist",
-    what: "Ten yes-or-no judgment gates from the masters' actual filters (Lynch's one-sentence test, Buffett's 10-year market closure, Munger's inversion, Graham's price-first discipline). No data feed can tick these; only you can. Ticks save on this device, per stock.",
-    better: "8 of 10 honest yeses is the bar before any buy order. Below that, the position is a gamble whatever the score says. The two most-skipped gates are the most valuable: WHY is it cheap (who's selling, what's your edge?) and writing your buy-below price BEFORE looking at today's quote.",
+    name: "Pre-buy gates (research prompt)",
+    what: "Ten yes/no questions no data feed can answer, because they are about the BUSINESS not the ticker: the one-sentence explanation, the 10-year test, the named moat, who the competitors are, survival in a terrible year, management's record, governance flags, capital allocation, why the opportunity exists, and the external risks. The app builds a prompt; any AI answers each gate YES / NO / UNKNOWN with the deciding fact and a source.",
+    better: "8 clean YES answers is the bar before a full-size position. The prompt forces an explicit UNKNOWN where evidence is missing - that is the honest answer most tools fake, and an UNKNOWN on governance or survival is itself a reason to go smaller or pass.",
   },
   momentum: {
     name: "Momentum (context chips)",

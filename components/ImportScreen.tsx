@@ -27,6 +27,7 @@ export function ImportScreen({
   onLoadSample,
   onAnalyze,
   onErase,
+  onDeepDive,
 }: {
   market: Market;
   holdings: Holding[];
@@ -44,6 +45,7 @@ export function ImportScreen({
   onLoadSample: () => void;
   onAnalyze: () => void;
   onErase: () => void;
+  onDeepDive?: () => void;
 }) {
   const meta = MARKET_META[market];
 
@@ -59,6 +61,21 @@ export function ImportScreen({
           <strong className="text-ink">sell / hold / accumulate</strong> decision.
         </p>
       </div>
+
+      {onDeepDive && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-page hairline rounded-xl px-3.5 py-2.5">
+          <span className="text-[12.5px] text-ink-2">
+            <strong className="text-ink">Just want to research one stock?</strong> Skip the import - deep-dive any{" "}
+            {meta.label} name for its scorecard, SWOT, valuation band and advanced chart.
+          </span>
+          <button
+            onClick={onDeepDive}
+            className="ml-auto bg-series-1 text-white rounded-lg px-3 py-1.5 text-[12.5px] font-semibold hover:opacity-90 no-print shrink-0"
+          >
+            🔬 Deep-dive any stock
+          </button>
+        </div>
+      )}
 
       {restored && holdings.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-[12.5px] bg-status-good/8 border border-status-good/30 rounded-xl px-3.5 py-2.5">

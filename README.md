@@ -27,16 +27,13 @@ Every holding gets ~5 fiscal years of statements + 5 years of prices and is scor
 Financials get sector-appropriate checks (ROA, leverage, P/B). Every check names its investor and
 shows its evidence. ETFs and new listings get an honest "insufficient data" verdict.
 
-## Simple by default
+## One tab row, no modes
 
-The dashboard opens with just **four tabs - Overview, Coach, Decisions, ETFs** - and the Overview leads
-with **"Your action plan"**: the whole analysis compressed into a few plain sentences (what to sell,
-what to stop adding to, which ETF fee to fix, where new money belongs, and what just needs
-patience), each line linking to the tab that holds the evidence. One click on **"All tools"**
-reveals the full bench, now grouped so the top row stays calm: **Ideas** (Screeners · Smart money -
-"what to buy next"), **Checkup** (Health & income · Stress test · Backtest - "is the portfolio
-built right?"), plus Chart, the Buffett matrix and the AI prompt generator. The choice is
-remembered on-device.
+The dashboard shows every tool in a single row - **Overview · Coach · Decisions · Ideas · ETFs ·
+Gold · Checkup · Chart** - with related tools grouped inside a tab rather than hidden behind a
+mode switch. The Overview still leads with **"Your action plan"**: the whole analysis compressed
+into a few plain sentences (what to sell, what to stop adding to, which ETF fee to fix, where new
+money belongs, and what just needs patience), each line linking to the tab that holds the evidence.
 
 ## The tabs
 
@@ -51,9 +48,8 @@ headers, custom-filter fields, pillar meters, ratio tables, the valuation snapsh
 card: what the ratio means, how it's computed, and **which direction the value school considers
 better** (with the masters' thresholds).
 
-**Market weather** (top of the Overview, both modes; **compact by default** - the regime read, three
-posture chips and your hedge sleeve, with all 9 readings one click away and the choice remembered) -
-the macro situation from free public data:
+**Market weather** (top of the Overview) - every reading visible at once, plus the regime read and
+your hedge sleeve. The macro situation from free public data:
 index level with 1-year return, distance from the 52-week high and position vs its **200-day
 average**; **India VIX / VIX** with fear bands (calm <14 · fear >28); USD/INR / USD/CAD; gold AND
 silver; the **gold/silver ratio** (long-run ~60-70, labelled "context, never a signal"); **gold in
@@ -77,10 +73,13 @@ brackets), a per-stock **snowflake**, pillar meters, every check with evidence, 
 P/E anchor, justified P/B for financials → buy-below price that demands 20/30/40% margin of safety
 by quality), the **analyst 12-month consensus as labelled context** (their horizon is 1 year, yours
 is 5), the **since-you-bought fundamentals journey** (below), 5-year charts, ratio tables, and a
-**pre-buy checklist**: ten yes-or-no judgment gates from the masters' actual filters (Lynch's
-one-sentence test, Buffett's market-closure test, Munger's inversion, Graham's price-first
-discipline). No data feed can tick these - only you can; ticks save on-device per symbol, and if
-you can't honestly tick 8 of 10, you're gambling, not investing.
+**pre-buy gates**: ten yes-or-no questions the numbers can't answer (the one-sentence explanation,
+the 10-year test, the named moat, the competitors, survival in a terrible year, management's record,
+governance flags, capital allocation, why the opportunity exists, external risks). Instead of asking
+you to self-grade, the app builds a **research prompt** for any AI: it must answer each gate
+**YES / NO / UNKNOWN** with the deciding fact and a source, then give the score, the two biggest
+unknowns to go and verify, and the bear case in three lines. Fewer than 8 clean YES answers means
+small position or skip.
 
 **Since you bought (fundamentals journey)** - every held stock gets a then-vs-now table: revenue,
 net income, EPS, ROE/ROCE, margins, leverage, interest cover and FCF **in the fiscal year you
@@ -91,8 +90,10 @@ lagging price (coiled spring - keep), flat business + flat price (dead money - r
 deteriorating business (the fall is deserved - exit review). The same chip appears on the Decisions
 board.
 
-**Deep analysis** - a full page for ANY India/Canada stock (every stock card has a "Deep analysis"
-button, and "Deep-dive any stock" in the toolbar takes a bare NSE/TSX code - DMART gets .NS tried
+**Deep analysis** - a full page for ANY India/Canada stock, and it does **not** need a portfolio:
+"Deep-dive any stock" sits on the import screen itself, so you can research a name before importing
+anything (every stock card has a "Deep analysis" button too, and the dashboard toolbar takes a bare
+NSE/TSX code - DMART gets .NS tried
 automatically). One screen collects everything the tabs know plus the portal-style extras, powered
 honestly: a **rule-based SWOT** with the evidence printed on every line (Strengths/Weaknesses = the
 business per the checks; Opportunities/Threats = the situation - price vs value, trend, size, market
@@ -209,6 +210,21 @@ MA" is the 40-week MA on weekly data - not a meaningless 200-week average), both
 and **golden / death crosses are marked right on the chart** where the 50-day crosses the 200-day.
 Works for any Yahoo symbol, not just holdings.
 
+**Gold** - a desk for the one asset the stock machinery cannot judge. Gold has no earnings, so the
+tab reads the forces that actually move it, each marked helping or hurting: the **US 10-year REAL
+yield and its 6-month direction** (gold pays no coupon, so inflation-protected bond yields are its
+opportunity cost - the single biggest driver, pulled keyless from FRED, and reported as UNKNOWN
+rather than faked if FRED is unreachable), the **US dollar**, gold **vs its own 200-day average**,
+where it sits **inside its 5-year log-trend channel**, **your own currency** (a weaker rupee or
+loonie adds to your local gold return on top of the metal), and **miners vs the metal** as sector
+confirmation. Two things outrank the tally on purpose: a **stretched price** (top rail of the
+channel) and **your own sleeve** - at or above the 10% cap the answer is "no more" whatever the
+macro says. Below that: **how to actually buy it here** - India's ETF/fund/SGB/digital reality with
+fees and the Apr-2026 tax treatment (SGBs are discontinued), Canada's hedged-vs-unhedged and
+registered-account mechanics - and **what governments are doing**, the slow structural facts
+(record central-bank buying, the US hoard, why sanctions move gold) dated and sourced so context
+never masquerades as news.
+
 **Checkup › Health & income** - concentration checks (top holding, top-3, HHI - each with a plain-words
 tooltip), sector caps **with history's receipts when a threshold is crossed** (Enron/Nokia/Yes Bank
 for single names, Nasdaq-2000's 78%-and-15-years for sector bets), capital-in-quality
@@ -300,7 +316,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # snowflake axis leaders, the SEC UA contact rule, the crash
                                      # stress test, hard-asset chips, concentration analogs, the
                                      # regression channel + auto S/R, rule-based SWOT, sector peers
-                                     # from the scan cache (420+ checks)
+                                     # from the scan cache, the gold desk, the pre-buy
+                                     # research prompt (445+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,
