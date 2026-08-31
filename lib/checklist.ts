@@ -89,6 +89,12 @@ export interface ChecklistPromptContext {
   price?: string;
   /** short facts the app already computed, so the AI doesn't re-derive them */
   appFacts?: string[];
+  /**
+   * what the app could NOT verify - readiness gaps and unscored (n/a) checks.
+   * The prompt turns each one into an explicit research task, so the gate's
+   * blind spots become the AI's to close from filings.
+   */
+  dataGaps?: string[];
 }
 
 /**
@@ -112,6 +118,14 @@ export function buildChecklistPrompt(ctx: ChecklistPromptContext): string {
   if (ctx.appFacts?.length) {
     lines.push(`NUMBERS ALREADY COMPUTED (from 5 years of filings - use them, don't re-derive):`);
     for (const f of ctx.appFacts) lines.push(`- ${f}`);
+    lines.push("");
+  }
+  if (ctx.dataGaps?.length) {
+    lines.push(
+      `DATA THE SCREENING APP COULD NOT VERIFY - close each of these from primary sources`,
+      `(company filings, annual report, exchange/regulator disclosures) and state the number, the fiscal period and the source:`
+    );
+    for (const g of ctx.dataGaps) lines.push(`- ${g}`);
     lines.push("");
   }
   lines.push(

@@ -58,7 +58,7 @@ import { buildJourney, estimateBuyMonth } from "../lib/journey";
 import { fromLite, toLite } from "../lib/scancache";
 import { parseCustomSymbols } from "../lib/universe";
 import type { StockData } from "../lib/types";
-import { buildValuation } from "../lib/valuation";
+import { buildValuation, judgeAgreement } from "../lib/valuation";
 import { UNIVERSES, UNIVERSE_COUNTRIES, candidatesFor } from "../lib/universe";
 import { computeHealth, computeIncome, activeRows } from "../lib/health";
 import { buildJourney as buildJourneyFn } from "../lib/journey";
@@ -2571,13 +2571,19 @@ console.log("\n== EXTERNAL REVIEW FIXES: flag tiers, coverage gate, readiness, t
     if (sc.verdict === "ADD_MORE") check(`${s}: ADD_MORE only with coverage ≥ 60%`, sc.coverage >= 0.6);
   }
 
-  // ---- valuation confidence tightened (1.75x / 2.25x) + raw min-max ----
+  // ---- valuation confidence tightened (1.75x / 2.25x), outlier-aware + raw min-max ----
   for (const s of ["TCS.NS", "HDFCBANK.NS", "ITC.NS", "SHOP.TO", "AAPL"]) {
     const d = mockStockData(s);
     const v = buildValuation(d, buildScorecard(d));
     if (v.confidence === "triangulated")
-      check(`${s}: triangulated demands 3+ methods within 1.75x`, (v.methodCount ?? 0) >= 3 && (v.spread ?? 9) <= 1.75, `spread=${v.spread?.toFixed(2)}`);
-    if (v.confidence === "conflicting") check(`${s}: conflicting means spread > 2.25x`, (v.spread ?? 0) > 2.25, `spread=${v.spread?.toFixed(2)}`);
+      check(
+        `${s}: triangulated = tight all round, or 4+ methods with the one outlier REPORTED`,
+        ((v.methodCount ?? 0) >= 3 && (v.spread ?? 9) <= 1.75) ||
+          ((v.methodCount ?? 0) >= 4 && (v.clusterSpread ?? 9) <= 1.75 && v.outlier !== undefined),
+        `spread=${v.spread?.toFixed(2)} cluster=${v.clusterSpread?.toFixed(2)}`
+      );
+    if (v.confidence === "conflicting")
+      check(`${s}: conflicting = scattered even after setting the extreme aside`, (v.clusterSpread ?? v.spread ?? 0) > 2.25, `cluster=${v.clusterSpread?.toFixed(2)}`);
     if ((v.methodCount ?? 0) >= 2)
       check(`${s}: raw method min-max surfaced`, v.methodLow !== undefined && v.methodHigh !== undefined && v.methodLow <= v.methodHigh);
   }
@@ -2676,6 +2682,74 @@ console.log("\n== EXTERNAL REVIEW FIXES: flag tiers, coverage gate, readiness, t
     })
   );
   check("F-Score is labelled as modified, with its deviations stated", /modified/i.test(METRIC_INFO.fscore.name) && /2%/.test(METRIC_INFO.fscore.what));
+}
+
+console.log("\n== OUTLIER-AWARE AGREEMENT: the Graham floor stops poisoning the confidence read ==");
+{
+  // ---- the pure statistic, exhaustively ----
+  const tight = judgeAgreement([100, 105, 110]);
+  check("3 methods within 1.75x → triangulated, no outlier", tight.confidence === "triangulated" && tight.outlierIdx === undefined);
+  const floor = judgeAgreement([100, 110, 120, 30]);
+  check(
+    "4 methods, one conservative floor → triangulated with the outlier reported BELOW",
+    floor.confidence === "triangulated" && floor.outlierIdx === 3 && floor.side === "below" && Math.abs((floor.clusterSpread ?? 0) - 1.2) < 1e-9,
+    JSON.stringify(floor)
+  );
+  const high = judgeAgreement([100, 105, 110, 190]);
+  check("4 methods, one optimistic stray → triangulated with the outlier reported ABOVE", high.confidence === "triangulated" && high.side === "above");
+  const camps = judgeAgreement([100, 101, 250, 260]);
+  check("two genuine camps → conflicting (no outlier can rescue it)", camps.confidence === "conflicting");
+  const twoOfThree = judgeAgreement([100, 102, 300]);
+  check("2-of-3 tight + a stray → THIN, never triangulated (two points don't triangulate)", twoOfThree.confidence === "thin" && twoOfThree.side === "above");
+  check("2 methods far apart → conflicting", judgeAgreement([100, 240]).confidence === "conflicting");
+  check("2 methods close → thin (a pair is never a triangulation)", judgeAgreement([100, 150]).confidence === "thin");
+  check("1 method → thin", judgeAgreement([50]).confidence === "thin");
+  check("junk values are ignored", judgeAgreement([100, NaN, -5, 0, 110, 95]).confidence === "triangulated");
+
+  // ---- the median and the displayed range NEVER change - only the label does ----
+  const itcD = mockStockData("ITC.NS");
+  const itcV = buildValuation(itcD, buildScorecard(itcD));
+  {
+    const vv = itcV.methods.map((m) => m.value).sort((a, b) => a - b);
+    const med = vv.length % 2 ? vv[(vv.length - 1) / 2] : (vv[vv.length / 2 - 1] + vv[vv.length / 2]) / 2;
+    check("outlier stays IN the median (intrinsic unchanged by the cluster read)", itcV.intrinsic !== undefined && Math.abs(itcV.intrinsic - med) < 1e-9);
+    check("outlier stays IN the displayed span", itcV.methodLow === vv[0] && itcV.methodHigh === vv[vv.length - 1]);
+  }
+  check(
+    "ITC: Graham floor set aside → triangulated, floor reported below",
+    itcV.confidence === "triangulated" && itcV.outlier?.id === "graham" && itcV.outlier.side === "below",
+    `${itcV.confidence} ${itcV.outlier?.id}`
+  );
+
+  // ---- readiness now differentiates instead of failing everyone ----
+  const readyOf = (s: string) => {
+    const d = mockStockData(s);
+    const sc = buildScorecard(d);
+    return assessReadiness({ card: sc, data: d, valuation: buildValuation(d, sc) });
+  };
+  check("ITC reaches DECISION-READY (methods cluster once the floor is set aside)", readyOf("ITC.NS").level === "full");
+  check("TITAN reaches DECISION-READY", readyOf("TITAN.NS").level === "full");
+  const tcsR = readyOf("TCS.NS");
+  check(
+    "TCS stays partial - its remaining methods GENUINELY disagree (2.5x cluster)",
+    tcsR.level === "partial" && tcsR.gaps.some((g) => /genuinely disagree/.test(g)),
+    tcsR.gaps.join("|")
+  );
+  const tataR = readyOf("TATAMOTORS.NS");
+  check("TATAMOTORS: 2-of-3 agreement named for what it is", tataR.gaps.some((g) => /two of the three/.test(g)));
+  check("a bank STILL never reaches full, triangulated or not", readyOf("HDFCBANK.NS").level === "partial");
+
+  // ---- the gap-closing research prompt ----
+  const gapPrompt = buildChecklistPrompt({
+    symbol: "ITC.NS",
+    name: "ITC Ltd",
+    dataGaps: ["Interest coverage unknown (no interest expense on file)", "Unscored check (the app had no data for it): Current ratio ≥ 1.25"],
+  });
+  check("gap prompt carries the COULD NOT VERIFY section", /DATA THE SCREENING APP COULD NOT VERIFY/.test(gapPrompt));
+  check("…with every gap as an explicit research task", /Interest coverage unknown/.test(gapPrompt) && /Current ratio/.test(gapPrompt));
+  check("…demanding period + source per item", /fiscal period and the source/.test(gapPrompt));
+  const plainPrompt = buildChecklistPrompt({ symbol: "ITC.NS" });
+  check("no gaps → no empty section", !/COULD NOT VERIFY/.test(plainPrompt));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL CHECKS PASSED");

@@ -60,7 +60,9 @@ export function ValuationBlock({
         {val.confidence && (
           <Badge tone={val.confidence === "triangulated" ? "good" : val.confidence === "thin" ? "muted" : "warning"}>
             {val.confidence === "triangulated"
-              ? `triangulated · ${val.methodCount} methods agree`
+              ? val.outlier
+                ? `triangulated · ${(val.methodCount ?? 1) - 1} of ${val.methodCount} agree`
+                : `triangulated · ${val.methodCount} methods agree`
               : val.confidence === "thin"
                 ? `thin · ${val.methodCount ?? 0} method${(val.methodCount ?? 0) === 1 ? "" : "s"}`
                 : "methods conflict"}
@@ -139,6 +141,15 @@ export function ValuationBlock({
           </span>
         )}
       </div>
+      {val.outlier && val.confidence === "triangulated" && (
+        <p className="text-[11px] text-muted mt-1 leading-snug">
+          {val.outlier.label} ({fmtMoney(val.outlier.value, cur, true)}) sits {val.outlier.side} the cluster -{" "}
+          {val.outlier.side === "below"
+            ? "a deliberately conservative floor (book-value anchored), answering a different question than the earnings-based methods"
+            : "the optimistic stray among the methods"}
+          . It stays in the median and the span above; it is only set aside when judging how well the methods agree.
+        </p>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-2">
         {val.methods.map((m) => (

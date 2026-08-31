@@ -210,6 +210,10 @@ export function StockCard({
   const [open, setOpen] = useState(defaultOpen);
   const [ai, setAi] = useState<{ loading: boolean; text?: string; error?: string }>({ loading: false });
   const [promptCopied, setPromptCopied] = useState(false);
+  const [gapCopied, setGapCopied] = useState(false);
+  // deliberate look-past-the-gate: the user can reveal withheld numbers, with
+  // the gaps kept on screen - a seatbelt, not a cage
+  const [showBlocked, setShowBlocked] = useState(false);
   const { holding, data, scorecard } = row;
   const cur = (data?.quote.currency ?? holding.currency) as Currency;
   const isWatch = !!holding.watch;
@@ -276,6 +280,39 @@ export function StockCard({
   const vm = VERDICT_META[scorecard.verdict];
   const q = data.quote;
   const isEtf = isEtfHolding(holding.yahooSymbol, q.name ?? holding.name, q.quoteType, holding.securityType);
+
+  /**
+   * The gap-closing research prompt: the pre-buy gates PLUS every readiness
+   * gap and every unscored (n/a) check, each turned into an explicit research
+   * task with a demanded source. What the free data cannot verify, the AI is
+   * sent to verify - accuracy is added, never assumed.
+   */
+  const copyGapPrompt = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const naChecks = scorecard.checks
+      .filter((c) => c.status === "na")
+      .map((c) => `Unscored check (the app had no data for it): ${c.label}`);
+    const prompt = buildChecklistPrompt({
+      symbol: holding.yahooSymbol,
+      name: q.name,
+      sector: q.sector,
+      industry: q.industry,
+      price: fmtMoney(q.price, cur),
+      appFacts: [
+        `App scorecard: ${scorecard.totalScore}/100 (${VERDICT_META[scorecard.verdict].label}), data coverage ${Math.round(scorecard.coverage * 100)}%`,
+        `5y revenue CAGR ${fmtPct(scorecard.cagr.revenue)}, EPS CAGR ${fmtPct(scorecard.cagr.eps)}`,
+        ...(scorecard.redFlags.length ? [`Red flags already found: ${scorecard.redFlags.join("; ")}`] : []),
+      ],
+      dataGaps: [...(readiness?.gaps ?? []), ...naChecks],
+    });
+    try {
+      await navigator.clipboard.writeText(prompt);
+    } catch {
+      /* clipboard blocked - ignore */
+    }
+    setGapCopied(true);
+    setTimeout(() => setGapCopied(false), 2200);
+  };
 
   const runAi = async () => {
     if (!aiKey) return;
@@ -476,11 +513,28 @@ export function StockCard({
                 ))}
               </ul>
               <p className="text-[11px] text-muted mt-1.5 italic">{readiness.notes[0]}</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                <button
+                  onClick={copyGapPrompt}
+                  className="text-[12px] font-medium text-series-1 hover:underline no-print"
+                  title="Builds a research prompt that turns every gap above (and every unscored check) into an explicit task for any AI, with sources demanded"
+                >
+                  {gapCopied ? "✓ Prompt copied - paste into any AI" : "📋 Copy the gap-closing research prompt"}
+                </button>
+                {readiness.suppressActions && (
+                  <button
+                    onClick={() => setShowBlocked(!showBlocked)}
+                    className="text-[12px] font-medium text-[#8a6100] hover:underline no-print"
+                  >
+                    {showBlocked ? "▴ Hide the withheld numbers again" : "▸ Show the withheld numbers anyway"}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
           {/* what the decision board says about THIS position - same engine, zero disagreement */}
-          {decision && !isEtf && !readiness?.suppressActions && (
+          {decision && !isEtf && (!readiness?.suppressActions || showBlocked) && (
             <div className="bg-page hairline rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px]">
               <span className="text-muted text-[11.5px] uppercase tracking-wide">Decision board says</span>
               <Badge tone={ACTION_META[decision.action].tone} icon={ACTION_META[decision.action].icon}>
@@ -672,14 +726,22 @@ export function StockCard({
               )}
           </div>
 
-          {/* intrinsic value strip - withheld entirely when the gate is closed */}
-          {readiness?.suppressActions ? (
+          {/* intrinsic value strip - withheld when the gate is closed, unless deliberately revealed */}
+          {readiness?.suppressActions && !showBlocked ? (
             <p className="text-[12.5px] text-muted italic">
               Fair-value prices are withheld - the readiness gaps above have to close before a buy-below number
-              would mean anything.
+              would mean anything. The &ldquo;show anyway&rdquo; button above reveals them at your call.
             </p>
           ) : (
-            <ValuationBlock data={data} scorecard={scorecard} avgCost={isWatch ? undefined : holding.avgCost} />
+            <div className="space-y-2">
+              {readiness?.suppressActions && showBlocked && (
+                <p className="text-[12px] text-status-critical leading-snug">
+                  ⚠ Shown on your explicit request. The readiness gaps above still stand - treat every number
+                  below as provisional arithmetic, not advice.
+                </p>
+              )}
+              <ValuationBlock data={data} scorecard={scorecard} avgCost={isWatch ? undefined : holding.avgCost} />
+            </div>
           )}
 
           {/* fundamentals then-vs-now */}

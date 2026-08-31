@@ -347,7 +347,7 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
   readiness: {
     name: "Decision-ready gate",
     what: "Before any buy/add/trim advice is shown, the app checks itself: enough data to score (coverage), enough years of history, a believable fair-value estimate, a live price, no solvency-level red flag, and no hidden account/tax complication. Anything missing becomes a listed gap. Banks and financials are always at most 'Partly ready', because their riskiest numbers (bad loans, capital adequacy) simply don't exist in free data.",
-    better: "Green (Decision-ready) = the verdict can be read as written. Amber (Partly ready) = read the gaps first; they are open questions, not footnotes. Red (Not decision-ready) = the app is refusing to give action advice on this data - on purpose, because a confident answer would be a guess.",
+    better: "Green (Decision-ready) = the verdict can be read as written. Amber (Partly ready) = read the gaps first; they are open questions, not footnotes. Red (Not decision-ready) = the app is refusing to give action advice on this data - on purpose, because a confident answer would be a guess. Two buttons sit under the gap list: one copies a research prompt that sends any AI to close the exact gaps from filings, and (on red) one shows the withheld numbers anyway - your call, with the gaps kept on screen.",
   },
   coverage: {
     name: "Data coverage",

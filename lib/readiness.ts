@@ -128,14 +128,24 @@ export function assessReadiness(args: {
     } else if (valuation.confidence === "conflicting") {
       demote(
         "partial",
-        `The ${valuation.methodCount ?? 0} valuation methods disagree by ${valuation.spread !== undefined ? `${valuation.spread.toFixed(1)}x` : "a wide margin"}${valuation.methodLow !== undefined && valuation.methodHigh !== undefined ? ` (${valuation.methodLow.toFixed(0)} to ${valuation.methodHigh.toFixed(0)} per share)` : ""} - treat the fair-value band as a sketch, not a target.`,
+        valuation.clusterSpread !== undefined && valuation.outlier
+          ? `The ${valuation.methodCount ?? 0} valuation methods genuinely disagree: even after setting aside the most extreme one (${valuation.outlier.label}, ${valuation.outlier.side} the rest), the remainder still span ${valuation.clusterSpread.toFixed(1)}x - treat the fair-value band as a sketch, not a target.`
+          : `The ${valuation.methodCount ?? 0} valuation methods disagree by ${valuation.spread !== undefined ? `${valuation.spread.toFixed(1)}x` : "a wide margin"}${valuation.methodLow !== undefined && valuation.methodHigh !== undefined ? ` (${valuation.methodLow.toFixed(0)} to ${valuation.methodHigh.toFixed(0)} per share)` : ""} - treat the fair-value band as a sketch, not a target.`,
       );
     } else if (valuation.confidence === "thin") {
       demote(
         "partial",
-        (valuation.methodCount ?? 0) >= 3
-          ? `The ${valuation.methodCount} valuation methods agree only loosely${valuation.spread !== undefined ? ` (${valuation.spread.toFixed(1)}x apart)` : ""} - the fair-value band is drawn wider to say so.`
-          : `Fair value rests on ${valuation.methodCount === 1 ? "a single method" : "only two methods"} - not a triangulation. The band is drawn wider to say so.`,
+        (valuation.methodCount ?? 0) === 3 && valuation.outlier
+          ? `Only two of the three valuation methods agree; ${valuation.outlier.label} sits far ${valuation.outlier.side} them. Two points and a stray are not a triangulation - the band is drawn wider to say so.`
+          : (valuation.methodCount ?? 0) >= 3
+            ? `The valuation methods agree only loosely${
+                valuation.clusterSpread !== undefined && valuation.outlier
+                  ? ` (even with ${valuation.outlier.label} set aside, the rest span ${valuation.clusterSpread.toFixed(1)}x)`
+                  : valuation.spread !== undefined
+                    ? ` (${valuation.spread.toFixed(1)}x apart)`
+                    : ""
+              } - the fair-value band is drawn wider to say so.`
+            : `Fair value rests on ${valuation.methodCount === 1 ? "a single method" : "only two methods"} - not a triangulation. The band is drawn wider to say so.`,
       );
     }
   }

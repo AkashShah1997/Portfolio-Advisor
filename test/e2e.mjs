@@ -163,6 +163,10 @@ if (!/unofficial Yahoo Finance aggregates/.test(readyBody)) throw new Error("pro
 // the tightened valuation confidence is shown on the intrinsic-value strip
 if (!/methods conflict|triangulated ·|thin ·/.test(readyBody)) throw new Error("valuation confidence chip missing");
 if (!/Methods span/.test(readyBody)) throw new Error("raw method min-max missing from the valuation strip");
+// the gate differentiates: at least one holding (ITC) fully clears it…
+if (!(await page.locator("text=/Decision-ready/").count())) throw new Error("no card reaches Decision-ready - the cluster read is not differentiating");
+// …and every gapped card offers the prompt that closes its gaps
+await page.waitForSelector("text=Copy the gap-closing research prompt", { timeout: 5000 });
 
 // ---- pre-buy gates: a research prompt for any AI, not a self-graded checklist ----
 await page.waitForSelector("text=Pre-buy gates", { timeout: 10000 });

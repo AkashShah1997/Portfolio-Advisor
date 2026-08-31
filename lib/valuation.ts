@@ -33,10 +33,19 @@ export interface Valuation {
   buyBelow?: number; // intrinsic × (1 − mosTarget)
   /** how many independent methods produced a number */
   methodCount?: number;
-  /** max/min across the methods - above ~2.25x they are not really agreeing */
+  /** max/min across ALL methods - the raw, unedited disagreement */
   spread?: number;
-  /** triangulated = 3+ methods within 1.75x; thin = few; conflicting = wide spread */
+  /**
+   * triangulated = 3+ methods within 1.75x, OR 4+ where all but one agree
+   * within 1.75x (the set-aside one is reported in `outlier`, never hidden);
+   * thin = too few points or loose agreement; conflicting = scattered even
+   * after setting the most extreme method aside
+   */
   confidence?: "triangulated" | "thin" | "conflicting";
+  /** max/min after setting aside the single farthest-from-median method (3+ methods, loose overall) */
+  clusterSpread?: number;
+  /** the method the cluster read set aside - reported with its value and side */
+  outlier?: { id: string; label: string; value: number; side: "below" | "above" };
   /** lowest and highest single-method value - the raw disagreement, shown honestly */
   methodLow?: number;
   methodHigh?: number;
@@ -54,6 +63,61 @@ export interface Valuation {
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * How well do the methods agree? The naive answer (max/min) is brittle: one
+ * structurally conservative method poisons it even when the rest cluster
+ * tightly. The Graham Number is the usual culprit - it is anchored to BOOK
+ * value, so for asset-light compounders (most of the Indian quality universe)
+ * it sits far below every earnings-based method BY CONSTRUCTION. That is a
+ * floor answering a different question, not a disagreement about fair value.
+ *
+ * So the read is two-stage, and nothing is hidden:
+ *  - 3+ methods all within 1.75x            → triangulated
+ *  - 4+ methods where all but ONE fit in
+ *    1.75x                                  → triangulated, outlier REPORTED
+ *    (which method, its value, which side) - it stays in the median and in
+ *    the displayed range; it is only set aside when judging agreement
+ *  - otherwise: thin, or conflicting when even the cluster spans > 2.25x
+ *
+ * With 3 methods a cluster of 2 plus an outlier is NOT a triangulation - two
+ * points and a stray never are - so that stays thin, with the outlier named.
+ */
+export interface AgreementRead {
+  spread?: number;
+  clusterSpread?: number;
+  outlierIdx?: number;
+  side?: "below" | "above";
+  confidence: "triangulated" | "thin" | "conflicting";
+}
+
+export function judgeAgreement(values: number[]): AgreementRead {
+  const v = values.filter((x) => Number.isFinite(x) && x > 0);
+  const n = v.length;
+  if (n < 2) return { confidence: "thin" };
+  const spread = Math.max(...v) / Math.min(...v);
+  if (n >= 3 && spread <= 1.75) return { spread, confidence: "triangulated" };
+  if (n < 3) return { spread, confidence: spread > 2.25 ? "conflicting" : "thin" };
+  // 3+ methods, loose overall: set aside the single farthest from the median
+  // (log distance, so 0.5x and 2x count as equally far)
+  const sorted = [...v].sort((a, b) => a - b);
+  const median = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  let outlierIdx = 0;
+  let worst = -1;
+  v.forEach((x, i) => {
+    const d = Math.abs(Math.log(x) - Math.log(median));
+    if (d > worst) {
+      worst = d;
+      outlierIdx = i;
+    }
+  });
+  const rest = v.filter((_, i) => i !== outlierIdx);
+  const clusterSpread = Math.max(...rest) / Math.min(...rest);
+  const side: "below" | "above" = v[outlierIdx] < median ? "below" : "above";
+  if (n >= 4 && clusterSpread <= 1.75) return { spread, clusterSpread, outlierIdx, side, confidence: "triangulated" };
+  if (clusterSpread > 2.25) return { spread, clusterSpread, outlierIdx, side, confidence: "conflicting" };
+  return { spread, clusterSpread, outlierIdx, side, confidence: "thin" };
+}
 
 function median(xs: number[]): number | undefined {
   const s = xs.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
@@ -191,14 +255,16 @@ export function buildValuation(data: StockData, sc: Scorecard): Valuation {
    * triangulation, and two methods that disagree by more than 2x are not a
    * range - the band widens to say so instead of drawing a tidy ±20%.
    */
-  const vals = methods.map((m) => m.value).filter((v) => Number.isFinite(v) && v > 0);
-  const spread = vals.length >= 2 ? Math.max(...vals) / Math.min(...vals) : undefined;
-  // Tightened after external review: the methods share inputs (the same EPS
-  // feeds Graham, the P/E anchor and the growth formula), so their agreement
-  // overstates independence. "Triangulated" now demands they sit within 1.75x
-  // of each other, and anything past 2.25x is called what it is - conflicting.
-  const confidence: "triangulated" | "thin" | "conflicting" =
-    vals.length >= 3 && (spread ?? 1) <= 1.75 ? "triangulated" : (spread ?? 99) > 2.25 ? "conflicting" : "thin";
+  // Tightened after external review (the methods share inputs, so agreement
+  // overstates independence: 1.75x / 2.25x bars) and then made outlier-aware,
+  // because max/min alone let the Graham book-value floor mislabel every
+  // asset-light compounder as "conflicting". See judgeAgreement above.
+  const pairs = methods.filter((m) => Number.isFinite(m.value) && m.value > 0);
+  const vals = pairs.map((m) => m.value);
+  const agreement = judgeAgreement(vals);
+  const spread = agreement.spread;
+  const confidence = agreement.confidence;
+  const outlierMethod = agreement.outlierIdx !== undefined ? pairs[agreement.outlierIdx] : undefined;
   const halfBand = confidence === "triangulated" ? 0.2 : confidence === "thin" ? 0.3 : 0.4;
   const mosTarget = sc.totalScore >= 70 ? 0.2 : sc.totalScore >= 55 ? 0.3 : 0.4;
 
@@ -210,6 +276,11 @@ export function buildValuation(data: StockData, sc: Scorecard): Valuation {
     methodCount: methods.length,
     spread,
     confidence,
+    clusterSpread: agreement.clusterSpread,
+    outlier:
+      outlierMethod && agreement.side
+        ? { id: outlierMethod.id, label: outlierMethod.label, value: outlierMethod.value, side: agreement.side }
+        : undefined,
     methodLow: vals.length ? Math.min(...vals) : undefined,
     methodHigh: vals.length ? Math.max(...vals) : undefined,
     buyBelow: intrinsic !== undefined ? intrinsic * (1 - mosTarget) : undefined,
