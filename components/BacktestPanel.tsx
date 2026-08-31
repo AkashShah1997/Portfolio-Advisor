@@ -63,7 +63,7 @@ export function BacktestPanel({ rows, market }: { rows: AnalyzedHolding[]; marke
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <SectionTitle sub="The same scorecard, re-run with ONLY the statements and the price that existed at the cutoff - anything unknowable then (dividend yield, TTM figures, 52-week range) honestly goes n/a. Then: what each verdict bucket returned since, vs the index.">
+        <SectionTitle sub="The same scorecard, re-run with ONLY the statements and the price that existed at the cutoff - anything unknowable then (dividend yield, TTM figures, 52-week range) honestly goes n/a. Then: what each verdict bucket returned since, vs the index. Two honest limits: your current list is survivors (whatever you already sold isn't graded), and the engine is judged on the same history it was built from - so read this as a limited diagnostic, never as proof of returns.">
           Backtest - would the engine have helped?
         </SectionTitle>
 

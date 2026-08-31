@@ -149,7 +149,9 @@ export const ETF_CATALOG: EtfCategory[] = [
     market: "canada",
     label: "Gold ETFs (CAD)",
     kind: "commodity",
-    match: /gold/i,
+    // bullion only - a gold MINERS fund is an equity bet and must not be offered
+    // a physical-gold "cheaper twin"
+    match: /(?!.*(miner|mining|producer|global gold|junior gold)).*gold/i,
     options: [
       { symbol: "KILO.TO", name: "Purpose Gold Bullion Fund", mer: 0.0028 },
       { symbol: "CGL.TO", name: "iShares Gold Bullion ETF", mer: 0.0055 },

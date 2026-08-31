@@ -264,6 +264,11 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     what: "A fire drill: it takes real past crashes (2000, 2008, 2020, 2022, and gold's own 1980 winter) and applies the damage each TYPE of investment took back then to what you hold today. You see your total before and after, which holdings get hit hardest, how long recovery took, and what happened to people who kept buying.",
     better: "There is no better or worse - it's not a prediction. The one question it answers: if your portfolio fell this much next year, would you panic-sell at the bottom? If yes, your position sizes are the problem, and the cheap time to fix them is NOW, while markets are calm.",
   },
+  conviction: {
+    name: "Conviction vs speculation",
+    what: "A 0-100 read of how much of the investment case is already PROVEN rather than assumed, across four pillars: evidence you can check (length and completeness of the record), proof already delivered (returns, profits, cash - on the record, not in the forecast), price that does not need heroics, and durability (survives being wrong for two years). It also names every assumption the case still depends on.",
+    better: "Higher means less of the case rests on the future cooperating. It grades EVIDENCE, not outcome: speculations often make money, and the damage comes from owning one while believing it is a conviction - which is how a 3% bet ends up sized like a 20% core holding. The grade maps to a position size, and that is its real job.",
+  },
   posture: {
     name: "Posture (buy, wait, or raise cash)",
     what: "A target CASH BAND derived from the opportunity set, not from a forecast: what share of the businesses you scanned are actually inside their buy zone, how much of what you own is priced above fair value, and what the market weather adds. Cash is treated the way the masters used it - the residue of price discipline, not a market call.",
@@ -335,9 +340,24 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     better: "No size is 'better': large = stability and liquidity; mid/small = longer growth runways AND more ways to fail - so the mid & small screen applies STRICTER quality bars, not looser ones.",
   },
   fscore: {
-    name: "Piotroski F-Score (0–9)",
-    what: "Nine yes/no tests of whether the fundamentals IMPROVED year-over-year: profitable, cash-generative, cash beating book profit, deleveraging, better liquidity, no dilution, rising margins and asset turnover. Hover the number for the per-test breakdown.",
-    better: "Higher is better: 8–9 = fundamentals firing on all cylinders, 0–3 = deteriorating. Academic backtests found high-F cheap stocks strongly beat low-F ones - it's a momentum test for the business, not the price.",
+    name: "Piotroski F-Score (0–9, modified)",
+    what: "Nine yes/no tests of whether the fundamentals IMPROVED year-over-year: profitable, cash-generative, cash beating book profit, deleveraging, better liquidity, no dilution, rising margins and asset turnover. Hover the number for the per-test breakdown. This app's version is slightly modified: up to 2% share-count growth still counts as 'no dilution' (the original demands strictly none), and tests with missing data drop out of the denominator instead of failing.",
+    better: "Higher is better: 8–9 = fundamentals firing on all cylinders, 0–3 = deteriorating. One honest caveat: Piotroski designed and tested it on cheap, out-of-favour value stocks - on expensive glamour stocks its predictive power was much weaker, so read it alongside valuation, never alone.",
+  },
+  readiness: {
+    name: "Decision-ready gate",
+    what: "Before any buy/add/trim advice is shown, the app checks itself: enough data to score (coverage), enough years of history, a believable fair-value estimate, a live price, no solvency-level red flag, and no hidden account/tax complication. Anything missing becomes a listed gap. Banks and financials are always at most 'Partly ready', because their riskiest numbers (bad loans, capital adequacy) simply don't exist in free data.",
+    better: "Green (Decision-ready) = the verdict can be read as written. Amber (Partly ready) = read the gaps first; they are open questions, not footnotes. Red (Not decision-ready) = the app is refusing to give action advice on this data - on purpose, because a confident answer would be a guess.",
+  },
+  coverage: {
+    name: "Data coverage",
+    what: "How much of the scorecard could actually be ANSWERED with available data, weighted by how much each check matters. 100% = every applicable check had real numbers. 50% = half the scorecard sits at n/a - and an n/a is an open question, never a pass.",
+    better: "Higher is better. Below 60% the app refuses to recommend fresh money, and the total score should be read loosely: a 75/100 built on 40% coverage is a sketch, not a grade.",
+  },
+  idleCash: {
+    name: "Idle cash",
+    what: "Money sitting in your bank or broker account waiting to be invested - NOT your emergency fund, and not money you'll need within about 2 years. Enter it (optional) and the posture card compares your actual cash against the band it suggests, instead of talking percentages about money it can't see. Stored only on this device, like everything else here.",
+    better: "Neither more nor less is 'better' - what matters is sitting inside the suggested band for current conditions: enough dry powder that a crash is an opportunity, not so much that a decade of compounding is missed waiting for one.",
   },
   regime: {
     name: "Market weather regime",

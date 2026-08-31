@@ -51,7 +51,10 @@ export function Weatherproof({ rows, fx }: { rows: AnalyzedHolding[]; fx: FxRate
             </div>
             <div className="min-w-[180px] flex-1 max-w-[280px]">
               <Meter value={res.score} />
-              <div className="text-[10.5px] text-muted mt-0.5">value-weighted across your scored holdings</div>
+              <div className="text-[10.5px] text-muted mt-0.5">
+                value-weighted across the {fmtPct(res.coverage, 0)} of your book that can be scored individually
+                (funds are excluded - they are diversified by construction)
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge tone={res.aiHighShare >= 0.4 ? "serious" : res.aiHighShare >= 0.2 ? "warning" : "good"}>

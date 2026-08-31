@@ -73,7 +73,12 @@ export function computeRatios(years: YearFinancials[], prices: { date: string; c
     if (y.netIncome !== undefined && y.revenue) r.netMargin = y.netIncome / y.revenue;
     if (y.operatingIncome !== undefined && y.revenue) r.opMargin = y.operatingIncome / y.revenue;
     if (y.grossProfit !== undefined && y.revenue) r.grossMargin = y.grossProfit / y.revenue;
-    if (y.totalDebt !== undefined && y.equity) r.debtToEquity = y.totalDebt / y.equity;
+    // Negative shareholders' equity makes D/E come out NEGATIVE, which every
+    // "lower is better" test then read as the safest possible balance sheet.
+    // Negative equity is a red flag, not a pass, so the ratio stays undefined
+    // and `negativeEquity` carries the fact instead.
+    if (y.totalDebt !== undefined && y.equity && y.equity > 0) r.debtToEquity = y.totalDebt / y.equity;
+    if (y.equity !== undefined && y.equity <= 0) r.negativeEquity = true;
     if (y.ebit !== undefined && y.interestExpense) r.interestCoverage = y.ebit / Math.abs(y.interestExpense);
     if (y.currentAssets !== undefined && y.currentLiabilities) r.currentRatio = y.currentAssets / y.currentLiabilities;
 
@@ -131,11 +136,13 @@ export function computeFScore(years: YearFinancials[]): Scorecard["fscore"] | un
     t("Operating cash flow > 0", cur.ocf === undefined ? undefined : cur.ocf > 0),
     t("ROA improving", cmp(roa(cur), roa(prev))),
     t("Cash beats accounting profit (OCF > net income)", cmp(cur.ocf, cur.netIncome)),
-    t("Deleveraging (debt/assets down)", cmp(lev(cur), lev(prev), (a, b) => a <= b)),
-    t("Liquidity improving (current ratio up)", cmp(cr(cur), cr(prev), (a, b) => a >= b)),
+    // Piotroski's signals 5, 6, 8 and 9 require STRICT improvement - "unchanged"
+    // scores zero. Awarding a point for flat turned two identical years into 7/9.
+    t("Deleveraging (debt/assets down)", cmp(lev(cur), lev(prev), (a, b) => a < b)),
+    t("Liquidity improving (current ratio up)", cmp(cr(cur), cr(prev), (a, b) => a > b)),
     t("No dilution (share count flat/down)", cmp(cur.shares, prev.shares, (a, b) => a <= b * 1.02)),
-    t("Gross margin improving", cmp(gm(cur), gm(prev), (a, b) => a >= b)),
-    t("Asset turnover improving", cmp(at(cur), at(prev), (a, b) => a >= b)),
+    t("Gross margin improving", cmp(gm(cur), gm(prev), (a, b) => a > b)),
+    t("Asset turnover improving", cmp(at(cur), at(prev), (a, b) => a > b)),
   ];
   const applicable = tests.filter((x) => x.status !== "na");
   if (applicable.length < 5) return undefined; // too little to call it an F-Score
@@ -158,6 +165,15 @@ interface CheckInput {
   fn: () => [number | undefined, string];
 }
 
+/**
+ * Band a metric into pass / borderline / fail.
+ *
+ * For lower-is-better metrics (P/E, P/B, D/E, PEG) a NEGATIVE value is not
+ * "wonderfully cheap" - it is a distress signal or an undefined ratio (negative
+ * earnings, negative equity). Scoring it 1.0 was inverting the signal on
+ * exactly the companies that deserve the harshest reading, so negatives score 0
+ * and the caller is expected to explain why.
+ */
 function band(v: number | undefined, full: number, half: number, higherIsBetter = true): number | undefined {
   if (v === undefined || !Number.isFinite(v)) return undefined;
   if (higherIsBetter) {
@@ -165,6 +181,7 @@ function band(v: number | undefined, full: number, half: number, higherIsBetter 
     if (v >= half) return 0.5;
     return 0;
   }
+  if (v < 0) return 0;
   if (v <= full) return 1;
   if (v <= half) return 0.5;
   return 0;
@@ -184,23 +201,69 @@ export function buildScorecard(data: StockData): Scorecard {
   const isFin =
     quote.sector === "Financial Services" ||
     /bank|insurance|capital markets|credit/i.test(quote.industry ?? "");
-  const isEtfOrFund = /etf|fund|trust units/i.test(quote.name ?? "") || quote.sector === "ETF";
+  // Detect funds by Yahoo's own type first; the old name regex flagged real
+  // operating companies ("Fundtech Ltd") as funds and voided their scorecard.
+  const qt = (quote.quoteType ?? "").toUpperCase();
+  const isEtfOrFund =
+    qt === "ETF" ||
+    qt === "MUTUALFUND" ||
+    quote.sector === "ETF" ||
+    /\b(etf|index fund|trust units|bees)\b/i.test(quote.name ?? "");
 
   const roeSeries = ratios.map((r) => r.roe).filter((v): v is number => v !== undefined);
   const roceSeries = ratios.map((r) => r.roce).filter((v): v is number => v !== undefined);
   const nmSeries = ratios.map((r) => r.netMargin).filter((v): v is number => v !== undefined);
   const first = years[0];
   const last = years[n - 1];
-  const spanYears = n >= 2 ? n - 1 : 0;
+  /**
+   * Span from the actual fiscal-year END DATES, not the row count. Yahoo drops
+   * years, and counting rows turned a 5-year 14.9% CAGR into a 4-year 18.9% one
+   * - which then fed the DCF and the growth checks.
+   */
+  const spanFromDates =
+    first?.endDate && last?.endDate
+      ? (new Date(last.endDate).getTime() - new Date(first.endDate).getTime()) / (365.25 * 24 * 3600 * 1000)
+      : undefined;
+  const spanYears = spanFromDates !== undefined && spanFromDates >= 1 ? spanFromDates : n >= 2 ? n - 1 : 0;
 
-  const revCagr = cagr(first?.revenue, last?.revenue, spanYears);
-  const epsFirst = first?.dilutedEPS ?? first?.basicEPS;
-  const epsLast = last?.dilutedEPS ?? last?.basicEPS;
-  const epsCagr = cagr(epsFirst, epsLast, spanYears);
-  const fcfCagr = cagr(first?.fcf, last?.fcf, spanYears);
+  /**
+   * CAGR endpoints must be the first and last rows that actually CARRY the
+   * metric - a blank oldest row used to void the whole series, and the span has
+   * to shrink with the endpoints or the rate is understated.
+   */
+  const spanBetween = (a?: YearFinancials, b?: YearFinancials): number => {
+    if (a?.endDate && b?.endDate) {
+      const y = (new Date(b.endDate).getTime() - new Date(a.endDate).getTime()) / (365.25 * 24 * 3600 * 1000);
+      if (y >= 1) return y;
+    }
+    return spanYears;
+  };
+  const edge = (pick: (y: YearFinancials) => number | undefined) => {
+    const withVal = years.filter((y) => {
+      const v = pick(y);
+      return v !== undefined && Number.isFinite(v);
+    });
+    if (withVal.length < 2) return undefined;
+    const a = withVal[0];
+    const b = withVal[withVal.length - 1];
+    return { a, b, years: spanBetween(a, b) };
+  };
+  const cagrOf = (pick: (y: YearFinancials) => number | undefined) => {
+    const e = edge(pick);
+    return e ? cagr(pick(e.a), pick(e.b), e.years) : undefined;
+  };
+  const epsOf = (y?: YearFinancials) => y?.dilutedEPS ?? y?.basicEPS;
+
+  const revCagr = cagrOf((y) => y.revenue);
+  const epsFirst = epsOf(first);
+  const epsLast = epsOf(last);
+  const epsCagr = cagrOf(epsOf);
+  const fcfCagr = cagrOf((y) => y.fcf);
 
   const peSeries = ratios.map((r) => r.approxPE).filter((v): v is number => v !== undefined && v > 0 && v < 200);
-  const avgPE = avg(peSeries);
+  // One observation is not a history: with a single year the "own average" is
+  // just today's multiple, which scored a 40x stock full marks against itself.
+  const avgPE = peSeries.length >= 3 ? avg(peSeries) : undefined;
   const currentPE = quote.trailingPE;
 
   const fcfYears = years.map((y) => y.fcf).filter((v): v is number => v !== undefined);
@@ -212,6 +275,7 @@ export function buildScorecard(data: StockData): Scorecard {
   for (let i = 1; i < niSeries.length; i++) if (niSeries[i] < niSeries[i - 1] * 0.98) declineYears++;
 
   const latestD2E = ratios[ratios.length - 1]?.debtToEquity ?? quote.debtToEquityNow;
+  const negativeEquity = ratios[ratios.length - 1]?.negativeEquity === true;
   const latestICR = ratios[ratios.length - 1]?.interestCoverage;
   const latestCR = ratios[ratios.length - 1]?.currentRatio ?? quote.currentRatioNow;
   const latestROE = roeSeries[roeSeries.length - 1] ?? quote.roeTTM;
@@ -294,6 +358,11 @@ export function buildScorecard(data: StockData): Scorecard {
       const m = avg(nmSeries);
       const sd = stdev(nmSeries);
       if (m === undefined || sd === undefined || m <= 0) return [undefined, "Not enough margin history"];
+      // Coefficient of variation is meaningless around a near-zero mean: a
+      // grocer earning 1.5% ± 0.5pp is a steady business, but sd/mean reads it
+      // as 33% "variability" and failed it. Below a 2% mean the check abstains.
+      if (m < 0.02)
+        return [undefined, `Avg margin ${pct(m)} is too thin for a stability ratio - swings around a near-zero mean read as noise`];
       const cv = sd / m;
       return [band(cv, 0.25, 0.5, false), `Margin variability (CV) ${(cv * 100).toFixed(0)}% - lower is steadier`];
     },
@@ -327,7 +396,7 @@ export function buildScorecard(data: StockData): Scorecard {
         if (!prevRev || rev === undefined || metric === undefined) continue;
         testable++;
         const growth = rev / prevRev - 1;
-        if (growth >= 0.095 && metric >= 0.145) qualifying++;
+        if (growth >= 0.10 && metric >= 0.15) qualifying++;
       }
       if (testable < 2) return [undefined, "Not enough year-pairs to test"];
       const share = qualifying / testable;
@@ -401,7 +470,7 @@ export function buildScorecard(data: StockData): Scorecard {
     label: "Revenue CAGR ≥ 10%",
     philosophy: "Jhunjhunwala: earnings follow revenue; growth compounds wealth",
     weight: 7,
-    fn: () => [band(revCagr, 0.1, 0.05), `Revenue CAGR ${pct(revCagr)} over ${spanYears}y`],
+    fn: () => [band(revCagr, 0.1, 0.05), `Revenue CAGR ${pct(revCagr)} over ${spanYears.toFixed(1)}y`],
   });
   checks.push({
     id: "epscagr",
@@ -409,7 +478,14 @@ export function buildScorecard(data: StockData): Scorecard {
     label: "EPS CAGR ≥ 12%",
     philosophy: "Buffett/Lynch: per-share earnings growth is what ultimately moves the price",
     weight: 8,
-    fn: () => [band(epsCagr, 0.12, 0.06), `EPS CAGR ${pct(epsCagr)} over ${spanYears}y`],
+    fn: () => {
+      // A collapse to a LOSS is a real, scoreable answer. Letting it fall to n/a
+      // shrank the denominator and RAISED the score of a company that just
+      // started losing money.
+      if (epsCagr === undefined && epsFirst !== undefined && epsLast !== undefined && epsLast <= 0 && epsFirst > 0)
+        return [0, `EPS fell from ${x2(epsFirst, 2)} to a loss of ${x2(epsLast, 2)} over ${spanYears.toFixed(1)}y`];
+      return [band(epsCagr, 0.12, 0.06), `EPS CAGR ${pct(epsCagr)} over ${spanYears.toFixed(1)}y`];
+    },
   });
   checks.push({
     id: "consistency",
@@ -433,7 +509,13 @@ export function buildScorecard(data: StockData): Scorecard {
     label: "Free cash flow growing",
     philosophy: "Buffett: growing owner earnings = compounding machine",
     weight: 4,
-    fn: () => [band(fcfCagr, 0.08, 0.0), `FCF CAGR ${pct(fcfCagr)} over ${spanYears}y`],
+    fn: () => {
+      const fFirst = years.find((y) => y.fcf !== undefined)?.fcf;
+      const fLast = [...years].reverse().find((y) => y.fcf !== undefined)?.fcf;
+      if (fcfCagr === undefined && fFirst !== undefined && fLast !== undefined && fLast <= 0 && fFirst > 0)
+        return [0, `Free cash flow went from positive to negative over ${spanYears.toFixed(1)}y`];
+      return [band(fcfCagr, 0.08, 0.0), `FCF CAGR ${pct(fcfCagr)} over ${spanYears.toFixed(1)}y`];
+    },
   });
   checks.push({
     id: "reinvest",
@@ -447,8 +529,11 @@ export function buildScorecard(data: StockData): Scorecard {
       let retention: number | undefined;
       if (quote.payoutRatio !== undefined && quote.payoutRatio >= 0 && quote.payoutRatio <= 1.5) {
         retention = Math.max(0, 1 - quote.payoutRatio);
-      } else if (quote.dividendYield === undefined || quote.dividendYield < 0.002) {
-        retention = 1; // effectively no dividend → everything is retained
+      } else if (quote.dividendYield !== undefined && quote.dividendYield < 0.002) {
+        // A KNOWN near-zero yield means everything is retained. An UNKNOWN yield
+        // must stay unknown - treating it as full retention was the single most
+        // optimistic possible reading, and it fired inside the backtest too.
+        retention = 1;
       }
       if (retention === undefined) return [undefined, "Payout ratio unavailable"];
       const sgr = roeAvg * retention;
@@ -545,29 +630,83 @@ export function buildScorecard(data: StockData): Scorecard {
   const dataCoverage = totalW / evaluated.reduce((a, c) => a + c.weight, 0);
 
   // ---------- red flags ----------
+  // Two tiers. CRITICAL flags are solvency/viability facts - negative equity,
+  // interest the profits cannot cover, a latest-year loss - and any ONE of
+  // them makes "keep holding comfortably" indefensible, so it caps the verdict
+  // at WATCH below. Cautions still block ADD_MORE (which demands a clean
+  // sheet), but a strong business can carry one and remain a HOLD.
   const redFlags: string[] = [];
-  if (!isFin && latestICR !== undefined && latestICR < 2) redFlags.push(`Interest coverage is only ${latestICR.toFixed(1)}x - debt service is eating profits.`);
+  const criticalFlags: string[] = [];
+  const critical = (msg: string) => {
+    redFlags.push(msg);
+    criticalFlags.push(msg);
+  };
+  if (!isFin && latestICR !== undefined && latestICR < 2) critical(`Interest coverage is only ${latestICR.toFixed(1)}x - debt service is eating profits.`);
   if (!isFin && latestD2E !== undefined && latestD2E > 2) redFlags.push(`Debt-to-equity of ${latestD2E.toFixed(1)}x is far beyond value-investing comfort.`);
-  if (niSeries.length && (last?.netIncome ?? 1) <= 0) redFlags.push("Latest fiscal year was loss-making.");
+  if (negativeEquity)
+    critical("Shareholders' equity is negative - the balance sheet owes more than it owns, and debt ratios cannot be read normally.");
+  if (niSeries.length && (last?.netIncome ?? 1) <= 0) critical("Latest fiscal year was loss-making.");
   if (fcfPositiveShare !== undefined && fcfPositiveShare < 0.5) redFlags.push("Free cash flow negative in most years - the business consumes cash.");
   if (roeFalling3 && latestROE !== undefined && latestROE < 0.1) redFlags.push("ROE has declined three straight years and is now below 10% - possible moat erosion.");
-  if (epsFirst && epsLast && epsLast < epsFirst * 0.6) redFlags.push("EPS is down more than 40% versus five years ago.");
+  if (epsFirst && epsLast && spanYears >= 2 && epsLast < epsFirst * 0.6)
+    redFlags.push(`EPS is down more than 40% versus ${spanYears.toFixed(0)} years ago.`);
   if (currentPE !== undefined && currentPE > 60 && (epsCagr ?? 0) < 0.15) redFlags.push(`P/E of ${currentPE.toFixed(0)} with modest growth leaves no margin of safety.`);
+  // Commodity earnings look best right before they turn: a miner or refiner at
+  // peak margins prints its fattest ROE and its cheapest P/E at the exact top
+  // of the cycle, and every "higher is better" check above rewards it for it.
+  // When a cyclical's latest margin runs 1.5x its own multi-year average, say so.
+  const isCyclical =
+    quote.sector === "Energy" ||
+    quote.sector === "Basic Materials" ||
+    /\b(oil|gas|coal|mining|metals?|steel|aluminum|copper|cement|chemicals?|paper|shipping)\b/i.test(quote.industry ?? "");
+  const latestNMOwn = nmSeries[nmSeries.length - 1];
+  const nmAvgOwn = avg(nmSeries);
+  if (
+    !isEtfOrFund &&
+    isCyclical &&
+    nmSeries.length >= 3 &&
+    nmAvgOwn !== undefined &&
+    nmAvgOwn > 0 &&
+    latestNMOwn !== undefined &&
+    latestNMOwn > nmAvgOwn * 1.5
+  )
+    redFlags.push(
+      `Cyclical sector at peak margins: latest net margin ${pct(latestNMOwn)} vs own ${nmSeries.length}-year average ${pct(nmAvgOwn)}. In commodities the P/E looks cheapest at the cycle top - score the trough, not the peak.`,
+    );
 
   // ---------- verdict ----------
   const valuationPillar = pillars.find((p) => p.pillar === "valuation");
   const qualityOk = totalScore >= 70;
-  const valuationOk = (valuationPillar?.score ?? 0) >= 50 || !valuationPillar?.applicable;
+  /**
+   * ADD_MORE claims "at a sensible price", so it now REQUIRES price evidence.
+   * The old `|| !applicable` clause let a stock with no P/E, no P/B and no
+   * market cap - i.e. nothing whatsoever about price - be recommended for fresh
+   * capital at any valuation.
+   */
+  const valuationKnown = !!valuationPillar?.applicable;
+  const valuationOk = valuationKnown && (valuationPillar?.score ?? 0) >= 50;
 
   let verdict: Verdict;
+  let verdictNote: string | undefined;
   if (isEtfOrFund || dataCoverage < 0.35 || n < 2) {
     verdict = "INSUFFICIENT_DATA";
   } else if (redFlags.length >= 2) {
     verdict = "REVIEW_EXIT";
-  } else if (qualityOk && valuationOk && redFlags.length === 0) {
+  } else if (qualityOk && valuationOk && redFlags.length === 0 && dataCoverage >= 0.6) {
     verdict = "ADD_MORE";
-  } else if (qualityOk) {
+  } else if (qualityOk && valuationOk && redFlags.length === 0) {
+    // Quality and price both pass - but so much of the checklist went unscored
+    // that "put fresh capital in" would rest on blind spots, not evidence.
+    verdict = "HOLD";
+    verdictNote = `Quality and price both pass, but only ${Math.round(
+      dataCoverage * 100,
+    )}% of the checklist could be scored from available data. Too many blind spots to recommend fresh capital - hold what you have and revisit when fuller financials arrive.`;
+  } else if (qualityOk && redFlags.length === 0) {
+    // high score, but the price is either rich or unknown
     verdict = "HOLD_QUALITY_PRICEY";
+  } else if (qualityOk) {
+    // a high score carrying a red flag is not a "rich price" story - say so
+    verdict = "HOLD";
   } else if (totalScore >= 55) {
     verdict = "HOLD";
   } else if (totalScore >= 40 || redFlags.length === 1) {
@@ -576,12 +715,20 @@ export function buildScorecard(data: StockData): Scorecard {
     verdict = "REVIEW_EXIT";
   }
 
+  // Any single CRITICAL flag caps the verdict at WATCH. A business with
+  // negative equity, un-covered interest or a latest-year loss can be worth
+  // watching, but a comfortable "hold" overstates what the data supports.
+  if (criticalFlags.length > 0 && (verdict === "ADD_MORE" || verdict === "HOLD_QUALITY_PRICEY" || verdict === "HOLD")) {
+    verdict = "WATCH";
+    verdictNote = undefined;
+  }
+
   const verdictTexts: Record<Verdict, string> = {
     ADD_MORE:
       "Quality business at a sensible price. On a 5-year+ horizon this is the kind of position the masters would quietly accumulate.",
     HOLD_QUALITY_PRICEY:
       "Wonderful business, rich price. Keep holding - but add only on meaningful dips. Patience is a position too.",
-    HOLD: "Solid but not exceptional. Hold and review annually; don't add aggressively until quality or price improves.",
+    HOLD: "Solid but not exceptional, or strong with a flag against it. Hold and review annually; read the red flags below before adding.",
     WATCH:
       "The long-term thesis is weakening on the numbers. Watch the next 2–4 quarters closely before committing new money.",
     REVIEW_EXIT:
@@ -605,8 +752,10 @@ export function buildScorecard(data: StockData): Scorecard {
     pillars,
     checks: evaluated,
     redFlags,
+    criticalFlags,
+    coverage: dataCoverage,
     verdict,
-    verdictText: verdictTexts[verdict],
+    verdictText: verdictNote ?? verdictTexts[verdict],
     philosophyNote: philosophyNotes[verdict],
     isFinancialSector: isFin,
     ratios,

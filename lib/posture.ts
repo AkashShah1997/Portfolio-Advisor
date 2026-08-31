@@ -70,11 +70,13 @@ export function opportunitySet(
   let heldTotal = 0;
   let heldPricey = 0;
   let priceyCount = 0;
+  let valuedCount = 0;
   for (const r of rows) {
     if (r.holding.watch || !r.data || !r.scorecard) continue;
     const v = toBase(r.currentValue ?? r.invested, r.holding.currency as Currency, fx);
     if (!(v > 0)) continue;
     heldTotal += v;
+    valuedCount++;
     const val = buildValuation(r.data, r.scorecard);
     if (val.status === "PRICEY") {
       heldPricey += v;
@@ -87,7 +89,10 @@ export function opportunitySet(
     qualityInBuyZone: qualityInBuyZone.length,
     buyZoneShare: scanned.length >= 10 ? inBuyZone.length / scanned.length : undefined,
     heldPricey: priceyCount,
-    heldTotal: rows.filter((r) => !r.holding.watch).length,
+    // Must be the count of positions that were actually VALUED - the old
+    // denominator counted unresolved rows too, so "62% of what you own" was
+    // printed next to "(1 of 6 positions)" where only 2 had been priced.
+    heldTotal: valuedCount,
     heldPriceyShare: heldTotal > 0 ? heldPricey / heldTotal : undefined,
   };
 }
@@ -161,6 +166,12 @@ export function readPosture(
   let tone: PostureRead["tone"];
   let headline: string;
   let newMoney: string;
+  // Without a scan there is no opportunity set, so the strongest claim available
+  // is "be patient" - asserting "the opportunity set is thin" would be inventing
+  // the very evidence the read admits it does not have.
+  const noScan = opp.buyZoneShare === undefined;
+  if (noScan && score > 2) score = 2;
+
   if (score <= -2) {
     stance = "DEPLOY";
     tone = "good";
@@ -182,7 +193,9 @@ export function readPosture(
     tone = "warning";
     low = 0.15;
     high = 0.25;
-    headline = "Few things are cheap - let cash build instead of forcing trades.";
+    headline = noScan
+      ? "Hard to justify new buying without knowing what is cheap - let cash build until you scan."
+      : "Few things are cheap - let cash build instead of forcing trades.";
     newMoney =
       "Pause discretionary buying of stocks above their buy-below price. Keep index SIPs going (stopping them has cost far more than it saved), and let the rest accumulate as cash while your watchlist prices come to you.";
   } else {
@@ -190,7 +203,7 @@ export function readPosture(
     tone = "serious";
     low = 0.25;
     high = 0.4;
-    headline = "The opportunity set is thin and your book is expensive - this is a raise-cash stretch.";
+    headline = "Your book is expensive and little is cheap - this is a raise-cash stretch.";
     newMoney =
       "Trim the most stretched, most oversized positions into strength, hold the proceeds as cash, and keep only the automatic index SIP running. You are not predicting a crash - you are declining to pay prices your own rules reject.";
   }
@@ -242,5 +255,8 @@ export function fundingCandidates(
       });
     }
   }
-  return out.sort((a, b) => b.value - a.value).slice(0, limit);
+  // Exit candidates come first regardless of size - "sell this" outranks
+  // "trim a slice of that", even when the slice is bigger.
+  const rank = (f: FundingCandidate) => (/fails the long-term tests/.test(f.reason) ? 0 : 1);
+  return out.sort((a, b) => rank(a) - rank(b) || b.value - a.value).slice(0, limit);
 }

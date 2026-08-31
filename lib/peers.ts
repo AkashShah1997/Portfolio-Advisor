@@ -75,22 +75,37 @@ export function sectorPeers(self: MetricRow, universe: MetricRow[], top = 6): Pe
   const ranks: PeerRank[] = PEER_METRICS.map((met) => {
     const withData = peers
       .map((p) => ({ sym: p.symbol.toUpperCase(), v: p[met.key] as number | undefined }))
-      .filter((x): x is { sym: string; v: number } => typeof x.v === "number" && Number.isFinite(x.v));
+      .filter((x): x is { sym: string; v: number } => typeof x.v === "number" && Number.isFinite(x.v))
+      // A negative P/E or P/B is not "the cheapest in the sector" - it is an
+      // undefined ratio on a loss-making or negative-equity company.
+      .filter((x) => met.higherBetter || x.v > 0);
     const med = median(withData.map((x) => x.v));
     const you = self[met.key] as number | undefined;
     let rank: number | undefined;
-    if (you !== undefined && withData.length) {
-      const sorted = [...withData].sort((a, b) => (met.higherBetter ? b.v - a.v : a.v - b.v));
-      const idx = sorted.findIndex((x) => x.sym === self.symbol.toUpperCase());
-      rank = idx >= 0 ? idx + 1 : undefined;
+    if (you !== undefined && withData.length && (met.higherBetter || you > 0)) {
+      // Competition ranking: everyone tied shares the same rank. Index-in-a-
+      // sorted-array gave four identical companies ranks 1,2,3,4 - and put the
+      // stock being viewed last every time, because it is appended last.
+      const strictlyBetter = withData.filter((x) => (met.higherBetter ? x.v > you : x.v < you)).length;
+      rank = strictlyBetter + 1;
     }
+    const youValid = you !== undefined && (met.higherBetter || you > 0);
     const better =
-      you !== undefined && med !== undefined
+      youValid && med !== undefined
         ? met.higherBetter
-          ? you >= med
-          : you <= med
+          ? you! > med
+          : you! < med
         : false;
-    return { key: String(met.key), label: met.label, kind: met.kind, you, median: med, rank, of: withData.length, better };
+    return {
+      key: String(met.key),
+      label: met.label,
+      kind: met.kind,
+      you: youValid ? you : undefined,
+      median: med,
+      rank,
+      of: withData.length,
+      better,
+    };
   });
 
   const beats = ranks.filter((r) => r.you !== undefined && r.median !== undefined);

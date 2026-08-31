@@ -575,7 +575,12 @@ export function EtfPanel({
       <p className="text-[11px] text-muted italic">
         Verdicts are mechanical starting points from public fee/size/duplication facts - not personal advice. MERs
         marked “approx” come from a hand-checked table (as of {MER_ASOF}); live Yahoo figures are used when present.
-        Switching funds can realize capital gains - weigh tax against fees before acting.
+        A SWITCH or REDUCE is also a TAX event in a taxable account:{" "}
+        {base === "INR"
+          ? "in India, equity funds/ETFs held over 12 months pay 12.5% LTCG on gains above the ₹1.25 lakh yearly exemption (rules as of FY2025-26 - confirm current rates)"
+          : "in Canada, half of the capital gain in a taxable account is added to your income, rebuying within 30 days voids a loss claim (the superficial-loss rule), and switches inside TFSA/RRSP are tax-free"}
+        . Weigh the tax cost against the fee saving before acting - a one-time tax hit can outweigh years of a
+        slightly lower MER.
       </p>
     </div>
   );

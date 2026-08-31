@@ -3,9 +3,22 @@ import { countryForSymbol } from "./symbols";
 import { isEtfHolding } from "./etf";
 
 export function toBase(value: number, from: Currency, fx: FxRates): number {
-  return value * (fx.rates[from] ?? 1);
+  const rate = fx.rates[from];
+  if (rate === undefined || !Number.isFinite(rate) || rate <= 0) {
+    // A missing rate must never masquerade as 1:1 - that would count $100 as ₹100.
+    // Base currency is always 1; anything else unknown is dropped from the total.
+    return from === fx.base ? value : 0;
+  }
+  return value * rate;
 }
 
+/**
+ * NOTE on failed fetches: a row whose quote could not be fetched has no market
+ * value, so `currentValue ?? invested` values it at COST. That is the least-bad
+ * default, but it must be visible - `atCostValue`/`atCostCount` report how much
+ * of the total is a cost basis wearing a market-value label, and such rows are
+ * excluded from the top-holding weight so concentration is not overstated.
+ */
 export function summarize(rows: AnalyzedHolding[], fx: FxRates): PortfolioSummary {
   const base = fx.base;
   let invested = 0;
@@ -23,13 +36,23 @@ export function summarize(rows: AnalyzedHolding[], fx: FxRates): PortfolioSummar
   let scoreWeighted = 0;
   let scoreDen = 0;
   let top = 0;
+  let atCostValue = 0;
+  let atCostCount = 0;
 
   for (const r of rows) {
+    if (r.holding.watch) continue; // watchlist rows carry no capital
     const inv = toBase(r.invested, r.holding.currency, fx);
     invested += inv;
-    const cur = r.currentValue !== undefined ? toBase(r.currentValue, r.holding.currency, fx) : inv;
+    const priced = r.currentValue !== undefined;
+    const cur = priced ? toBase(r.currentValue!, r.holding.currency, fx) : inv;
     current += cur;
-    top = Math.max(top, cur);
+    if (!priced) {
+      // no market price came back - this is a cost basis, not a valuation
+      atCostValue += cur;
+      atCostCount++;
+    } else {
+      top = Math.max(top, cur);
+    }
 
     const country = countryForSymbol(r.holding.yahooSymbol);
     byCountry.set(country, (byCountry.get(country) ?? 0) + cur);
@@ -67,6 +90,8 @@ export function summarize(rows: AnalyzedHolding[], fx: FxRates): PortfolioSummar
     byVerdict,
     topHoldingPct: current > 0 ? top / current : 0,
     weightedScore: scoreDen > 0 ? Math.round(scoreWeighted / scoreDen) : 0,
+    atCostValue,
+    atCostCount,
   };
 }
 
@@ -87,18 +112,52 @@ export function portfolioSeries(rows: AnalyzedHolding[], fx: FxRates): { date: s
     return { r, m, first: monthOf(r.data!.prices[0].date), last: undefined as number | undefined };
   });
   const months = [...new Set(perRow.flatMap((x) => [...x.m.keys()]))].sort();
+  /**
+   * CRITICAL: the basket must be CONSTANT across the window. A holding whose
+   * price history starts later (recent listing, or a short free-data series)
+   * used to join the total part-way through, which made the line step UP for a
+   * reason that has nothing to do with returns - and the benchmark badge then
+   * reported that step as alpha. So the series starts at the first month EVERY
+   * holding has data for; anything earlier is simply not comparable.
+   */
+  const start = perRow.reduce((a, x) => (x.first > a ? x.first : a), perRow[0].first);
   const out: { date: string; value: number }[] = [];
   for (const mo of months) {
+    if (mo < start) continue;
     let total = 0;
+    let covered = 0;
     for (const row of perRow) {
       const px = row.m.get(mo);
       if (px !== undefined) row.last = px;
-      if (mo < row.first || row.last === undefined) continue;
+      if (row.last === undefined) continue;
+      covered++;
       total += row.last * row.r.holding.quantity * (fx.rates[row.r.holding.currency] ?? 1);
     }
-    if (total > 0) out.push({ date: `${mo}-01`, value: total });
+    if (total > 0 && covered === perRow.length) out.push({ date: `${mo}-01`, value: total });
   }
   return out;
+}
+
+/** The window the value series actually covers, for honest labelling. */
+export function seriesWindow(rows: AnalyzedHolding[]): { start?: string; truncatedBy?: string } {
+  const active = rows.filter(
+    (r) => !r.holding.watch && r.holding.quantity > 0 && (r.data?.prices?.length ?? 0) > 0
+  );
+  if (!active.length) return {};
+  let start = "";
+  let by: string | undefined;
+  for (const r of active) {
+    const f = r.data!.prices[0].date.slice(0, 7);
+    if (f > start) {
+      start = f;
+      by = r.holding.yahooSymbol;
+    }
+  }
+  const earliest = active.reduce((a, r) => {
+    const f = r.data!.prices[0].date.slice(0, 7);
+    return f < a ? f : a;
+  }, start);
+  return { start, truncatedBy: start > earliest ? by : undefined };
 }
 
 // ---------- benchmark comparison (indexed to 100) ----------

@@ -61,8 +61,20 @@ export function cutoffISO(yearsBack: number, now: Date = new Date()): string {
  * Truncate a stock's data to what was knowable at the cutoff. Returns null
  * when there isn't enough pre-cutoff history to score honestly.
  */
+/**
+ * Annual results are published weeks to months AFTER the fiscal year closes, so
+ * admitting a year the moment it ends is reading the future - the backtest was
+ * scoring on numbers the market had not seen. 90 days is the conservative floor.
+ */
+const REPORTING_LAG_DAYS = 90;
+function filedBy(cutoffISO: string): string {
+  const d = new Date(cutoffISO);
+  d.setDate(d.getDate() - REPORTING_LAG_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
 export function buildAsOf(data: StockData, cutoff: string): StockData | null {
-  const years = data.years.filter((y) => y.endDate && y.endDate.slice(0, 10) <= cutoff);
+  const years = data.years.filter((y) => y.endDate && y.endDate.slice(0, 10) <= filedBy(cutoff));
   const prices = data.prices.filter((p) => p.date <= cutoff);
   if (years.length < 2 || prices.length < 6) return null;
 

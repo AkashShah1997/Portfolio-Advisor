@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AnalyzedHolding, Currency, FxRates } from "@/lib/types";
 import type { MetricRow } from "@/lib/screens";
 import type { MacroPayload } from "@/lib/macro";
-import { MARKET_META, type Market } from "@/lib/store";
+import { loadCash, MARKET_META, saveCash, type Market } from "@/lib/store";
 import { fundingCandidates, opportunitySet, readPosture } from "@/lib/posture";
 import { toBase } from "@/lib/portfolio";
 import { fmtMoney, fmtPct } from "@/lib/symbols";
@@ -49,6 +49,23 @@ export function PostureCard({
     })();
   }, [market, regime]);
 
+  // user-entered idle cash (per market, this device only) - lets the band talk
+  // about YOUR actual cash instead of a percentage of money it cannot see
+  const [cash, setCashState] = useState<number | null>(null);
+  const cashMarket = useRef<Market | null>(null);
+  useEffect(() => {
+    if (cashMarket.current === market) return;
+    cashMarket.current = market;
+    void (async () => {
+      await Promise.resolve();
+      setCashState(loadCash(market));
+    })();
+  }, [market]);
+  const setCash = (v: number | null) => {
+    setCashState(v);
+    saveCash(market, v);
+  };
+
   const opp = useMemo(() => opportunitySet(rows, universe, fx), [rows, universe, fx]);
   const read = useMemo(
     () => readPosture(opp, regime?.key, MARKET_META[market].benchmark.label),
@@ -78,6 +95,44 @@ export function PostureCard({
         <span className="text-[12px] text-muted tnum">
           target cash {fmtPct(read.cashLow, 0)}-{fmtPct(read.cashHigh, 0)} of the portfolio
         </span>
+      </div>
+
+      {/* your ACTUAL cash vs the band - optional, stored on this device only */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
+        <label htmlFor="posture-cash" className="text-ink-2">
+          Idle cash you hold ({base}) <InfoTip k="idleCash" />
+        </label>
+        <input
+          id="posture-cash"
+          type="number"
+          min={0}
+          inputMode="numeric"
+          value={cash ?? ""}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const v = raw === "" ? null : Number(raw);
+            setCash(v === null || !Number.isFinite(v) || v < 0 ? null : v);
+          }}
+          placeholder="optional"
+          className="bg-surface hairline rounded-lg px-2.5 py-1 text-[12.5px] w-[130px] tnum"
+        />
+        {cash !== null &&
+          invested + cash > 0 &&
+          (() => {
+            const share = cash / (invested + cash);
+            const inBand = share >= read.cashLow && share <= read.cashHigh;
+            const below = share < read.cashLow;
+            return (
+              <span className={`tnum ${inBand ? "text-success-text" : "text-[#8a6100]"}`}>
+                = {fmtPct(share, 1)} of your investable money -{" "}
+                {inBand
+                  ? "inside the suggested band"
+                  : below
+                    ? "below the band: build the buffer before chasing new buys"
+                    : "above the band: you have dry powder ready for the deploy triggers below"}
+              </span>
+            );
+          })()}
       </div>
 
       <ul className="mt-2.5 space-y-1">

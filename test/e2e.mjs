@@ -76,6 +76,10 @@ const postureBody = await page.locator("body").textContent();
 if (!/target cash \d+%-\d+%/.test(postureBody)) throw new Error("posture cash band missing");
 if (!/What would put the cash back to work/.test(postureBody)) throw new Error("deploy triggers missing");
 if (!/never targets|dry powder/i.test(postureBody)) throw new Error("posture guardrail note missing");
+// enter actual idle cash → the band becomes a concrete comparison, persisted per market
+await page.locator("#posture-cash").fill("100000");
+await page.waitForSelector("text=of your investable money", { timeout: 5000 });
+if (!(await page.locator("[data-infotip=idleCash]").count())) throw new Error("idle-cash info tooltip missing");
 await page.waitForSelector("text=Position coach", { timeout: 10000 });
 await page.waitForSelector("text=Keep DCA-ing", { timeout: 30000 }); // NIFTYBEES core ETF
 await page.waitForSelector("text=The SIP plan", { timeout: 10000 });
@@ -143,10 +147,22 @@ await page.waitForSelector("text=⚑ Risks", { timeout: 10000 });
 await page.waitForSelector("text=12-mo target", { timeout: 10000 });
 await page.waitForSelector("text=F-Score", { timeout: 10000 });
 await page.waitForSelector("text=Decision board says", { timeout: 10000 });
+await page.waitForSelector("text=Conviction test", { timeout: 5000 });
 await page.waitForSelector("text=Best thing about it", { timeout: 5000 });
 await page.waitForSelector("text=Worst thing about it", { timeout: 5000 }); // same engine as the Decisions tab, inline
 if ((await page.locator("[data-testid=snowflake]").count()) < 2) throw new Error("stock-card snowflake missing");
 if (!(await page.locator("[data-infotip=pe]").count())) throw new Error("info tooltips not wired in stock card");
+
+// ---- the decision-readiness gate is on every card, with its gaps and coverage ----
+await page.waitForSelector("text=Partly ready", { timeout: 10000 });
+await page.waitForSelector("text=Why not fully decision-ready", { timeout: 10000 });
+await page.waitForSelector("text=Data coverage", { timeout: 5000 });
+if (!(await page.locator("[data-infotip=readiness]").count())) throw new Error("readiness info tooltip missing");
+const readyBody = await page.locator("body").textContent();
+if (!/unofficial Yahoo Finance aggregates/.test(readyBody)) throw new Error("provenance note missing from the gap panel");
+// the tightened valuation confidence is shown on the intrinsic-value strip
+if (!/methods conflict|triangulated ·|thin ·/.test(readyBody)) throw new Error("valuation confidence chip missing");
+if (!/Methods span/.test(readyBody)) throw new Error("raw method min-max missing from the valuation strip");
 
 // ---- pre-buy gates: a research prompt for any AI, not a self-graded checklist ----
 await page.waitForSelector("text=Pre-buy gates", { timeout: 10000 });
@@ -209,6 +225,11 @@ await page.locator("text=Deep analysis →").first().click(); // from the first 
 await page.waitForSelector("text=SWOT", { timeout: 15000 });
 await page.waitForSelector("text=Strengths", { timeout: 5000 });
 await page.waitForSelector("text=Threats", { timeout: 5000 });
+await page.waitForSelector("text=Conviction or speculation?", { timeout: 10000 });
+const convBody = await page.locator("body").textContent();
+if (!/What size this justifies/.test(convBody)) throw new Error("conviction sizing guidance missing");
+if (!/Evidence you can check/.test(convBody)) throw new Error("conviction pillars missing");
+if (!/Partly ready|Decision-ready|Not decision-ready/.test(convBody)) throw new Error("readiness chip missing from deep dive");
 await page.waitForSelector("text=Sector comparison", { timeout: 5000 });
 await page.waitForSelector("text=Coach's call on YOUR position", { timeout: 15000 }); // held, non-ETF
 await page.waitForSelector("text=Full breakdown", { timeout: 5000 });
@@ -302,6 +323,9 @@ if (!(await page.locator("text=add to on autopilot").count())) throw new Error("
 if (!(await page.locator("[data-infotip=mer]").count())) throw new Error("MER info tooltip missing");
 const bodyEtf = await page.locator("body").textContent();
 if (!/GOLDIETF|ICICI Prudential Gold/.test(bodyEtf)) throw new Error("cheaper gold alternative missing");
+// a SWITCH/REDUCE is also a tax event - the market-specific caution must be on the tab
+if (!/also a TAX event/.test(bodyEtf)) throw new Error("ETF tax caution missing");
+if (!/12\.5% LTCG/.test(bodyEtf)) throw new Error("India LTCG specifics missing from the ETF tax caution");
 // inspect an arbitrary fund by symbol
 await page.getByPlaceholder("JUNIORBEES.NS").fill("JUNIORBEES.NS");
 await page.getByRole("button", { name: "Analyze fund" }).click();
@@ -343,6 +367,7 @@ await page.waitForSelector("text=/yr avg", { timeout: 20000 });
 const btBody = await page.locator("body").textContent();
 if (!/TCS/.test(btBody)) throw new Error("backtest table missing holdings");
 if (!/Honest limits/.test(btBody)) throw new Error("backtest caveats missing");
+if (!/limited diagnostic, never as proof/.test(btBody)) throw new Error("backtest survivorship/self-grading disclaimer missing");
 // switch cutoff to 2y and confirm it recomputes
 await page.getByRole("button", { name: "2y ago", exact: true }).click();
 await page.waitForTimeout(600);

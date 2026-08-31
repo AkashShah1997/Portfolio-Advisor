@@ -113,6 +113,35 @@ export function saveUiFlag(key: string, v: boolean): void {
   }
 }
 
+/**
+ * User-entered idle cash (in the market's base currency) - the number the
+ * posture card compares against its suggested cash band. Stored per market,
+ * on this device only, like everything else.
+ */
+const CASH_KEY = (m: Market) => `pa.v2.cash.${m}`;
+
+export function loadCash(m: Market): number | null {
+  if (!canStore()) return null;
+  try {
+    const raw = window.localStorage.getItem(CASH_KEY(m));
+    if (raw === null) return null;
+    const v = Number(raw);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCash(m: Market, v: number | null): void {
+  if (!canStore()) return;
+  try {
+    if (v === null || !Number.isFinite(v) || v < 0) window.localStorage.removeItem(CASH_KEY(m));
+    else window.localStorage.setItem(CASH_KEY(m), String(v));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function loadHoldings(m: Market): Holding[] | null {
   if (!canStore()) return null;
   try {
@@ -168,7 +197,10 @@ export function saveMarket(m: Market | null): void {
 export function eraseAll(): void {
   if (!canStore()) return;
   try {
-    for (const m of MARKETS) window.localStorage.removeItem(HOLDINGS_KEY(m));
+    for (const m of MARKETS) {
+      window.localStorage.removeItem(HOLDINGS_KEY(m));
+      window.localStorage.removeItem(CASH_KEY(m));
+    }
     window.localStorage.removeItem(MARKET_KEY);
   } catch {
     /* ignore */

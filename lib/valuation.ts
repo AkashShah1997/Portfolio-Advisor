@@ -31,6 +31,15 @@ export interface Valuation {
   low?: number; // intrinsic × 0.8
   high?: number; // intrinsic × 1.2
   buyBelow?: number; // intrinsic × (1 − mosTarget)
+  /** how many independent methods produced a number */
+  methodCount?: number;
+  /** max/min across the methods - above ~2.25x they are not really agreeing */
+  spread?: number;
+  /** triangulated = 3+ methods within 1.75x; thin = few; conflicting = wide spread */
+  confidence?: "triangulated" | "thin" | "conflicting";
+  /** lowest and highest single-method value - the raw disagreement, shown honestly */
+  methodLow?: number;
+  methodHigh?: number;
   mosTarget: number; // required margin of safety, by quality
   marginOfSafety?: number; // 1 − price/intrinsic (negative ⇒ overpriced)
   status: ValuationStatus;
@@ -91,11 +100,19 @@ export function buildValuation(data: StockData, sc: Scorecard): Valuation {
   const fcfBase = q.fcfTTM ?? last?.fcf;
   if (fcfBase !== undefined && fcfBase > 0 && shares && shares > 0) fcfPs = fcfBase / shares;
 
-  // growth: prefer EPS CAGR, else revenue CAGR; 25% haircut, clamped 2–14%
-  const rawG = [sc.cagr.eps, sc.cagr.revenue].find(
-    (v): v is number => v !== undefined && Number.isFinite(v) && v > 0
-  );
-  const growth = rawG !== undefined ? clamp(rawG * 0.75, 0.02, 0.14) : undefined;
+  /**
+   * Growth for the forward methods: EPS CAGR if it exists AT ALL (even if
+   * negative), else revenue CAGR. Skipping a negative EPS CAGR to reach a
+   * positive revenue CAGR was picking the flattering number on exactly the
+   * businesses whose earnings are shrinking.
+   */
+  const epsG = Number.isFinite(sc.cagr.eps as number) ? (sc.cagr.eps as number) : undefined;
+  const revG = Number.isFinite(sc.cagr.revenue as number) ? (sc.cagr.revenue as number) : undefined;
+  const rawG = epsG ?? revG;
+  // shrinking earnings get no growth-based valuation at all - a DCF on a
+  // declining business is false precision, so those methods are skipped
+  const growth = rawG !== undefined && rawG > 0 ? clamp(rawG * 0.75, 0.02, 0.14) : undefined;
+  const shrinking = rawG !== undefined && rawG <= 0;
 
   const methods: ValuationMethod[] = [];
 
@@ -121,12 +138,16 @@ export function buildValuation(data: StockData, sc: Scorecard): Valuation {
   if (fcfPs !== undefined && growth !== undefined && !sc.isFinancialSector) {
     let pv = 0;
     let f = fcfPs;
+    // Fade DOWN to the terminal rate, never up: with growth clamped at ≥2% and
+    // an INR terminal of 5%, the old fade modelled slow businesses as
+    // ACCELERATING, overstating their value by ~25%.
+    const gEnd = Math.min(gt, growth);
     for (let t = 1; t <= 10; t++) {
-      const gT = growth + ((gt - growth) * (t - 1)) / 9; // fade g → terminal over 10y
+      const gT = growth + ((gEnd - growth) * (t - 1)) / 9;
       f = f * (1 + gT);
       pv += f / Math.pow(1 + r, t);
     }
-    pv += (f * (1 + gt)) / (r - gt) / Math.pow(1 + r, 10);
+    pv += (f * (1 + gEnd)) / (r - gEnd) / Math.pow(1 + r, 10);
     methods.push({
       id: "dcf",
       label: "Owner-earnings DCF (10y fade)",
@@ -165,13 +186,32 @@ export function buildValuation(data: StockData, sc: Scorecard): Valuation {
   }
 
   const intrinsic = median(methods.map((m) => m.value));
+  /**
+   * Confidence in the estimate. One method is a single opinion, not a
+   * triangulation, and two methods that disagree by more than 2x are not a
+   * range - the band widens to say so instead of drawing a tidy ±20%.
+   */
+  const vals = methods.map((m) => m.value).filter((v) => Number.isFinite(v) && v > 0);
+  const spread = vals.length >= 2 ? Math.max(...vals) / Math.min(...vals) : undefined;
+  // Tightened after external review: the methods share inputs (the same EPS
+  // feeds Graham, the P/E anchor and the growth formula), so their agreement
+  // overstates independence. "Triangulated" now demands they sit within 1.75x
+  // of each other, and anything past 2.25x is called what it is - conflicting.
+  const confidence: "triangulated" | "thin" | "conflicting" =
+    vals.length >= 3 && (spread ?? 1) <= 1.75 ? "triangulated" : (spread ?? 99) > 2.25 ? "conflicting" : "thin";
+  const halfBand = confidence === "triangulated" ? 0.2 : confidence === "thin" ? 0.3 : 0.4;
   const mosTarget = sc.totalScore >= 70 ? 0.2 : sc.totalScore >= 55 ? 0.3 : 0.4;
 
   const out: Valuation = {
     methods,
     intrinsic,
-    low: intrinsic !== undefined ? intrinsic * 0.8 : undefined,
-    high: intrinsic !== undefined ? intrinsic * 1.2 : undefined,
+    low: intrinsic !== undefined ? intrinsic * (1 - halfBand) : undefined,
+    high: intrinsic !== undefined ? intrinsic * (1 + halfBand) : undefined,
+    methodCount: methods.length,
+    spread,
+    confidence,
+    methodLow: vals.length ? Math.min(...vals) : undefined,
+    methodHigh: vals.length ? Math.max(...vals) : undefined,
     buyBelow: intrinsic !== undefined ? intrinsic * (1 - mosTarget) : undefined,
     mosTarget,
     marginOfSafety:
@@ -187,9 +227,10 @@ export function buildValuation(data: StockData, sc: Scorecard): Valuation {
     },
   };
 
-  if (intrinsic !== undefined && q.price !== undefined && out.buyBelow !== undefined) {
-    out.status =
-      q.price <= out.buyBelow ? "BUY_ZONE" : q.price <= intrinsic * 1.05 ? "FAIR" : "PRICEY";
+  if (intrinsic !== undefined && q.price !== undefined && out.buyBelow !== undefined && out.high !== undefined) {
+    // FAIR now means "inside the band the UI actually draws". The old 1.05x cut
+    // labelled prices inside the drawn band as PRICEY and vice versa.
+    out.status = q.price <= out.buyBelow ? "BUY_ZONE" : q.price <= out.high ? "FAIR" : "PRICEY";
   }
   return out;
 }

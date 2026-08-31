@@ -27,8 +27,23 @@ export function mapYearRow(row: AnyRow): YearFinancials {
   }
   const pretax = num(row.annualPretaxIncome);
   const interest = num(row.annualInterestExpense) ?? num(row.annualInterestExpenseNonOperating);
+  const shares =
+    num(row.annualOrdinarySharesNumber) ??
+    num(row.annualDilutedAverageShares) ??
+    num(row.annualBasicAverageShares);
+  const niForEps = num(row.annualNetIncome) ?? num(row.annualNetIncomeCommonStockholders);
+  // Some Yahoo paths carry net income and a share count but no EPS line. EPS
+  // drives the heaviest growth check, the P/E history and the DCF, so derive it
+  // rather than losing all three.
+  const derivedEps =
+    num(row.annualDilutedEPS) === undefined && niForEps !== undefined && shares && shares > 0
+      ? niForEps / shares
+      : undefined;
   let ebit = num(row.annualEBIT);
-  if (ebit === undefined && pretax !== undefined && interest !== undefined) ebit = pretax + interest;
+  // Yahoo reports interest expense with either sign depending on the endpoint.
+  // EBIT = pretax + |interest|; adding a negative understated EBIT by ~40% and
+  // flowed straight into ROCE and the Coffee Can test.
+  if (ebit === undefined && pretax !== undefined && interest !== undefined) ebit = pretax + Math.abs(interest);
   if (ebit === undefined) ebit = num(row.annualOperatingIncome);
 
   return {
@@ -50,9 +65,9 @@ export function mapYearRow(row: AnyRow): YearFinancials {
     fcf,
     ocf,
     capex: capexRaw,
-    dilutedEPS: num(row.annualDilutedEPS),
+    dilutedEPS: num(row.annualDilutedEPS) ?? derivedEps,
     basicEPS: num(row.annualBasicEPS),
-    shares: num(row.annualOrdinarySharesNumber) ?? num(row.annualDilutedAverageShares),
+    shares,
   };
 }
 
@@ -161,19 +176,29 @@ export function mapStatementHistory(qs: {
         annualPretaxIncome: num(r.incomeBeforeTax),
         annualNetIncome: num(r.netIncome),
         annualInterestExpense: ie !== undefined ? Math.abs(ie) : undefined,
+        // Without EPS the heaviest growth check (weight 8), the own-history P/E
+        // anchor and the whole DCF silently disappear on this fallback path.
+        annualDilutedEPS: num(r.dilutedEPS),
+        annualBasicEPS: num(r.basicEPS),
+        annualDilutedAverageShares: num(r.dilutedAverageShares) ?? num(r.weightedAverageShsOutDil),
+        annualBasicAverageShares: num(r.basicAverageShares) ?? num(r.weightedAverageShsOut),
       })
     );
   }
   for (const r of qs.balanceSheetHistory?.balanceSheetStatements ?? []) {
     const endDate = dateOf(r);
     if (!endDate) continue;
-    const shortDebt = num(r.shortLongTermDebt) ?? 0;
-    const longDebt = num(r.longTermDebt) ?? 0;
+    // A missing debt component must NOT count as zero: understating debt made
+    // D/E look safe and ROCE look high on exactly the leveraged names.
+    const shortDebt = num(r.shortLongTermDebt) ?? num(r.shortTermDebt) ?? num(r.currentDebt);
+    const longDebt = num(r.longTermDebt);
+    const anyDebt = shortDebt !== undefined || longDebt !== undefined;
+    const totalDebt = anyDebt ? (shortDebt ?? 0) + (longDebt ?? 0) : undefined;
     rows.push(
       mapYearRow({
         date: endDate,
         annualStockholdersEquity: num(r.totalStockholderEquity),
-        annualTotalDebt: shortDebt + longDebt > 0 ? shortDebt + longDebt : undefined,
+        annualTotalDebt: totalDebt,
         annualTotalAssets: num(r.totalAssets),
         annualCurrentAssets: num(r.totalCurrentAssets),
         annualCurrentLiabilities: num(r.totalCurrentLiabilities),

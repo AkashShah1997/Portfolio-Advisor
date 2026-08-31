@@ -133,7 +133,15 @@ export function CoachPanel({
     );
     const etfRows = held.filter((r) => !stockRows.includes(r));
     const groups = decideAll(stockRows);
-    const total = held.reduce((a, r) => a + toBase(r.currentValue ?? r.invested, r.holding.currency as Currency, fx), 0);
+    /**
+     * Weight denominator must be EVERY funded position, not just the ones whose
+     * quote fetch succeeded. Dropping failed rows inflated each remaining
+     * weight - and the coach trims at 15%, so an inflated number changed the
+     * recommendation (25% shown elsewhere read as 33% here).
+     */
+    const total = rows
+      .filter((r) => !r.holding.watch && r.holding.quantity > 0)
+      .reduce((a, r) => a + toBase(r.currentValue ?? r.invested, r.holding.currency as Currency, fx), 0);
     const etfAssessed = etfRows.length
       ? assessAll(
           etfRows.map((r) => ({

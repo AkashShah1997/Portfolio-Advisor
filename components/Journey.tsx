@@ -81,6 +81,12 @@ export function Journey({
         </span>
       </div>
 
+      {j.thenFellBack && (
+        <p className="text-[11.5px] text-[#8a6100] leading-snug mb-1.5">
+          The estimated buy month sits outside the fiscal years on file, so &ldquo;then&rdquo; falls back to the
+          oldest year available - set the real buy month above to fix the comparison.
+        </p>
+      )}
       {j.awaitingLatestFy && (
         <p className="text-[11.5px] text-muted leading-snug mb-1.5">
           FY{String(j.nowYear).slice(2)} is the newest ANNUAL report filed for this company - FY

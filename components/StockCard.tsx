@@ -11,6 +11,8 @@ import { buildJourney } from "@/lib/journey";
 import { strengthsAndRisks } from "@/lib/insights";
 import { describeSnowflake, snowflakeOf } from "@/lib/snowflake";
 import { buildChecklistPrompt, PREBUY_CHECKLIST } from "@/lib/checklist";
+import { assessReadiness, READINESS_META } from "@/lib/readiness";
+import { ConvictionCard } from "./ConvictionCard";
 import { isEtfHolding } from "@/lib/etf";
 import { Badge, Card, InfoTip, Meter, Spinner } from "./ui";
 import { Snowflake } from "./Snowflake";
@@ -231,6 +233,14 @@ export function StockCard({
     () => (!isWatch && scorecard && scorecard.verdict !== "INSUFFICIENT_DATA" ? decideRow(row) : null),
     [row, isWatch, scorecard]
   );
+  // the decision-readiness gate: is there enough evidence to act on the verdict at all?
+  const readiness = useMemo(
+    () =>
+      data && scorecard
+        ? assessReadiness({ card: scorecard, data, valuation, account: holding.account })
+        : undefined,
+    [data, scorecard, valuation, holding.account]
+  );
 
   const copyPrompt = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -382,14 +392,35 @@ export function StockCard({
           ? "Fund units aren't judged on the four stock pillars - open the ETFs tab for the fee-first fund analysis (MER, size, duplication, cheaper twins)."
           : scorecard.verdictText}
       </p>
+      {/* decision-readiness gate - visible whether the card is open or closed */}
+      {readiness && !isEtf && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
+          <Badge tone={READINESS_META[readiness.level].tone} icon={READINESS_META[readiness.level].icon}>
+            {readiness.label}
+          </Badge>
+          <InfoTip k="readiness" />
+          {readiness.gaps.length > 0 && (
+            <span className="text-ink-2">
+              {readiness.gaps.length} gap{readiness.gaps.length === 1 ? "" : "s"}
+              {!open ? " - open the card for the list" : " listed below"}
+            </span>
+          )}
+        </div>
+      )}
       {!open && scorecard.redFlags.length > 0 && (
         <ul className="mt-1.5 space-y-0.5">
-          {scorecard.redFlags.map((f, i) => (
-            <li key={i} className="text-[12px] text-status-critical flex gap-1.5">
-              <span aria-hidden>⚑</span>
-              {f}
-            </li>
-          ))}
+          {scorecard.redFlags.map((f, i) => {
+            const crit = scorecard.criticalFlags.includes(f);
+            return (
+              <li key={i} className="text-[12px] text-status-critical flex gap-1.5">
+                <span aria-hidden>{crit ? "⛔" : "⚑"}</span>
+                <span>
+                  {crit && <strong>Critical: </strong>}
+                  {f}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
       <div className="flex flex-wrap gap-x-4 items-center">
@@ -427,8 +458,29 @@ export function StockCard({
 
       <Collapse open={open}>
         <div className="mt-4 space-y-5">
+          {/* why the gate is not fully open - every gap, in plain words */}
+          {readiness && !isEtf && readiness.level !== "full" && (
+            <div className="bg-page hairline rounded-xl px-3 py-2">
+              <div className="text-[11.5px] font-semibold text-muted uppercase tracking-wide">
+                Why {readiness.level === "blocked" ? "no action can be recommended" : "not fully decision-ready"}{" "}
+                <InfoTip k="readiness" />
+              </div>
+              <ul className="mt-1 space-y-1">
+                {readiness.gaps.map((g, i) => (
+                  <li key={i} className="text-[12.5px] text-ink-2 leading-snug flex gap-1.5">
+                    <span className="text-[#8a6100] font-bold shrink-0" aria-hidden>
+                      ◐
+                    </span>
+                    <span>{g}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-muted mt-1.5 italic">{readiness.notes[0]}</p>
+            </div>
+          )}
+
           {/* what the decision board says about THIS position - same engine, zero disagreement */}
-          {decision && !isEtf && (
+          {decision && !isEtf && !readiness?.suppressActions && (
             <div className="bg-page hairline rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px]">
               <span className="text-muted text-[11.5px] uppercase tracking-wide">Decision board says</span>
               <Badge tone={ACTION_META[decision.action].tone} icon={ACTION_META[decision.action].icon}>
@@ -444,6 +496,11 @@ export function StockCard({
                 </button>
               )}
             </div>
+          )}
+
+          {/* conviction or speculation - the size question, up front */}
+          {!isEtf && scorecard.verdict !== "INSUFFICIENT_DATA" && (
+            <ConvictionCard data={data} scorecard={scorecard} valuation={valuation} compact />
           )}
 
           {/* the two lines that matter most, before the detail */}
@@ -566,6 +623,12 @@ export function StockCard({
               <span>
                 52w <InfoTip k="week52" /> {fmtMoney(q.fiftyTwoWeekLow, cur, true)}–{fmtMoney(q.fiftyTwoWeekHigh, cur, true)}
               </span>
+              <span>
+                Data coverage <InfoTip k="coverage" />{" "}
+                <strong className={scorecard.coverage >= 0.6 ? "text-ink" : "text-[#8a6100]"}>
+                  {Math.round(scorecard.coverage * 100)}%
+                </strong>
+              </span>
               {scorecard.fscore && (
                 <span
                   title={scorecard.fscore.tests
@@ -576,9 +639,9 @@ export function StockCard({
                   F-Score <InfoTip k="fscore" />{" "}
                   <strong
                     className={
-                      scorecard.fscore.score >= 7
+                      scorecard.fscore.score / scorecard.fscore.of >= 0.78
                         ? "text-success-text"
-                        : scorecard.fscore.score <= 3
+                        : scorecard.fscore.score / scorecard.fscore.of <= 0.34
                           ? "text-status-critical"
                           : "text-ink"
                     }
@@ -609,8 +672,15 @@ export function StockCard({
               )}
           </div>
 
-          {/* intrinsic value strip */}
-          <ValuationBlock data={data} scorecard={scorecard} avgCost={isWatch ? undefined : holding.avgCost} />
+          {/* intrinsic value strip - withheld entirely when the gate is closed */}
+          {readiness?.suppressActions ? (
+            <p className="text-[12.5px] text-muted italic">
+              Fair-value prices are withheld - the readiness gaps above have to close before a buy-below number
+              would mean anything.
+            </p>
+          ) : (
+            <ValuationBlock data={data} scorecard={scorecard} avgCost={isWatch ? undefined : holding.avgCost} />
+          )}
 
           {/* fundamentals then-vs-now */}
           {!isWatch && <Journey row={row} onPatchHolding={onPatchHolding} />}

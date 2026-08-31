@@ -6,11 +6,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { parseBrokerCsv } from "../lib/parse";
 import { mockHistory, mockStockData } from "../lib/mock";
 import { buildScorecard, computeRatios } from "../lib/scorecard";
-import { portfolioSeries, summarize } from "../lib/portfolio";
+import { portfolioSeries, seriesWindow, summarize, toBase } from "../lib/portfolio";
 import { buildPrompt } from "../lib/promptgen";
 import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
 import { capTierOf, CONSENSUS_MIN, consensusOf, runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
-import { applyTheme, loadTheme, loadUiFlag, saveUiFlag } from "../lib/store";
+import { applyTheme, loadCash, loadTheme, loadUiFlag, saveCash, saveUiFlag } from "../lib/store";
+import { assessReadiness, READINESS_META } from "../lib/readiness";
 import { normalizeSecurityType } from "../lib/parse";
 import { sma } from "../lib/history";
 import { loadHoldings, MARKET_META, saveHoldings } from "../lib/store";
@@ -19,7 +20,7 @@ import { incomeAxis, portfolioSnowflake, snowflakeOf, SNOWFLAKE_AXES } from "../
 import { strengthsAndRisks } from "../lib/insights";
 import { benchmarkCompare, monthlyCloses } from "../lib/portfolio";
 import type { Journey } from "../lib/journey";
-import { enrichEtfData, fallbackEtfData, isEtfHolding, mapFundSummary, fundDataEmpty, trailingFromPrices } from "../lib/etf";
+import { enrichEtfData, fallbackEtfData, isBullionFund, isEtfHolding, isMinerFund, mapFundSummary, fundDataEmpty, trailingFromPrices } from "../lib/etf";
 import { catalogMer, categoryOf, ETF_CATALOG } from "../lib/etfcatalog";
 import { assessAll, feeDrag, merBandOf } from "../lib/etfscore";
 import { mockEtfData } from "../lib/mocketf";
@@ -32,6 +33,7 @@ import { snowflakeLeaders } from "../lib/snowflake";
 import { BUCKET_META, hedgeShare, runStress, STRESS_SCENARIOS, stressBucketOf } from "../lib/stress";
 import { maCrossings, maLenForInterval, regressionChannel, swingLevels } from "../lib/history";
 import { buildSwot } from "../lib/swot";
+import { convictionOf, GRADE_META } from "../lib/conviction";
 import { fundingCandidates, opportunitySet, readPosture } from "../lib/posture";
 import { aiBucketFor, portfolioResilience } from "../lib/resilience";
 import { crashRecord, CRASH_WINDOWS, describeCrashRecord, worstEver } from "../lib/crashrecord";
@@ -59,6 +61,7 @@ import type { StockData } from "../lib/types";
 import { buildValuation } from "../lib/valuation";
 import { UNIVERSES, UNIVERSE_COUNTRIES, candidatesFor } from "../lib/universe";
 import { computeHealth, computeIncome, activeRows } from "../lib/health";
+import { buildJourney as buildJourneyFn } from "../lib/journey";
 import { project, portfolioGrowthGuess, yearsToMultiple } from "../lib/project";
 import { currencyForSymbol } from "../lib/symbols";
 import type { AnalyzedHolding, FxRates } from "../lib/types";
@@ -698,10 +701,24 @@ console.log("\n== Portfolio value series ==");
     ]),
   ];
   const s = portfolioSeries(rows, fx);
-  check("series spans the union of months", s.length === 3, String(s.length));
-  check("month 1 = A only (20 CAD)", Math.abs(s[0].value - 20) < 1e-9, String(s[0]?.value));
-  check("month 2 sums both (22 + 150)", Math.abs(s[1].value - 172) < 1e-9, String(s[1]?.value));
-  check("month 3 carries A forward (22 + 180)", Math.abs(s[2].value - 202) < 1e-9, String(s[2]?.value));
+  // The basket must be CONSTANT: B has no January price, so the series starts in
+  // February. Letting B join mid-window made the total step up for a reason that
+  // was not a return, and the benchmark badge then reported that step as alpha.
+  check("series starts only when EVERY holding has data (constant basket)", s.length === 2, String(s.length));
+  check("first point is the first fully-covered month (22 + 150)", Math.abs(s[0].value - 172) < 1e-9, String(s[0]?.value));
+  check("second point carries A forward (22 + 180)", Math.abs(s[1].value - 202) < 1e-9, String(s[1]?.value));
+  check("no month before full coverage is emitted", s.every((p) => p.date >= "2024-02-01"));
+  // the regression this guards: a late-joining holding must not create fake alpha
+  const flat = [
+    mk("OLD.NS", "INR", 90, [["2021-01-01", 1000], ["2022-01-01", 1000], ["2023-01-01", 1000], ["2024-01-01", 1000]]),
+    mk("NEW.NS", "INR", 10, [["2023-01-01", 1000], ["2024-01-01", 1000]]),
+  ];
+  const flatSeries = portfolioSeries(flat, fx);
+  check("a flat portfolio with a late-listing holding shows ZERO growth, not fake alpha",
+    flatSeries.length >= 2 && Math.abs(flatSeries[0].value - flatSeries[flatSeries.length - 1].value) < 1e-9,
+    JSON.stringify(flatSeries));
+  check("seriesWindow names the holding that truncates the history",
+    seriesWindow(flat).start === "2023-01" && seriesWindow(flat).truncatedBy === "NEW.NS");
   const withWatch = [...rows, { ...mk("W", "USD", 5, [["2024-01-01", 999]]), holding: { ...mk("W", "USD", 5, [["2024-01-01", 999]]).holding, watch: true, quantity: 0 } }];
   const s2 = portfolioSeries(withWatch, fx);
   check("watch rows never enter the value series", JSON.stringify(s2) === JSON.stringify(s));
@@ -1782,6 +1799,326 @@ console.log("\n== Plain-language glossary for the new features ==");
   check("the stress entry frames it as sizing, not prediction", /not a prediction/.test(METRIC_INFO.stress.better));
 }
 
+console.log("\n== AUDIT REGRESSIONS: every bug the audit found, locked down ==");
+{
+  const base = mockStockData("TCS.NS");
+  const withQuote = (q: Record<string, unknown>) => ({ ...base, quote: { ...base.quote, ...q } });
+  const findCheck = (sc: ReturnType<typeof buildScorecard>, id: string) => sc.checks.find((c) => c.id === id);
+
+  // 1. a negative ratio is a distress signal, never "wonderfully cheap"
+  const negPe = buildScorecard(withQuote({ trailingPE: -20, priceToBook: -1.4, pegRatio: -3.2 }));
+  check("negative P/E does NOT score as cheap", findCheck(negPe, "pevshistory")?.status !== "pass");
+  check("negative P/B does NOT score as cheap", findCheck(negPe, "pb")?.status !== "pass");
+  check("negative PEG does NOT score as cheap", findCheck(negPe, "peg")?.status !== "pass");
+
+  // 2. "no price data" must never be reported as "a sensible price"
+  const noPrice = buildScorecard({
+    ...base,
+    quote: { symbol: "X", name: "X", price: 5000, sector: "Technology", currency: "INR" },
+  });
+  check("a stock with NO valuation data can never be ADD_MORE", noPrice.verdict !== "ADD_MORE", noPrice.verdict);
+
+  // 3. earnings collapsing to a loss scores 0, it does not vanish into n/a
+  const collapsed = buildScorecard({
+    ...base,
+    years: base.years.map((y, i) =>
+      i === base.years.length - 1 ? { ...y, netIncome: -50, dilutedEPS: -0.5, fcf: -80 } : y
+    ),
+  });
+  const epsCheck = findCheck(collapsed, "epscagr");
+  check("EPS falling into a loss scores zero, not n/a", epsCheck?.status === "fail", epsCheck?.status);
+  check("...and the evidence says so in words", /loss/i.test(epsCheck?.detail ?? ""));
+  check("a collapse pushes the score DOWN, never up", collapsed.totalScore < buildScorecard(base).totalScore);
+
+  // 4. Piotroski requires strict improvement
+  const flatYear = { ...base.years[base.years.length - 1] };
+  const identical = computeFScore([{ ...flatYear, endDate: "2024-03-31", year: 2024 }, { ...flatYear, endDate: "2025-03-31", year: 2025 }]);
+  check("two IDENTICAL years cannot score 7/9 on Piotroski", (identical?.score ?? 9) <= 4, String(identical?.score));
+
+  // 5. unknown dividend data is not "retains 100%"
+  const noDiv = buildScorecard(withQuote({ payoutRatio: undefined, dividendYield: undefined }));
+  check("unknown payout AND yield → reinvestment check goes n/a, not pass", findCheck(noDiv, "reinvest")?.status === "na");
+  const zeroDiv = buildScorecard(withQuote({ payoutRatio: undefined, dividendYield: 0 }));
+  check("a KNOWN zero yield still means full retention", findCheck(zeroDiv, "reinvest")?.status !== "na");
+
+  // 6. one P/E observation is not an "own 5-year average"
+  const onePrice = buildScorecard({ ...base, prices: base.prices.slice(-1) });
+  check("a single P/E observation does not become the own-history average", onePrice.avgPE === undefined || (onePrice.ratios.filter((r) => r.approxPE !== undefined).length >= 3));
+
+  // 7. real companies are not mistaken for funds by name
+  const fundtech = buildScorecard(withQuote({ name: "Fundtech Ltd", quoteType: "EQUITY" }));
+  check("'Fundtech Ltd' is scored as a company, not voided as a fund", fundtech.verdict !== "INSUFFICIENT_DATA");
+
+  // 8. the DCF must not fade growth UPWARD
+  const slow = { ...base, years: base.years, quote: { ...base.quote } };
+  const slowSc = buildScorecard(slow);
+  const val = buildValuation(slow, slowSc);
+  check("valuation exposes how many methods agreed", (val.methodCount ?? 0) >= 1 && val.confidence !== undefined);
+  check("the drawn band and the PRICEY label agree", (() => {
+    if (val.intrinsic === undefined || val.high === undefined) return true;
+    const priced = { ...slow, quote: { ...slow.quote, price: val.high * 0.99 } };
+    return buildValuation(priced, buildScorecard(priced)).status !== "PRICEY";
+  })());
+
+  // 9. missing debt components must not read as zero debt
+  const partial = mapStatementHistory({
+    balanceSheetHistory: {
+      balanceSheetStatements: [
+        { endDate: "2025-03-31", totalStockholderEquity: 1500, longTermDebt: 1000, totalAssets: 4000 },
+      ],
+    },
+  } as never);
+  const dRow = partial.find((r) => r.endDate?.startsWith("2025"));
+  check("a balance sheet with only long-term debt still reports debt", (dRow?.totalDebt ?? 0) === 1000);
+
+  // 10. the backtest cannot read a fiscal year before it was filed
+  const asOf = buildAsOf(
+    { ...base, years: [...base.years, { endDate: "2026-03-31", year: 2026, revenue: 999, netIncome: 99 } as never] },
+    "2026-04-12"
+  );
+  check("an as-of cutoff 12 days after year-end excludes that unfiled year",
+    !asOf || !asOf.years.some((y) => y.endDate?.startsWith("2026-03")));
+
+  // 11. journey: a loss turning into a profit is an IMPROVEMENT
+  const turnaround: AnalyzedHolding = {
+    holding: { id: "t", broker: "zerodha", rawSymbol: "T", yahooSymbol: "T.NS", quantity: 10, avgCost: 100, currency: "INR", buyDate: "2022-06" },
+    data: {
+      ...base,
+      prices: [
+        { date: "2022-06-01", close: 100 },
+        { date: "2023-06-01", close: 110 },
+        { date: "2024-06-01", close: 120 },
+        { date: "2025-06-01", close: 130 },
+      ],
+      years: [
+        { endDate: "2022-03-31", year: 2022, revenue: 1000, netIncome: -200, dilutedEPS: -2, equity: 500, fcf: -100 } as never,
+        { endDate: "2025-03-31", year: 2025, revenue: 1600, netIncome: 400, dilutedEPS: 4, equity: 900, fcf: 200 } as never,
+      ],
+    },
+    invested: 1000,
+    currentValue: 1300,
+  };
+  turnaround.scorecard = buildScorecard(turnaround.data!);
+  const jr = buildJourney(turnaround);
+  check("loss → profit counts as IMPROVED, not worsened", (jr?.rows.find((r) => r.key === "netIncome")?.better) === true);
+  check("...and the verdict is not an exit review", jr?.verdict.tone !== "critical");
+
+  // 12. an average cost far ABOVE the whole price window is flagged, not snapped to the top
+  const est = estimateBuyMonth([{ date: "2021-01-01", close: 100 }, { date: "2025-12-01", close: 159 }], 5000);
+  check("avg cost above the entire window is marked as pre-window", est?.atWindowEdge === true && est?.ym === "2021-01");
+
+  // 13. missing growth data can never justify an EXIT
+  const noGrowth: AnalyzedHolding = {
+    holding: { id: "n", broker: "zerodha", rawSymbol: "N", yahooSymbol: "N.NS", quantity: 10, avgCost: 100, currency: "INR" },
+    data: { ...base, years: [] },
+    scorecard: { ...buildScorecard(base), totalScore: 50, verdict: "HOLD", cagr: { revenue: undefined, eps: undefined, fcf: undefined, years: 0 } },
+    invested: 1000,
+    currentValue: 1000,
+  };
+  const dec = decideRow(noGrowth);
+  check("no fundamental growth data → never an EXIT call", dec.action !== "EXIT", dec.action);
+  check("...and it does not claim the business is flat", !dec.reasons.some((r) => /flat earnings/i.test(r)));
+
+  // 14. momentum will not call two months of data a 52-week high
+  const short: Candle[] = Array.from({ length: 45 }, (_, i) => ({
+    time: new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10),
+    open: 100 + i, high: 100 + i, low: 100 + i, close: 100 + i,
+  }));
+  check("45 bars is not a 52-week high", momentumFromCandles(short).pctFromHigh === undefined);
+  const long: Candle[] = Array.from({ length: 260 }, (_, i) => ({
+    time: new Date(Date.UTC(2025, 0, 1 + i)).toISOString().slice(0, 10),
+    open: 100, high: 100, low: 100, close: 100,
+  }));
+  check("260 bars does give a 52-week high and a 200-day average",
+    momentumFromCandles(long).pctFromHigh !== undefined && momentumFromCandles(long).vs200d !== undefined);
+
+  // 15. an all-ETF portfolio is the most diversified thing there is
+  const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const etfRow = (sym: string): AnalyzedHolding => {
+    const d = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 10, avgCost: 100, currency: "INR", securityType: "ETF" as never },
+      data: d, scorecard: buildScorecard(d), invested: 1000, currentValue: 1000,
+    };
+  };
+  const etfHealth = computeHealth([etfRow("NIFTYBEES.NS"), etfRow("JUNIORBEES.NS"), etfRow("GOLDBEES.NS")], fxI);
+  const sectorCheck = etfHealth.find((c) => c.id === "sector");
+  check("an all-index-fund portfolio does not FAIL the sector-concentration test", sectorCheck?.status !== "fail", sectorCheck?.detail);
+
+  // 16. failed fetches are marked, not silently counted as market value
+  const failed: AnalyzedHolding = {
+    holding: { id: "f", broker: "zerodha", rawSymbol: "F", yahooSymbol: "F.NS", quantity: 10, avgCost: 5000, currency: "INR" },
+    invested: 50000, error: "HTTP 502",
+  };
+  const okRow: AnalyzedHolding = {
+    holding: { id: "o", broker: "zerodha", rawSymbol: "O", yahooSymbol: "O.NS", quantity: 10, avgCost: 100, currency: "INR" },
+    data: base, scorecard: buildScorecard(base), invested: 1000, currentValue: 3000,
+  };
+  const sm = summarize([okRow, failed], fxI);
+  check("value priced at cost is reported separately", sm.atCostValue === 50000 && sm.atCostCount === 1);
+  check("an unpriced row does not become the 'top holding'", (sm.topHoldingPct ?? 1) < 0.5, String(sm.topHoldingPct));
+
+  // 17. an unknown currency must not pass through at 1:1
+  check("unknown currency is dropped, not counted as base", toBase(100, "XXX" as never, fxI) === 0);
+  check("the base currency itself always converts 1:1", toBase(100, "INR", fxI) === 100);
+
+  // 18. a percent-shaped dividend yield cannot inflate income 100x
+  const pctYield: AnalyzedHolding = {
+    ...okRow,
+    data: { ...base, quote: { ...base.quote, dividendYield: 1.35 } },
+  };
+  const inc = computeIncome([pctYield], fxI);
+  check("a yield of 1.35 is read as 1.35%, not 135%", (inc.yieldOnValue ?? 1) < 0.05, String(inc.yieldOnValue));
+}
+
+console.log("\n== AUDIT REGRESSIONS 2: engine-level defects ==");
+{
+  const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const base = mockStockData("TCS.NS");
+
+  // negative equity is a red flag, never a "fortress"
+  const negEq = buildScorecard({
+    ...base,
+    years: base.years.map((y) => ({ ...y, equity: -500, totalDebt: 1000 })),
+  });
+  check("negative equity does NOT produce a flattering D/E", negEq.ratios.every((r) => (r.debtToEquity ?? 0) >= 0));
+  check("negative equity raises a red flag instead", negEq.redFlags.some((f) => /equity is negative/i.test(f)));
+
+  // an unknown market cap takes the harsher stress bucket, not the mildest
+  const noCap: AnalyzedHolding = {
+    holding: { id: "u", broker: "zerodha", rawSymbol: "U", yahooSymbol: "U.NS", quantity: 10, avgCost: 100, currency: "INR" },
+    data: { ...base, quote: { ...base.quote, marketCap: undefined } },
+    scorecard: buildScorecard(base), invested: 1000, currentValue: 1000,
+  };
+  check("unknown company size is stressed as mid/small, not as a blue chip", stressBucketOf(noCap) === "midSmallStock");
+
+  // gold MINERS are equities, not the insurance sleeve
+  const miner: AnalyzedHolding = {
+    holding: { id: "m", broker: "wealthsimple", rawSymbol: "XGD", yahooSymbol: "XGD.TO", quantity: 10, avgCost: 100, currency: "CAD", securityType: "ETF" as never },
+    data: { ...base, quote: { ...base.quote, name: "iShares S&P/TSX Global Gold Index ETF", quoteType: "ETF" } },
+    scorecard: buildScorecard(base), invested: 1000, currentValue: 1000,
+  };
+  check("a gold MINERS fund is not counted as bullion insurance", stressBucketOf(miner) === "equityEtf");
+  check("...so it cannot fill the 5-10% hedge sleeve", (hedgeShare([miner], fxI)?.share ?? 1) === 0);
+  check("the miner rule catches the phrase AND the ticker", isMinerFund("XGD.TO", "iShares S&P/TSX Global Gold Index ETF") && isMinerFund("GDX", "VanEck Gold Miners ETF"));
+  check("real bullion funds are still bullion", isBullionFund("GOLDBEES.NS", "Nippon India ETF Gold BeES") && isBullionFund("CGL.TO", "iShares Gold Bullion ETF"));
+
+  // crash factors match the verified history
+  const gfc = STRESS_SCENARIOS.find((s) => s.id === "gfc2008")!;
+  check("2008 index hit matches the verified S&P 500 -56.8%", Math.abs(gfc.hits.equityEtf + 0.57) < 0.03);
+  check("2008 gold hit matches the verified ~-30%", Math.abs(gfc.hits.hedge + 0.3) < 0.03);
+  check("2008 small caps fall harder than large caps", gfc.hits.midSmallStock < gfc.hits.largeStock);
+  check("the 2008 recovery text uses the corrected 20-month Sensex figure", /20 months/.test(gfc.recovery) && /closing basis/i.test(gfc.recovery));
+  const gw = STRESS_SCENARIOS.find((s) => s.id === "gold1980")!;
+  check("the gold winter states both the 65% and the eventual 70%", /65%/.test(gw.story) && /70%/.test(gw.story) && /28 YEARS/.test(gw.story));
+
+  // peers: ties share a rank, and a negative P/E is not "cheapest"
+  const mkPeer = (symbol: string, over: Record<string, unknown>) => ({
+    symbol, name: symbol, sector: "Technology", owned: false, watch: false, score: 70,
+    verdict: "HOLD", valStatus: "FAIR", isFin: false, redFlags: 0, lossYears: 0,
+    pillarQuality: 60, pillarFortress: 60, pillarGrowth: 60, pillarValuation: 60, ...over,
+  }) as unknown as Parameters<typeof sectorPeers>[0];
+  const same = { roeAvg: 0.2, pe: 20, pb: 3, revCagr: 0.1, roceAvg: 0.25, divYield: 0.02 };
+  const tied = sectorPeers(mkPeer("A.NS", same), [mkPeer("B.NS", same), mkPeer("C.NS", same), mkPeer("D.NS", same)])!;
+  check("four IDENTICAL peers all rank #1, not 4th", tied.ranks.every((r) => r.rank === 1));
+  check("...and a tie is not counted as beating the median", !/sector leader/i.test(tied.read));
+  const withLoss = sectorPeers(
+    mkPeer("A.NS", { ...same, pe: 18 }),
+    [mkPeer("B.NS", { ...same, pe: -8 }), mkPeer("C.NS", { ...same, pe: 22 }), mkPeer("D.NS", { ...same, pe: 25 })]
+  )!;
+  const peRank = withLoss.ranks.find((r) => r.key === "pe")!;
+  check("a negative P/E is excluded, so it cannot rank as the cheapest", peRank.of === 3 && peRank.rank === 1);
+
+  // posture: counts and values must agree, and no scan can't claim a thin market
+  const priceyRow = (sym: string, value: number): AnalyzedHolding => {
+    const d = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 10, avgCost: 100, currency: "INR" },
+      data: d, scorecard: buildScorecard(d), invested: value * 0.5, currentValue: value,
+    };
+  };
+  const unresolved: AnalyzedHolding = {
+    holding: { id: "x", broker: "zerodha", rawSymbol: "X", yahooSymbol: "X.NS", quantity: 1, avgCost: 1, currency: "INR" },
+    invested: 1, error: "fetch failed",
+  };
+  const opp = opportunitySet([priceyRow("TCS.NS", 620000), priceyRow("ITC.NS", 380000), unresolved, unresolved], [], fxI);
+  check("the 'of N positions' count only counts positions that were actually valued", opp.heldTotal === 2, String(opp.heldTotal));
+  const blind = readPosture(opp, "EXPENSIVE_CALM");
+  check("with no scan the stance never escalates to DEFENSIVE", blind.stance !== "DEFENSIVE", blind.stance);
+  check("...and the headline does not claim to know the opportunity set", !/opportunity set is thin/i.test(blind.headline));
+
+  // resilience: a headline score needs to cover most of the book
+  const etfBig = (sym: string, value: number): AnalyzedHolding => {
+    const d = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 10, avgCost: 100, currency: "INR", securityType: "ETF" as never },
+      data: d, scorecard: buildScorecard(d), invested: value, currentValue: value,
+    };
+  };
+  const thin = portfolioResilience([etfBig("NIFTYBEES.NS", 8000000), priceyRow("TATAMOTORS.NS", 500000)], fxI);
+  check("a 6%-covered book reports NO headline score", thin.score === undefined, String(thin.score));
+  check("...and says how little it could score", /scoreable/i.test(thin.headline));
+
+  // crash record: a window the stock rose through is reported, not hidden
+  const rising: Candle[] = Array.from({ length: 500 }, (_, i) => {
+    const d = new Date(Date.UTC(2019, 0, 1 + i * 2));
+    const c = 100 + i * 0.5;
+    return { time: d.toISOString().slice(0, 10), open: c, high: c, low: c, close: c };
+  });
+  const rows2 = crashRecord(rising);
+  check("a shock the stock rose through appears with a 0% drawdown", rows2.some((r) => r.id === "covid2020" && r.drawdown === 0));
+  // and truncation on the RIGHT side is flagged
+  const cutShort = rising.filter((c) => c.time <= "2020-03-06");
+  const partialRow = crashRecord(cutShort).find((r) => r.id === "covid2020");
+  check("data that stops mid-crash is flagged as partial", partialRow === undefined || partialRow.partial === true);
+}
+
+console.log("\n== Conviction vs speculation ==");
+{
+  const data = mockStockData("TCS.NS");
+  const sc = buildScorecard(data);
+  const val = buildValuation(data, sc);
+  const c = convictionOf({ data, scorecard: sc, valuation: val });
+  check("produces a 0-100 read with four pillars", c.score >= 0 && c.score <= 100 && c.pillars.length === 4);
+  check("pillars cover evidence, proof, price and durability",
+    ["evidence", "proof", "price", "durability"].every((k) => c.pillars.some((p) => p.key === k)));
+  check("every grade carries sizing guidance", c.sizing.length > 40);
+  check("a quality compounder on the mock data is not called speculative", c.grade === "CONVICTION" || c.grade === "REASONABLE", c.grade);
+
+  // no record → UNKNOWABLE, never a flattering grade
+  const bare = { ...data, years: data.years.slice(0, 1) };
+  const bareSc = buildScorecard(bare);
+  const bareC = convictionOf({ data: bare, scorecard: bareSc });
+  check("one year of statements is NOT judgeable", bareC.grade === "UNKNOWABLE", bareC.grade);
+  check("...and it says so instead of hoping", /not enough evidence/i.test(bareC.headline) && /pass/i.test(bareC.sizing));
+
+  // an expensive, loss-making, leveraged name must read as speculative
+  const spec = {
+    ...data,
+    quote: { ...data.quote, trailingPE: 95, priceToBook: 14, price: 5000, marketCap: 1e9 },
+    years: data.years.map((y, i) => ({
+      ...y,
+      netIncome: i >= data.years.length - 2 ? -50 : 10,
+      fcf: -80,
+      totalDebt: (y.equity ?? 100) * 3,
+      dilutedEPS: i >= data.years.length - 2 ? -0.5 : 1,
+    })),
+  };
+  const specSc = buildScorecard(spec);
+  const specC = convictionOf({ data: spec, scorecard: specSc, valuation: buildValuation(spec, specSc) });
+  check("loss-making + leveraged + expensive reads as SPECULATIVE", specC.grade === "SPECULATIVE" || specC.grade === "UNKNOWABLE", specC.grade);
+  check("...and it names the assumptions the case depends on", specC.assumptions.length >= 2, JSON.stringify(specC.assumptions));
+  check("...and tells you to size it as a bet", /total loss changes nothing|do not size this/i.test(specC.sizing));
+
+  // price alone must be able to block a conviction grade
+  const pricey = { ...data, quote: { ...data.quote, price: (data.quote.price ?? 100) * 8, trailingPE: 85 } };
+  const priceySc = buildScorecard(pricey);
+  const priceyC = convictionOf({ data: pricey, scorecard: priceySc, valuation: buildValuation(pricey, priceySc) });
+  check("a great business at a heroic price cannot be CONVICTION", priceyC.grade !== "CONVICTION", priceyC.grade);
+  check("...and the price pillar is what fails", (priceyC.pillars.find((p) => p.key === "price")?.score ?? 100) < 50);
+  check("every grade has display meta", Object.keys(GRADE_META).length === 4);
+}
+
 console.log("\n== Posture: when to hold cash and wait ==");
 {
   const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
@@ -2143,6 +2480,202 @@ console.log("\n== SEC EDGAR fair-access UA & typography sweep ==");
     }
   }
   check("no em dashes anywhere in the app", offenders.length === 0, offenders.join(", "));
+}
+
+console.log("\n== EXTERNAL REVIEW FIXES: flag tiers, coverage gate, readiness, trim anchor, HHI ==");
+{
+  const clone = (d: StockData): StockData => ({
+    ...d,
+    quote: { ...d.quote },
+    years: d.years.map((y) => ({ ...y })),
+    prices: d.prices.map((p) => ({ ...p })),
+  });
+
+  // ---- two-tier flags + the WATCH cap ----
+  const base = mockStockData("TCS.NS");
+  const baseSc = buildScorecard(base);
+  check("clean stock: no critical flags, coverage exposed on the type", baseSc.criticalFlags.length === 0 && baseSc.coverage > 0.9 && baseSc.coverage <= 1);
+
+  const lossCo = clone(base);
+  lossCo.years[lossCo.years.length - 1].netIncome = -1; // tiny loss, EPS untouched
+  const lossSc = buildScorecard(lossCo);
+  check("latest-year loss is a CRITICAL flag", lossSc.criticalFlags.some((f) => /loss-making/i.test(f)));
+  check(
+    "a single critical flag caps the verdict at WATCH (was HOLD)",
+    lossSc.verdict === "WATCH" || lossSc.verdict === "REVIEW_EXIT",
+    lossSc.verdict
+  );
+
+  const icrCo = clone(base);
+  const lastY = icrCo.years[icrCo.years.length - 1];
+  if (lastY.ebit !== undefined) lastY.interestExpense = lastY.ebit / 1.5; // ICR 1.5x
+  const icrSc = buildScorecard(icrCo);
+  check("ICR < 2 (non-financial) is a CRITICAL flag", icrSc.criticalFlags.some((f) => /Interest coverage/i.test(f)));
+
+  const negEqCo = clone(base);
+  negEqCo.years[negEqCo.years.length - 1].equity = -5e8;
+  const negEqSc = buildScorecard(negEqCo);
+  check("negative equity is a CRITICAL flag", negEqSc.criticalFlags.some((f) => /equity is negative/i.test(f)));
+  check("critical flags are a SUBSET of redFlags (UI renders one list, marks the tier)", negEqSc.criticalFlags.every((f) => negEqSc.redFlags.includes(f)));
+
+  const tata = buildScorecard(mockStockData("TATAMOTORS.NS"));
+  check("a caution alone does NOT cap the verdict (TATAMOTORS keeps HOLD)", tata.criticalFlags.length === 0 && tata.redFlags.length === 1 && tata.verdict === "HOLD", `${tata.verdict} crit=${tata.criticalFlags.length}`);
+
+  // ---- cyclical peak-margin caution ----
+  const cyc = clone(base);
+  cyc.quote.sector = "Energy";
+  cyc.years.forEach((y, i) => {
+    if (y.revenue !== undefined) y.netIncome = y.revenue * (i === cyc.years.length - 1 ? 0.25 : 0.1);
+  });
+  const cycSc = buildScorecard(cyc);
+  check("cyclical at peak margins gets the cycle-top caution", cycSc.redFlags.some((f) => /Cyclical sector at peak margins/.test(f)));
+  check("the cycle-top caution is NOT critical", !cycSc.criticalFlags.some((f) => /Cyclical/.test(f)));
+  const notCyc = clone(base);
+  notCyc.years.forEach((y, i) => {
+    if (y.revenue !== undefined) y.netIncome = y.revenue * (i === notCyc.years.length - 1 ? 0.25 : 0.1);
+  });
+  check("same margins in a non-cyclical sector: no cycle-top caution", !buildScorecard(notCyc).redFlags.some((f) => /Cyclical/.test(f)));
+
+  // ---- margin stability abstains around a near-zero mean ----
+  const thinMargin = clone(base);
+  thinMargin.years.forEach((y, i) => {
+    if (y.revenue !== undefined) y.netIncome = y.revenue * [0.01, 0.02, 0.01, 0.02, 0.015][i % 5];
+  });
+  const thinSc = buildScorecard(thinMargin);
+  const msCheck = thinSc.checks.find((c) => c.id === "marginstability");
+  check("margin stability goes n/a when mean margin < 2%", msCheck?.status === "na" && /too thin/.test(msCheck?.detail ?? ""), msCheck?.detail);
+
+  // ---- ADD_MORE requires coverage ≥ 60% ----
+  const sparse: StockData = {
+    symbol: "SPARSECO.NS",
+    quote: { symbol: "SPARSECO.NS", name: "Sparse Compounders", price: 100, currency: "INR", trailingPE: 12, pegRatio: 1.0, sector: "Industrials" },
+    years: [0, 1, 2, 3, 4].map((i) => ({
+      year: 2021 + i,
+      endDate: `${2021 + i}-03-31`,
+      revenue: 1000 * Math.pow(1.18, i),
+      netIncome: 120 * Math.pow(1.2, i),
+      equity: 600 * Math.pow(1.1, i),
+    })),
+    prices: [],
+    fetchedAt: "2026-01-01",
+  };
+  const sparseSc = buildScorecard(sparse);
+  check(
+    "quality + price pass on thin coverage → HOLD, never ADD_MORE",
+    sparseSc.verdict === "HOLD" && sparseSc.coverage < 0.6 && sparseSc.coverage >= 0.35,
+    `${sparseSc.verdict} cov=${sparseSc.coverage.toFixed(2)} score=${sparseSc.totalScore}`
+  );
+  check("the coverage-shortfall HOLD says WHY in the verdict text", /checklist could be scored/.test(sparseSc.verdictText));
+  for (const s of ["TCS.NS", "HDFCBANK.NS", "ITC.NS", "RELIANCE.NS", "ENB.TO", "AAPL"]) {
+    const sc = buildScorecard(mockStockData(s));
+    if (sc.verdict === "ADD_MORE") check(`${s}: ADD_MORE only with coverage ≥ 60%`, sc.coverage >= 0.6);
+  }
+
+  // ---- valuation confidence tightened (1.75x / 2.25x) + raw min-max ----
+  for (const s of ["TCS.NS", "HDFCBANK.NS", "ITC.NS", "SHOP.TO", "AAPL"]) {
+    const d = mockStockData(s);
+    const v = buildValuation(d, buildScorecard(d));
+    if (v.confidence === "triangulated")
+      check(`${s}: triangulated demands 3+ methods within 1.75x`, (v.methodCount ?? 0) >= 3 && (v.spread ?? 9) <= 1.75, `spread=${v.spread?.toFixed(2)}`);
+    if (v.confidence === "conflicting") check(`${s}: conflicting means spread > 2.25x`, (v.spread ?? 0) > 2.25, `spread=${v.spread?.toFixed(2)}`);
+    if ((v.methodCount ?? 0) >= 2)
+      check(`${s}: raw method min-max surfaced`, v.methodLow !== undefined && v.methodHigh !== undefined && v.methodLow <= v.methodHigh);
+  }
+  {
+    const d = mockStockData("TCS.NS");
+    const v = buildValuation(d, buildScorecard(d));
+    check("mock TCS methods conflict (4.3x) → widest ±40% band", v.confidence === "conflicting" && v.high !== undefined && v.intrinsic !== undefined && Math.abs(v.high / v.intrinsic - 1.4) < 1e-9, `${v.confidence} spread=${v.spread?.toFixed(2)}`);
+    const hd = mockStockData("HDFCBANK.NS");
+    const hv = buildValuation(hd, buildScorecard(hd));
+    check("mock HDFC triangulates (1.46x, 3 methods) → ±20% band", hv.confidence === "triangulated" && hv.high !== undefined && hv.intrinsic !== undefined && Math.abs(hv.high / hv.intrinsic - 1.2) < 1e-9, `${hv.confidence}`);
+  }
+
+  // ---- coach: a BUY_ZONE holding is never trimmed on profit ----
+  const trimBase = { symbol: "X.NS", isEtf: false, currency: "INR" as const, pnlPct: 0.45, weightPct: 0.16, verdict: "ADD_MORE" as const, action: "ACCUMULATE" as const, momentum: {} };
+  const inBuyZone = coachPosition({ ...trimBase, valStatus: "BUY_ZONE" });
+  check("profit 45% + weight 16% + BUY_ZONE → never TRIM", inBuyZone.stance !== "TRIM", inBuyZone.stance);
+  check("…and the card names the entry-price anchor", inBuyZone.points.some((p) => /entry-price anchor/.test(p)));
+  check("same position at PRICEY → TRIM (unchanged)", coachPosition({ ...trimBase, valStatus: "PRICEY" }).stance === "TRIM");
+  check("overweight at FAIR with big profit still trims (weight is the reason)", coachPosition({ ...trimBase, valStatus: "FAIR" }).stance === "TRIM");
+
+  // ---- decisions: multi-account sales carry the tax-context caution ----
+  {
+    const row = mkAnalyzed("ENB.TO", 10, 30);
+    row.holding.account = "TFSA + RRSP";
+    const dec = decideRow(row);
+    check("TRIM on a merged multi-account position warns about per-account tax", dec.action === "TRIM" && dec.reasons.some((r) => /spans accounts/.test(r)), dec.action);
+    const single = decideRow(mkAnalyzed("ENB.TO", 10, 30));
+    check("single-account TRIM carries no such caution", !single.reasons.some((r) => /spans accounts/.test(r)));
+  }
+
+  // ---- health: HHI boundary lets clean equal-weight books pass ----
+  const eqRows = (n: number): AnalyzedHolding[] =>
+    Array.from({ length: n }, (_, i) => ({
+      holding: { id: `H${i}`, broker: "manual" as const, rawSymbol: `H${i}`, yahooSymbol: `H${i}.NS`, quantity: 1, avgCost: 1000, currency: "INR" as const },
+      invested: 1000,
+      currentValue: 1000,
+    }));
+  const fxIn: FxRates = { base: "INR", rates: { INR: 1, CAD: 1, USD: 1 }, asOf: "", source: "" };
+  const hhiOf = (n: number) => computeHealth(eqRows(n), fxIn).find((c) => c.id === "hhi");
+  check("10 equal positions PASS the HHI check (0.100)", hhiOf(10)?.status === "pass", hhiOf(10)?.detail);
+  check("8 equal positions pass at the 0.125 boundary", hhiOf(8)?.status === "pass");
+  check("6 equal positions warn (0.167)", hhiOf(6)?.status === "warn");
+  check("4 equal positions fail (0.250)", hhiOf(4)?.status === "fail");
+
+  // ---- the decision-readiness gate ----
+  {
+    const d = mockStockData("TCS.NS");
+    const sc = buildScorecard(d);
+    const v = buildValuation(d, sc);
+    const r = assessReadiness({ card: sc, data: d, valuation: v });
+    check("TCS: partial - the only gap is the conflicting valuation", r.level === "partial" && r.gaps.length === 1 && /disagree/.test(r.gaps[0]), r.gaps.join("|"));
+    check("partial does NOT suppress actions", !r.suppressActions);
+    check("the provenance note is permanent", /unofficial Yahoo/.test(r.notes[0]));
+
+    const hd = mockStockData("HDFCBANK.NS");
+    const hsc = buildScorecard(hd);
+    const hr = assessReadiness({ card: hsc, data: hd, valuation: buildValuation(hd, hsc) });
+    check("a bank is NEVER fully decision-ready (partial by design)", hr.level === "partial" && hr.gaps.some((g) => /loan-book/.test(g)));
+
+    const noPrice = clone(d);
+    noPrice.quote.price = undefined;
+    const npSc = buildScorecard(noPrice);
+    const npR = assessReadiness({ card: npSc, data: noPrice, valuation: buildValuation(noPrice, npSc) });
+    check("no live price → BLOCKED and actions suppressed", npR.level === "blocked" && npR.suppressActions && npR.gaps.some((g) => /No live price/.test(g)));
+
+    const negR = assessReadiness({ card: negEqSc, data: negEqCo, valuation: buildValuation(negEqCo, negEqSc) });
+    check("negative equity → BLOCKED", negR.level === "blocked" && negR.gaps.some((g) => /equity is negative/i.test(g)));
+
+    const acctR = assessReadiness({ card: sc, data: d, valuation: v, account: "TFSA + RRSP" });
+    check("multi-account position → tax-context gap", acctR.gaps.some((g) => /spans accounts/.test(g)));
+
+    const etf = clone(d);
+    etf.quote.quoteType = "ETF";
+    const etfSc = buildScorecard(etf);
+    const etfR = assessReadiness({ card: etfSc, data: etf, valuation: buildValuation(etf, etfSc) });
+    check("INSUFFICIENT_DATA (fund) → BLOCKED with the history gap", etfSc.verdict === "INSUFFICIENT_DATA" && etfR.level === "blocked" && etfR.gaps.some((g) => /Not enough fundamental history/.test(g)));
+
+    const bare = assessReadiness({});
+    check("no data at all → BLOCKED", bare.level === "blocked" && bare.suppressActions);
+    check("readiness meta covers all three levels with distinct labels", new Set([READINESS_META.full.label, READINESS_META.partial.label, READINESS_META.blocked.label]).size === 3);
+
+    const lossR = assessReadiness({ card: lossSc, data: lossCo, valuation: buildValuation(lossCo, lossSc) });
+    check("a critical flag surfaces as a readiness gap", lossR.gaps.some((g) => /solvency-level/.test(g)));
+  }
+
+  // ---- posture cash persistence is server-safe ----
+  saveCash("india", 150000); // no window in node - must not throw
+  check("loadCash is null without browser storage (server-safe)", loadCash("india") === null);
+
+  // ---- plain-language glossary for every new metric ----
+  check(
+    "glossary explains readiness, coverage and idle cash in plain words",
+    ["readiness", "coverage", "idleCash"].every((k) => {
+      const e = (METRIC_INFO as Record<string, { name: string; what: string; better: string }>)[k];
+      return !!e && e.what.length > 80 && e.better.length > 40;
+    })
+  );
+  check("F-Score is labelled as modified, with its deviations stated", /modified/i.test(METRIC_INFO.fscore.name) && /2%/.test(METRIC_INFO.fscore.what));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL CHECKS PASSED");

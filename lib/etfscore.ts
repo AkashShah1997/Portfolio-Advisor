@@ -160,7 +160,7 @@ export function assessEtf(
   if (overlapWith.length) {
     const peers = ctx.heldByCategory.get(cat!.key)!;
     const cheapest = [...peers].sort(
-      (a, b) => (a.etf.mer ?? catalogMer(a.etf.symbol)?.mer ?? 1) - (b.etf.mer ?? catalogMer(b.etf.symbol)?.mer ?? 1)
+      (a, b) => effMerOf(a.etf) - effMerOf(b.etf)
     )[0];
     if (cheapest.etf.symbol !== etf.symbol) {
       sw = true;
@@ -218,7 +218,13 @@ export function assessEtf(
     );
   }
 
-  if (effMer === undefined && fundDataEmpty(etf)) {
+  /**
+   * No fee data is only an UNKNOWN verdict when no rule has fired. A 40%
+   * commodity position had already earned a REDUCE by this point, and this
+   * early return threw the verdict AND its reasons away, rendering the whole
+   * card as "No fund data".
+   */
+  if (effMer === undefined && fundDataEmpty(etf) && !reduce && !sw && !increase) {
     return {
       symbol: etf.symbol,
       verdict: "UNKNOWN",
@@ -270,6 +276,16 @@ export function assessEtf(
 }
 
 /** Assess every held ETF together (so duplication is visible). */
+/**
+ * The fee actually being paid, resolved the same way everywhere: live MER, then
+ * the net expense ratio, then the catalog approximation. The duplicate-fund
+ * comparator used to read `mer` ONLY and default a missing one to 1 (=100%/yr),
+ * which told the CHEAPER fund to consolidate into the dearer one.
+ */
+function effMerOf(e: { mer?: number; netExpenseRatio?: number; symbol: string }): number {
+  return e.mer ?? e.netExpenseRatio ?? catalogMer(e.symbol)?.mer ?? Number.POSITIVE_INFINITY;
+}
+
 export function assessAll(
   held: HeldEtfInput[],
   ctx: { market: Market; portfolioTotal: number }

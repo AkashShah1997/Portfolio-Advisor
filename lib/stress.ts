@@ -1,6 +1,6 @@
 import type { AnalyzedHolding, Currency, FxRates } from "./types";
 import { toBase } from "./portfolio";
-import { isEtfHolding } from "./etf";
+import { isBullionFund, isEtfHolding } from "./etf";
 import { capTierOf } from "./screens";
 
 /**
@@ -43,11 +43,15 @@ export function stressBucketOf(r: AnalyzedHolding): StressBucket {
   const name = q?.name ?? r.holding.name ?? "";
   const isEtf = isEtfHolding(r.holding.yahooSymbol, name, q?.quoteType, r.holding.securityType);
   if (isEtf) {
-    return /gold|silver|platinum/i.test(`${r.holding.yahooSymbol} ${name}`) ? "hedge" : "equityEtf";
+    // Miners are equities that happen to dig up metal (see isBullionFund).
+    return isBullionFund(r.holding.yahooSymbol, name) ? "hedge" : "equityEtf";
   }
   const pe = q?.trailingPE;
   if (pe !== undefined && pe >= 40) return "expensiveStock";
   const tier = capTierOf(q?.marketCap, r.holding.yahooSymbol);
+  // An UNKNOWN size must take the harsher bucket, not the mildest one. Treating
+  // "no market cap" as large-cap hid roughly a fifth of the modelled loss.
+  if (tier === undefined) return "midSmallStock";
   return tier === "mid" || tier === "small" ? "midSmallStock" : "largeStock";
 }
 
@@ -67,10 +71,12 @@ export const STRESS_SCENARIOS: StressScenario[] = [
     label: "2000 dot-com bust",
     window: "Mar 2000 – Oct 2002",
     story:
-      "The internet was real, and the Nasdaq still fell 78%. The crash sorted stocks by PRICE PAID, not by how exciting the technology was: the expensive fell furthest, boring profitable businesses fell least, and gold quietly rose.",
-    hits: { hedge: 0.15, equityEtf: -0.45, largeStock: -0.35, midSmallStock: -0.3, expensiveStock: -0.75 },
+      "The internet was real, and the Nasdaq still fell 78% (5,048 on 10 Mar 2000 to 1,114 on 9 Oct 2002). The crash sorted stocks by PRICE PAID, not by how exciting the technology was: the expensive fell furthest, boring profitable businesses fell least, and gold quietly rose.",
+    // Verified: S&P 500 -49% peak-to-trough, Nasdaq -77.9%; gold ROSE ~15% over
+    // the same span; value and small-cap value held up far better than the index.
+    hits: { hedge: 0.15, equityEtf: -0.45, largeStock: -0.35, midSmallStock: -0.3, expensiveStock: -0.78 },
     recovery:
-      "The S&P 500 took 7 years to reclaim its high; the Nasdaq took 15. Cheap quality names were whole years earlier - many value portfolios actually GAINED through 2000-02.",
+      "The S&P 500 took 7 years to reclaim its high (30 May 2007); the Nasdaq took 15 (23 Apr 2015). Cheap quality names were whole years earlier - many value portfolios actually GAINED through 2000-02.",
     dcaNote:
       "A fixed monthly buy kept running through the bust was back in profit by ~2004-06, years before buy-and-forget money at the top.",
   },
@@ -79,10 +85,13 @@ export const STRESS_SCENARIOS: StressScenario[] = [
     label: "2008 financial crisis",
     window: "Oct 2007 – Mar 2009",
     story:
-      "The everything-crash: banks froze, and for a few months ALL assets fell together because everyone needed cash - even gold dropped ~25% in the panic before making new highs within a year. Diversification helps less during the crash and more in the recovery.",
-    hits: { hedge: -0.25, equityEtf: -0.55, largeStock: -0.45, midSmallStock: -0.65, expensiveStock: -0.6 },
+      "The everything-crash: banks froze, and for a few months ALL assets fell together because everyone needed cash - even gold fell about 30% before setting a new record 11 months after its low. Diversification helps less during the crash and more in the recovery.",
+    // Verified peak-to-trough: S&P 500 -56.8% (9 Oct 2007 - 9 Mar 2009),
+    // Russell 2000 -59.9%, Sensex ~-60%, BSE Smallcap ~-80%, gold -30%
+    // (Mar 2008 $1,011 fix - Nov 2008 $692).
+    hits: { hedge: -0.3, equityEtf: -0.57, largeStock: -0.52, midSmallStock: -0.7, expensiveStock: -0.65 },
     recovery:
-      "US indexes needed ~5.5 years. The Sensex reclaimed its high in about 21 months (Nov 2010). Gold was at new records inside 12 months.",
+      "The S&P 500 took about 5.5 years (new high 28 Mar 2013). On a closing basis the Sensex needed about 20 months from the March 2009 bottom (record close 5 Nov 2010) - though its January 2008 INTRADAY peak was not exceeded until 2013. Gold set a new record in October 2009.",
     dcaNote:
       "A SIP that kept running through 2008-09 bought the entire bottom - in India it was strongly profitable by 2010 while lump-sum-at-the-top money was still underwater.",
   },
@@ -91,9 +100,10 @@ export const STRESS_SCENARIOS: StressScenario[] = [
     label: "2020 COVID crash",
     window: "Feb – Mar 2020 (5 weeks)",
     story:
-      "The fastest 30%+ fall in history - and the fastest recovery. Quality businesses and index funds round-tripped within months. The only investors who lost permanently were the ones who sold in March and waited for 'clarity' to get back in.",
+      "The fastest 30% fall from a record in S&P 500 history - 22 trading days - and the fastest recovery. Quality businesses and index funds round-tripped within months. The only investors who lost permanently were the ones who sold in March and waited for 'clarity' to get back in.",
     hits: { hedge: -0.12, equityEtf: -0.35, largeStock: -0.3, midSmallStock: -0.4, expensiveStock: -0.3 },
-    recovery: "5-6 months for the big indexes - the fastest major recovery on record.",
+    recovery:
+      "The S&P 500 regained its high in six months (18 Aug 2020) - the Nasdaq in under four, the Dow in nine. The fastest major recovery on record.",
     dcaNote:
       "The March-2020 instalment became one of the best single buys of the decade. Nobody who paused their SIP knew when to restart it.",
   },
@@ -105,7 +115,7 @@ export const STRESS_SCENARIOS: StressScenario[] = [
       "Interest rates jumped and the market repriced everything expensive: indexes fell ~25%, but profitless 'story' stocks fell 60-90% and many never came back. Gold was flat in dollars - and UP in rupees and loonies as the dollar strengthened.",
     hits: { hedge: 0, equityEtf: -0.25, largeStock: -0.2, midSmallStock: -0.3, expensiveStock: -0.65 },
     recovery:
-      "The S&P 500 took ~2 years (new high Jan 2024). Many 2021 favourites bought at any price never recovered at all.",
+      "The S&P 500 took just over 2 years (record close 4,839.81 on 19 Jan 2024, from the 3 Jan 2022 peak). Many 2021 favourites bought at any price never recovered at all.",
     dcaNote:
       "Boring index SIPs recovered fully and quickly. The permanent damage was concentrated in expensive stocks bought without a price discipline.",
   },
@@ -114,10 +124,10 @@ export const STRESS_SCENARIOS: StressScenario[] = [
     label: "1980 gold winter",
     window: "Jan 1980 – 2008",
     story:
-      "The crash gold-pitch videos never mention: after the 1979-80 panic spike, gold fell ~65% and took 28 YEARS to see its old high again - while boring stocks compounded ~17%/yr through the 80s and 90s. Insurance is not an engine.",
+      "The crash gold-pitch videos never mention: after the January 1980 peak of $850, gold fell 65% by 1982 and ultimately about 70% by 1999, and took 28 YEARS to regain $850 in nominal dollars (January 2008) - while boring stocks compounded through the 80s and 90s. Insurance is not an engine.",
     hits: { hedge: -0.65, equityEtf: 0, largeStock: 0, midSmallStock: 0, expensiveStock: 0 },
     recovery:
-      "28 years (1980 → 2008) just to break even in dollars - before counting inflation. That is what buying insurance at a panic top costs.",
+      "28 years (Jan 1980 → Jan 2008) just to break even in NOMINAL dollars; adjusted for inflation the 1980 peak was not regained until 2011. That is what buying insurance at a panic top costs.",
     dcaNote:
       "This is why the plan caps the hedge sleeve at ~5-10%: enough that it insures, small enough that a two-decade gold winter can't strand your savings.",
   },

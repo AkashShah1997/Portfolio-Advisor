@@ -60,6 +60,8 @@ export interface YearRatios {
   opMargin?: number;
   grossMargin?: number;
   debtToEquity?: number;
+  /** set when equity <= 0: D/E is meaningless, and that itself is the signal */
+  negativeEquity?: boolean;
   interestCoverage?: number; // ebit / interestExpense
   currentRatio?: number;
   eps?: number;
@@ -160,6 +162,10 @@ export interface Scorecard {
   pillars: PillarScore[];
   checks: Check[];
   redFlags: string[];
+  /** subset of redFlags severe enough that any ONE caps the verdict at WATCH (solvency/viability facts) */
+  criticalFlags: string[];
+  /** share (0..1) of total check WEIGHT that could actually be scored - the honest denominator */
+  coverage: number;
   verdict: Verdict;
   verdictText: string;
   philosophyNote: string;
@@ -209,6 +215,9 @@ export interface PortfolioSummary {
   baseCurrency: Currency;
   totalInvested: number;
   totalCurrent: number;
+  /** portion of totalCurrent that is a COST basis because the quote failed */
+  atCostValue?: number;
+  atCostCount?: number;
   totalPnl: number;
   totalPnlPct: number;
   byCountry: { label: string; value: number }[];

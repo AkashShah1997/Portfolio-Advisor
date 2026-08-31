@@ -8,6 +8,7 @@ import { strengthsAndRisks } from "@/lib/insights";
 import { sectorPeers } from "@/lib/peers";
 import { capTierOf, CAP_TIER_META, toMetricRow, type MetricRow } from "@/lib/screens";
 import { buildValuation } from "@/lib/valuation";
+import { assessReadiness, READINESS_META } from "@/lib/readiness";
 import { ACTION_META, decideRow } from "@/lib/decisions";
 import { coachPosition, momentumFromCandles, STANCE_META, trancheLadder, type MomentumStats } from "@/lib/coach";
 import type { MacroPayload } from "@/lib/macro";
@@ -20,6 +21,7 @@ import type { Candle } from "@/lib/history";
 import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 import { ChartPanel } from "./ChartPanel";
 import { CrashRecord } from "./CrashRecord";
+import { ConvictionCard } from "./ConvictionCard";
 import { StockCard } from "./StockCard";
 
 /**
@@ -175,6 +177,14 @@ export function DeepDive({
     [row]
   );
   const capTier = row ? capTierOf(row.data?.quote.marketCap, row.holding.yahooSymbol) : undefined;
+  // the decision-readiness gate - shown beside the verdict, and it can withhold action output
+  const readiness = useMemo(
+    () =>
+      row?.data && row.scorecard && !isEtf
+        ? assessReadiness({ card: row.scorecard, data: row.data, valuation, account: row.holding.account })
+        : undefined,
+    [row, valuation, isEtf]
+  );
   const weightPct = useMemo(() => {
     if (!held || !fx) return undefined;
     const total = rows
@@ -387,12 +397,19 @@ export function DeepDive({
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {decision && (
+                {readiness && (
+                  <Badge tone={READINESS_META[readiness.level].tone} icon={READINESS_META[readiness.level].icon}>
+                    {readiness.label}
+                  </Badge>
+                )}
+                {decision && !readiness?.suppressActions && (
                   <Badge tone={ACTION_META[decision.action].tone} icon={ACTION_META[decision.action].icon}>
                     {ACTION_META[decision.action].label}
                   </Badge>
                 )}
-                {coach && <Badge tone={STANCE_META[coach.stance].tone} icon={STANCE_META[coach.stance].icon}>{STANCE_META[coach.stance].label}</Badge>}
+                {coach && !readiness?.suppressActions && (
+                  <Badge tone={STANCE_META[coach.stance].tone} icon={STANCE_META[coach.stance].icon}>{STANCE_META[coach.stance].label}</Badge>
+                )}
                 {row.scorecard && vm && (
                   <div className="text-right">
                     <div className="text-[11px] text-muted">Score</div>
@@ -428,6 +445,11 @@ export function DeepDive({
                 </p>
               </Card>
             </div>
+          )}
+
+          {/* conviction vs speculation - the read that decides position size */}
+          {row.data && row.scorecard && scored && !isEtf && (
+            <ConvictionCard data={row.data} scorecard={row.scorecard} valuation={valuation} />
           )}
 
           {/* SWOT */}
@@ -542,8 +564,8 @@ export function DeepDive({
             )}
           </Card>
 
-          {/* the position coach (held) or an entry plan (not held) */}
-          {scored && !isEtf && (
+          {/* the position coach (held) or an entry plan (not held) - withheld when the gate is closed */}
+          {scored && !isEtf && !readiness?.suppressActions && (
             <Card className="p-4">
               {coach ? (
                 <>

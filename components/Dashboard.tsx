@@ -14,7 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import type { AnalyzedHolding, Currency, FxRates, Holding, Scorecard, StockData, Verdict } from "@/lib/types";
-import { benchmarkCompare, portfolioSeries, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
+import { benchmarkCompare, portfolioSeries, seriesWindow, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
 import { describeSnowflake, portfolioSnowflake, snowflakeLeaders } from "@/lib/snowflake";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
@@ -241,6 +241,8 @@ export function Dashboard({
   const watchRows = useMemo(() => rows.filter((r) => r.holding.watch), [rows]);
   const summary = useMemo(() => summarize(invRows, fx), [invRows, fx]);
   const series = useMemo(() => portfolioSeries(invRows, fx), [invRows, fx]);
+  // the basket is constant, so say when a late-listing holding shortens the window
+  const window0 = useMemo(() => seriesWindow(invRows), [invRows]);
   const pfFlake = useMemo(() => portfolioSnowflake(invRows, fx), [invRows, fx]);
   const axisLeaders = useMemo(() => snowflakeLeaders(invRows), [invRows]);
 
@@ -631,6 +633,13 @@ export function Dashboard({
               <span>
                 {invRows.length} holdings{watchRows.length ? ` · ${watchRows.length} watched` : ""}
               </span>
+              {(summary.atCostCount ?? 0) > 0 && (
+                <span className="text-[#8a6100]">
+                  ⚠ {summary.atCostCount} holding{summary.atCostCount === 1 ? "" : "s"} priced at COST
+                  ({fmtMoney(summary.atCostValue ?? 0, base, true)}) - the quote failed, so this much of the total
+                  is not a market value
+                </span>
+              )}
             </div>
           </div>
           {series.length > 1 && (
@@ -657,7 +666,11 @@ export function Dashboard({
                 </div>
                 <div className="text-[11px] text-muted text-right">
                   {heroView === "value"
-                    ? `your current holdings, valued over the last ${Math.round(series.length / 12)}y - not account history`
+                    ? `your current holdings, valued over the last ${Math.round(series.length / 12)}y - not account history${
+                        window0.truncatedBy
+                          ? ` · window starts ${window0.start} because ${window0.truncatedBy.replace(/\.(NS|BO|TO|V|NE)$/i, "")} has no earlier price`
+                          : ""
+                      }`
                     : `both indexed to 100 at the common start · price only, dividends excluded on both sides`}
                 </div>
               </div>

@@ -45,6 +45,8 @@ export interface Journey {
    * says so instead of silently looking stale.
    */
   awaitingLatestFy: boolean;
+  /** true when the buy month could not select a "then" year and we used the oldest on file */
+  thenFellBack: boolean;
   /** the fiscal year the market is currently living in, if it isn't filed yet */
   pendingFy?: number;
   verdict: { tone: "good" | "neutral" | "warning" | "critical"; line: string };
@@ -57,8 +59,15 @@ export function estimateBuyMonth(
 ): { ym: string; atWindowEdge: boolean } | undefined {
   if (!prices.length || !Number.isFinite(avgCost) || avgCost <= 0) return undefined;
   const minClose = Math.min(...prices.map((p) => p.close));
+  const maxClose = Math.max(...prices.map((p) => p.close));
   if (avgCost < minClose * 0.9) {
     // cheaper than anything in the window → bought before it
+    return { ym: prices[0].date.slice(0, 7), atWindowEdge: true };
+  }
+  if (avgCost > maxClose * 1.1) {
+    // dearer than anything in the window → also bought before it, and underwater
+    // since. Without this mirror guard the estimate snapped to the window's
+    // HIGHEST month and reported it as a confident buy date.
     return { ym: prices[0].date.slice(0, 7), atWindowEdge: true };
   }
   let bestIdx = 0;
@@ -74,7 +83,13 @@ export function estimateBuyMonth(
   return { ym: prices[bestIdx].date.slice(0, 7), atWindowEdge: false };
 }
 
-const rel = (then: number, now: number) => (Math.abs(then) > 1e-12 ? now / then - 1 : undefined);
+/**
+ * Relative change that survives a negative starting point. `now/then - 1`
+ * inverts whenever `then < 0`, so a loss of 200 turning into a profit of 400
+ * was scored as DETERIORATION and could trigger an exit review.
+ */
+const rel = (then: number, now: number) =>
+  Math.abs(then) > 1e-12 ? (now - then) / Math.abs(then) : undefined;
 
 function judge(then?: number, now?: number, higherIsBetter = true, threshold = 0.05): boolean | undefined {
   if (then === undefined || now === undefined) return undefined;
@@ -96,14 +111,25 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
 
   // fiscal years: "then" = last fiscal year ending at/before the buy month (else earliest)
   const ratios = sc.ratios;
-  const buyYearNum = Number(sinceYM.slice(0, 4)) + (Number(sinceYM.slice(5, 7)) - 1) / 12;
-  let thenR: YearRatios = ratios[0];
-  for (const r of ratios) {
-    if (r.year <= buyYearNum) thenR = r;
+  /**
+   * "Then" must be the last fiscal year that had actually CLOSED when you
+   * bought. Comparing the integer FY label against a fractional calendar year
+   * selected a year that had barely started - a look-ahead that quietly
+   * compressed every measured improvement.
+   */
+  const endOf = (r: YearRatios, i: number) => data.years[i]?.endDate?.slice(0, 7) ?? `${r.year}-03`;
+  let thenIdx = 0;
+  for (let i = 0; i < ratios.length; i++) {
+    if (endOf(ratios[i], i) <= sinceYM) thenIdx = i;
     else break;
   }
+  let thenR: YearRatios = ratios[thenIdx];
   const nowR = ratios[ratios.length - 1];
-  if (thenR.year >= nowR.year) thenR = ratios[0];
+  let thenFellBack = false;
+  if (thenR.year >= nowR.year) {
+    thenR = ratios[0];
+    thenFellBack = true;
+  }
   if (thenR.year >= nowR.year) return undefined;
 
   const isFin = sc.isFinancialSector;
@@ -154,7 +180,10 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
 
   // price since the buy month
   const monthOf = (d: string) => d.slice(0, 7);
-  const buyPoint = data.prices.find((p) => monthOf(p.date) >= sinceYM) ?? data.prices[0];
+  // If the buy month is NEWER than every price bar we have, there is no honest
+  // "since you bought" return - the old fallback to prices[0] reported a
+  // five-year CAGR under a one-month heading.
+  const buyPoint = data.prices.find((p) => monthOf(p.date) >= sinceYM);
   const lastPoint = data.prices[data.prices.length - 1];
   const priceThen = buyPoint?.close;
   const priceNow = data.quote.price ?? lastPoint?.close;
@@ -211,6 +240,7 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
     rows,
     improved,
     worsened,
+    thenFellBack,
     awaitingLatestFy,
     pendingFy,
     verdict,

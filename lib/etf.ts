@@ -274,3 +274,26 @@ export function enrichEtfData(
   }
   return out;
 }
+
+
+/**
+ * Gold MINERS funds are equities, not bullion. They fell ~70% in 2008 while the
+ * metal fell ~30%, so counting them as the insurance sleeve both understated the
+ * crash and falsely filled the 5-10% band. Name alone is not enough - XGD.TO is
+ * "iShares S&P/TSX Global Gold Index ETF" with no "miner" in the title - so this
+ * matches the standard miner phrases plus the well-known tickers.
+ */
+const MINER_WORDS = /miner|mining|producer|gold equit|global gold|junior gold|senior gold|gold industry/i;
+const MINER_SYMBOLS = /^(GDX|GDXJ|XGD|RING|SGDM|GOAU|NUGT|JNUG|GOLDMINER)\b/i;
+const BULLION_WORDS = /gold|silver|platinum|bullion|precious metal/i;
+
+export function isMinerFund(symbol: string, name?: string): boolean {
+  const hay = `${symbol} ${name ?? ""}`;
+  return MINER_WORDS.test(hay) || MINER_SYMBOLS.test(symbol.replace(/\..*$/, ""));
+}
+
+/** True only for funds that actually hold the metal. */
+export function isBullionFund(symbol: string, name?: string): boolean {
+  if (isMinerFund(symbol, name)) return false;
+  return BULLION_WORDS.test(`${symbol} ${name ?? ""}`);
+}

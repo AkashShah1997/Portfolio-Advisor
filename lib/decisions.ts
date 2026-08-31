@@ -146,6 +146,15 @@ export function decideRow(r: AnalyzedHolding): Decision {
     headline = "Price has lagged but the business keeps compounding - that's a valuation reset, not decay. Re-check the thesis, don't panic-sell.";
   }
 
+  // Selling across a merged multi-account position is not ONE decision. Tax
+  // treatment differs by account (registered vs taxable), and this app cannot
+  // see which units sit where - so it says so instead of pretending.
+  if ((action === "EXIT" || action === "TRIM") && r.holding.account && r.holding.account.includes("+")) {
+    reasons.push(
+      `This position spans accounts (${r.holding.account}). A sale from a taxable account is taxed; from a registered one (TFSA/RRSP) it isn't - decide WHERE to sell, not just whether.`
+    );
+  }
+
   return { action, headline, reasons, deadMoney, priceCagr, spanYears, valuation: val };
 }
 

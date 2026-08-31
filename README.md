@@ -94,6 +94,18 @@ lagging price (coiled spring - keep), flat business + flat price (dead money - r
 deteriorating business (the fall is deserved - exit review). The same chip appears on the Decisions
 board.
 
+**Conviction or speculation?** - the read that decides POSITION SIZE, on every stock card and in
+full on the deep-dive page. It deliberately does not ask "is this a good stock". It asks how much of
+the case is already PROVEN rather than assumed, across four pillars: **evidence you can check**
+(length and completeness of the filing record, and whether the valuation methods agree),
+**proof already delivered** (returns on capital, unbroken profits, cash conversion - on the record,
+not in a forecast), **price that does not need heroics**, and **survives being wrong** (leverage,
+interest cover, size, red flags). It then names every assumption the case still rests on, and maps
+the grade to a size: full position for CONVICTION, half for REASONABLE, "small enough that a total
+loss changes nothing" for SPECULATIVE, and "pass" for NOT JUDGEABLE. The failure it exists to
+prevent is not owning a speculation - it is owning one while believing it is a conviction, and
+sizing it that way.
+
 **Deep analysis** - a full page for ANY India/Canada stock, and it does **not** need a portfolio:
 "Deep-dive any stock" sits on the import screen itself, so you can research a name before importing
 anything (every stock card has a "Deep analysis" button too, and the dashboard toolbar takes a bare
@@ -276,6 +288,22 @@ always falls back to the light palette because paper is light.
 
 ---
 
+## How far the numbers can be trusted
+
+Every formula in the engine is checked against its textbook definition by the test suite (550+
+assertions, run with `MOCK_DATA=1 npx tsx test/verify.ts`), and every historical figure printed as
+fact - the 2008 drawdowns, the recovery times, the 1980 gold winter, India's gold-tax rules - has
+been verified against primary sources and carries its date. A dedicated **audit-regression** block
+locks down the specific defects a line-by-line review found, so they cannot come back.
+
+What that does NOT mean: the inputs come from a free, unofficial Yahoo feed that can lag, revise or
+simply omit data, and no amount of arithmetic makes a forecast reliable. So the app is built to say
+"unknown" rather than guess - missing data goes n/a instead of scoring zero or full marks, a
+valuation built from one method is labelled thin, a portfolio it can only partly score refuses to
+publish a headline number, and a holding priced at cost because its quote failed is flagged as such
+in the header. Where a number is an approximation (ETF expense ratios, the crash-test hit factors,
+the AI-exposure hypothesis) the card says so on its face.
+
 ## Data sources (all free, no API keys)
 
 - **Yahoo Finance** (via [`yahoo-finance2`](https://github.com/gadicc/yahoo-finance2), unofficial):
@@ -347,7 +375,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # regression channel + auto S/R, rule-based SWOT, sector peers
                                      # from the scan cache, the gold desk, the pre-buy
                                      # research prompt, posture/cash discipline, recession +
-                                     # AI resilience, per-stock crash records (490+ checks)
+                                     # AI resilience, per-stock crash records, the conviction
+                                     # test, and a full audit-regression suite (550+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

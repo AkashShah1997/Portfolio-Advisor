@@ -236,11 +236,11 @@ const BASE_SCREENS: ScreenDef[] = [
         .filter(
           (r) =>
             !r.isFin &&
-            ok(r.d2e, (v) => v <= 0.35) &&
+            ok(r.d2e, (v) => v >= 0 && v <= 0.35) &&
             (r.icr === undefined || r.icr >= 8) &&
             ok(r.fcfPosShare, (v) => v >= 0.8)
         )
-        .sort((a, b) => (a.d2e ?? 99) - (b.d2e ?? 99)),
+        .sort((a, b) => ((a.d2e ?? 99) < 0 ? 99 : (a.d2e ?? 99)) - ((b.d2e ?? 99) < 0 ? 99 : (b.d2e ?? 99))),
   },
   {
     id: "garp",

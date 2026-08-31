@@ -57,6 +57,15 @@ export function ValuationBlock({
               : `${fmtPct(-val.marginOfSafety, 0)} above estimate`}
           </Badge>
         )}
+        {val.confidence && (
+          <Badge tone={val.confidence === "triangulated" ? "good" : val.confidence === "thin" ? "muted" : "warning"}>
+            {val.confidence === "triangulated"
+              ? `triangulated · ${val.methodCount} methods agree`
+              : val.confidence === "thin"
+                ? `thin · ${val.methodCount ?? 0} method${(val.methodCount ?? 0) === 1 ? "" : "s"}`
+                : "methods conflict"}
+          </Badge>
+        )}
         <span className="text-[11px] text-muted ml-auto">
           needs {fmtPct(val.mosTarget, 0)} MoS at this quality
         </span>
@@ -123,6 +132,12 @@ export function ValuationBlock({
         <span>
           Band {fmtMoney(low, cur, true)}–{fmtMoney(high, cur, true)}
         </span>
+        {val.methodLow !== undefined && val.methodHigh !== undefined && (val.methodCount ?? 0) >= 2 && (
+          <span className="text-muted">
+            Methods span {fmtMoney(val.methodLow, cur, true)}–{fmtMoney(val.methodHigh, cur, true)}
+            {val.spread !== undefined ? ` (${val.spread.toFixed(1)}x apart)` : ""}
+          </span>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-2">

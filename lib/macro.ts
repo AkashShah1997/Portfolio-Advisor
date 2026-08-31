@@ -86,12 +86,13 @@ export function seriesStats(candles: Candle[]): SeriesStats {
   const first = closes[0];
   const high = Math.max(...closes);
   const dmaWindow = closes.slice(-200);
-  const dma = dmaWindow.reduce((a, b) => a + b, 0) / dmaWindow.length;
+  // only call it a 200-day average when there really are ~200 bars
+  const dma = dmaWindow.length >= 150 ? dmaWindow.reduce((a, b) => a + b, 0) / dmaWindow.length : undefined;
   return {
     last,
     ret1y: first > 0 ? last / first - 1 : undefined,
     fromHigh: high > 0 ? last / high - 1 : undefined,
-    above200dma: last >= dma,
+    above200dma: dma !== undefined ? last >= dma : undefined,
   };
 }
 

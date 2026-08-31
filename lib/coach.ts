@@ -52,12 +52,16 @@ export function momentumFromCandles(candles: Candle[]): MomentumStats {
   const closes = candles.map((c) => c.close).filter((v) => Number.isFinite(v) && v > 0);
   if (closes.length < 40) return {};
   const last = closes[closes.length - 1];
-  const high = Math.max(...closes);
+  // A "52-week high" needs about a year of bars. With two months of data every
+  // stock sits AT its high, which silently disabled buy-the-dip on new listings
+  // and made "near the high, trims execute well" fire on no evidence.
+  const high = closes.length >= 180 ? Math.max(...closes) : undefined;
   const dmaWin = closes.slice(-200);
-  const dma = dmaWin.length >= 120 ? dmaWin.reduce((a, b) => a + b, 0) / dmaWin.length : undefined;
+  // and a "200-day average" needs 200 bars, not 120
+  const dma = dmaWin.length >= 200 ? dmaWin.reduce((a, b) => a + b, 0) / dmaWin.length : undefined;
   const i3m = closes.length - 1 - 63;
   return {
-    pctFromHigh: high > 0 ? last / high - 1 : undefined,
+    pctFromHigh: high !== undefined && high > 0 ? last / high - 1 : undefined,
     vs200d: dma ? last / dma - 1 : undefined,
     ret3m: i3m >= 0 && closes[i3m] > 0 ? last / closes[i3m] - 1 : undefined,
     lastClose: last,
@@ -207,7 +211,17 @@ export function coachPosition(inp: CoachInput): CoachCall {
 
   const qualityOk = inp.action === "ACCUMULATE" || inp.action === "HOLD" || inp.verdict === "ADD_MORE" || inp.verdict === "HOLD_QUALITY_PRICEY" || inp.verdict === "HOLD";
 
-  if (bigProfit && (inp.valStatus === "PRICEY" || overweight) && !dip) {
+  // A holding still IN THE BUY ZONE never gets trimmed on profit: "up 40%" is
+  // an anchor to your entry price, not evidence about the business or the
+  // price today. If it's overweight AND undervalued, the fix is to direct NEW
+  // money elsewhere - selling below fair value to tidy a percentage is how
+  // compounders get lost.
+  if (bigProfit && overweight && inp.valStatus === "BUY_ZONE") {
+    points.push(
+      `It's ${fmtPct(inp.weightPct!, 0)} of the portfolio but still priced in the buy zone - being up ${pf(inp.pnlPct)} is an entry-price anchor, not a sell signal. Rebalance by pointing fresh money elsewhere, not by selling cheap.`
+    );
+  }
+  if (bigProfit && (inp.valStatus === "PRICEY" || overweight) && !dip && inp.valStatus !== "BUY_ZONE") {
     points.push(
       overweight
         ? `Position size (${fmtPct(inp.weightPct!, 0)}) is the honest reason to trim - you're de-risking the portfolio, not calling a top.`

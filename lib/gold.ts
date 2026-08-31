@@ -110,7 +110,7 @@ export const GOLD_CONTEXT: GoldFact[] = [
   },
   {
     label: "The US holds the largest official hoard",
-    text: "The United States reports roughly 8,100 tonnes - more than the next two countries combined - and has not been an active buyer or seller for decades. US policy matters to gold through the dollar and real rates, not through its vault.",
+    text: "The United States reports 8,133.5 tonnes - more than Germany (3,350t) and Italy (2,452t) combined - and has not been an active buyer or seller for decades. US policy matters to gold through the dollar and real rates, not through its vault.",
     source: "IMF / World Gold Council reserve statistics",
   },
   {
@@ -126,9 +126,9 @@ export const GOLD_HOWTO: Record<Market, { title: string; lines: string[]; cautio
     title: "Buying gold in India",
     lines: [
       "Gold ETFs (GOLDBEES, GOLDIETF, HDFCGOLD) are the cheapest liquid route: expense ratios roughly 0.5-0.8%/yr, held in your demat, no making charges, no purity risk.",
-      "Gold mutual funds / FoFs cost slightly more but allow a true monthly SIP without a demat account - the better vehicle if you want automation over the lowest fee.",
-      "Sovereign Gold Bonds are DISCONTINUED - no new tranche since Feb 2024, and the government confirmed the scheme ends. Older SGBs still trade on the secondary market, but the tax-free-at-maturity benefit applies only to original allottees held to the full 8 years.",
-      "Tax (from Apr 2026): gold ETFs and funds pay 12.5% long-term capital gains after 12 months, no indexation; short-term gains follow your slab.",
+      "Gold mutual funds / FoFs cost slightly more but allow a true monthly SIP without a demat account - better for automation, though note the longer 24-month bar for the 12.5% LTCG rate.",
+      "Sovereign Gold Bonds are DISCONTINUED for new issuance - the last tranche was 2023-24 Series IV in February 2024. Older SGBs still trade on the secondary market, but the tax-free-at-maturity benefit applies only to original allottees who hold to the full 8 years.",
+      "Tax (since 1 Apr 2025): gold ETFs pay 12.5% long-term capital gains after a 12-MONTH holding period, while gold mutual funds and fund-of-funds need 24 MONTHS for the same rate. Below those thresholds gains are taxed at your slab rate. No indexation either way.",
       "Physical gold and jewellery carry 3% GST plus 5% GST on making charges (often 8-25% of the bill) - fine as ornament, expensive as an investment.",
       "Digital gold is unregulated: SEBI warned in Nov 2025 that it carries no investor protection, plus a 2-3% spread and 3% GST.",
     ],
@@ -227,8 +227,8 @@ export function buildGoldSignals(
     });
   }
 
-  // 4. gold's own trend
-  if (gold.last !== undefined) {
+  // 4. gold's own trend - symmetrical, so a broken trend can actually score as a headwind
+  if (gold.last !== undefined && gold.above200dma !== undefined) {
     const above = gold.above200dma === true;
     items.push({
       key: "goldTrend",
@@ -236,8 +236,8 @@ export function buildGoldSignals(
       value: above ? "above" : "below",
       detail: above
         ? "the multi-year uptrend is intact - keep the plan running, don't chase size"
-        : "below trend: cheaper entries, but wait for tranches rather than one big buy",
-      state: above ? "tailwind" : "neutral",
+        : "below its own long-term trend: cheaper entries, but momentum is against it - average in, don't lump in",
+      state: above ? "tailwind" : "headwind",
       scored: true,
     });
   }
@@ -261,16 +261,20 @@ export function buildGoldSignals(
     });
   }
 
-  // 6. your currency does half the work
+  // 6. your currency does half the work - but only claim a direction when it is known
   if (fx.last !== undefined) {
-    const homeWeaker = (fx.ret1y ?? 0) > 0.01;
+    const known = fx.ret1y !== undefined;
+    const move = fx.ret1y ?? 0;
+    const state: GoldState = !known ? "unknown" : move > 0.01 ? "tailwind" : move < -0.01 ? "headwind" : "neutral";
     items.push({
       key: "fx",
       label: market === "india" ? "USD/INR" : "USD/CAD",
       value: fx.last.toFixed(2),
-      detail: `${pct(fx.ret1y)} 1y - the ${market === "india" ? "rupee" : "loonie"} is ${homeWeaker ? "weaker, which adds to your local gold return" : "firmer, which trims your local gold return"} on top of the metal itself`,
-      state: homeWeaker ? "tailwind" : "neutral",
-      scored: true,
+      detail: !known
+        ? `no 1-year history for this pair right now, so the currency leg is unknown - it usually does about half the work of local gold returns`
+        : `${pct(fx.ret1y)} 1y - the ${market === "india" ? "rupee" : "loonie"} is ${move > 0.01 ? "weaker, which ADDS to your local gold return" : move < -0.01 ? "firmer, which TRIMS your local gold return" : "roughly flat"} on top of the metal itself`,
+      state,
+      scored: known,
     });
   }
 
@@ -404,6 +408,8 @@ export function buildGoldPayload(
   const ch = goldCandles?.length ? regressionChannel(goldCandles) : null;
   const channel = ch ? { cagr: ch.cagr, position: ch.position } : undefined;
   const items = buildGoldSignals(market, stats, real, channel);
+  // The server knows nothing about your holdings, so the sleeve override cannot
+  // be applied here - GoldPanel re-runs readGold with your actual sleeve share.
   const { read, tally } = readGold(items, channel?.position);
   const gold = stats.gold ?? {};
   const fx = stats.fx ?? {};

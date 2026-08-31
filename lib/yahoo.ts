@@ -278,8 +278,16 @@ export async function getStockData(symbol: string): Promise<StockData> {
     const d2ePct = qs.financialData?.debtToEquity;
     quote.debtToEquityNow = typeof d2ePct === "number" ? d2ePct / 100 : undefined;
     quote.pegRatio = qs.defaultKeyStatistics?.pegRatio ?? undefined;
-    quote.dividendYield = qs.summaryDetail?.dividendYield ?? undefined;
-    quote.payoutRatio = qs.summaryDetail?.payoutRatio ?? undefined;
+    /**
+     * Yahoo has shipped these as a fraction (0.0135) on some endpoints and as a
+     * percent (1.35) on others. Normalising ONCE here - the same way
+     * debtToEquity is divided by 100 above - stops a 100x overstatement leaking
+     * into income projections, screeners and the sector medians. A real yield
+     * above 100% does not exist, so anything > 1 is certainly a percent.
+     */
+    const asFraction = (v: number | undefined) => (v !== undefined && v > 1 ? v / 100 : v);
+    quote.dividendYield = asFraction(qs.summaryDetail?.dividendYield ?? undefined);
+    quote.payoutRatio = asFraction(qs.summaryDetail?.payoutRatio ?? undefined);
     if (quote.trailingPE === undefined) quote.trailingPE = qs.summaryDetail?.trailingPE ?? undefined;
     if (quote.marketCap === undefined) quote.marketCap = qs.summaryDetail?.marketCap ?? undefined;
     if (quote.priceToBook === undefined) quote.priceToBook = qs.defaultKeyStatistics?.priceToBook ?? undefined;

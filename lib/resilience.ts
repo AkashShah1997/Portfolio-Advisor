@@ -182,9 +182,11 @@ export interface PortfolioResilience {
   rows: HoldingResilience[];
   /** value-weighted recession score across scored holdings, 0-100 */
   score?: number;
+  /** share of portfolio value the score actually covers (funds/failures excluded) */
+  coverage: number;
   aiHighShare: number; // fraction of value in high AI-exposure businesses
   fragileShare: number; // fraction of value in fragile balance sheets
-  cashflowShare: number; // fraction in FCF-positive, low-debt businesses
+  cashflowShare: number; // fraction of value scoring 70+ on recession resilience
   headline: string;
   fixFirst: { symbol: string; why: string }[];
 }
@@ -313,7 +315,13 @@ export function portfolioResilience(rows: AnalyzedHolding[], fx: FxRates): Portf
     });
   }
 
-  const score = wsum > 0 ? Math.round(scoreSum / wsum) : undefined;
+  /**
+   * A headline score needs to describe most of the book. With 94% in an
+   * unscored index fund, one small fragile stock was defining the number - and
+   * contradicting the headline sentence next to it.
+   */
+  const coverage = wsum;
+  const score = wsum >= 0.5 ? Math.round(scoreSum / wsum) : undefined;
   const fixFirst = out
     .filter((h) => !h.isEtf && (h.grade === "fragile" || (h.ai.exposure === "high" && h.weight >= 0.1)))
     .sort((a, b) => b.weight - a.weight)
@@ -330,7 +338,12 @@ export function portfolioResilience(rows: AnalyzedHolding[], fx: FxRates): Portf
 
   let headline: string;
   if (score === undefined) {
-    headline = "Not enough scored holdings yet to grade the portfolio's resilience.";
+    headline =
+      coverage > 0
+        ? `Only ${(coverage * 100).toFixed(0)}% of the book is individually scoreable (the rest is funds or unpriced rows) - too little to grade the whole portfolio honestly.`
+        : "Not enough scored holdings yet to grade the portfolio's resilience.";
+  } else if (aiHigh >= 0.4 && fragile >= 0.25) {
+    headline = `${(fragile * 100).toFixed(0)}% of the book has a balance sheet a recession would strain AND ${(aiHigh * 100).toFixed(0)}% sits in high AI-exposure models - those two risks stack.`;
   } else if (aiHigh >= 0.4) {
     headline = `${(aiHigh * 100).toFixed(0)}% of your money sits in business models with high AI-disruption exposure - that is a concentrated bet on one thesis being wrong.`;
   } else if (score >= 75 && fragile < 0.1) {
@@ -341,5 +354,5 @@ export function portfolioResilience(rows: AnalyzedHolding[], fx: FxRates): Portf
     headline = "Reasonably weatherproof, with a few positions worth firming up.";
   }
 
-  return { rows: out.sort((a, b) => b.weight - a.weight), score, aiHighShare: aiHigh, fragileShare: fragile, cashflowShare: cashflow, headline, fixFirst };
+  return { rows: out.sort((a, b) => b.weight - a.weight), score, coverage, aiHighShare: aiHigh, fragileShare: fragile, cashflowShare: cashflow, headline, fixFirst };
 }

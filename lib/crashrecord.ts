@@ -111,7 +111,11 @@ function windowStats(candles: Candle[], from: string, to: string) {
       bestPeakDate = peakDate;
     }
   }
-  if (worst === 0) return null;
+  // A window the stock ROSE through is a real (and favourable) answer - dropping
+  // it hid the best results and made describeCrashRecord claim there was no data.
+  if (worst === 0) {
+    return { worst: 0, bestPeakDate: inWin[0].time, troughDate: inWin[inWin.length - 1].time, trough: inWin[inWin.length - 1].close, recoveryMonths: 0 };
+  }
   // recovery: first close at/above the pre-crash peak, after the trough
   let recoveryMonths: number | undefined;
   for (const c of candles) {
@@ -134,7 +138,8 @@ export function crashRecord(candles: Candle[], bench?: Candle[]): CrashResult[] 
     if (w.to < first || w.from > last) continue; // no overlap at all
     const s = windowStats(sorted, w.from, w.to);
     if (!s) continue;
-    const b = bench ? windowStats(bench, w.from, w.to) : null;
+    const sortedBench = bench ? [...bench].filter((c) => c.close > 0).sort((a, b2) => a.time.localeCompare(b2.time)) : undefined;
+    const b = sortedBench ? windowStats(sortedBench, w.from, w.to) : null;
     out.push({
       id: w.id,
       label: w.label,
@@ -146,7 +151,9 @@ export function crashRecord(candles: Candle[], bench?: Candle[]): CrashResult[] 
       recovered: s.recoveryMonths !== undefined,
       benchDrawdown: b?.worst,
       vsBench: b ? s.worst - b.worst : undefined,
-      partial: first > w.from,
+      // truncation on EITHER side must be flagged: data that stops mid-crash
+      // reported a -12% fall where the real trough was -38% three weeks later
+      partial: first > w.from || last < w.to,
     });
   }
   return out;
@@ -175,7 +182,7 @@ export function worstEver(candles: Candle[]): { drawdown: number; peakDate: stri
       troughDate = c.time;
     }
   }
-  if (worst === 0) return null;
+  if (worst === 0) return null; // never fell from a peak in this series
   let recoveryMonths: number | undefined;
   for (const c of sorted) {
     if (c.time <= troughDate) continue;

@@ -1,5 +1,6 @@
 import type { AnalyzedHolding, FxRates } from "./types";
 import { toBase } from "./portfolio";
+import { isEtfHolding } from "./etf";
 
 /**
  * Portfolio health checks - construction-level tests the masters apply before
@@ -92,24 +93,42 @@ export function computeHealth(rows: AnalyzedHolding[], fx: FxRates): HealthCheck
   checks.push({
     id: "hhi",
     label: "Concentration index (HHI)",
-    status: hhi < 0.1 ? "pass" : hhi < 0.18 ? "warn" : "fail",
+    // Pass at ≤ 0.13 (~8 effective names) so a clean 10-equal-position book
+    // passes; the old strict `< 0.1` failed exactly the portfolio the
+    // "8–25 holdings" check calls ideal.
+    status: hhi <= 0.13 ? "pass" : hhi < 0.18 ? "warn" : "fail",
     detail: `HHI ${hhi.toFixed(3)} ≈ ${effN.toFixed(1)} equally-weighted positions`,
     principle: "A portfolio of 15 names that behaves like 4 is a 4-stock portfolio",
   });
 
   // 5. Sector concentration
+  /**
+   * Funds get their own bucket and are EXEMPT from the single-sector cap - a
+   * broad index fund is the most diversified thing you can own, and lumping it
+   * into "Unknown" gave an all-ETF portfolio the app's worst diversification
+   * grade. `summarize` already did this; the health check did not.
+   */
   const bySector = new Map<string, number>();
+  let fundW = 0;
   for (const v of ws) {
-    const s = v.row.data?.quote.sector ?? "Unknown";
+    const q = v.row.data?.quote;
+    if (isEtfHolding(v.row.holding.yahooSymbol, q?.name ?? v.row.holding.name, q?.quoteType, v.row.holding.securityType)) {
+      fundW += v.w;
+      continue;
+    }
+    const s = q?.sector ?? "Unknown";
     bySector.set(s, (bySector.get(s) ?? 0) + v.w);
   }
-  const [maxSector, maxSectorW] = [...bySector.entries()].sort((a, b) => b[1] - a[1])[0];
+  const sectorEntries = [...bySector.entries()].sort((a, b) => b[1] - a[1]);
+  const [maxSector, maxSectorW] = sectorEntries.length ? sectorEntries[0] : ["ETFs / funds", 0];
   const sectorStatus: HealthStatus = maxSectorW <= 0.35 ? "pass" : maxSectorW <= 0.5 ? "warn" : "fail";
   checks.push({
     id: "sector",
     label: "Largest sector ≤ 35%",
     status: sectorStatus,
-    detail: `${maxSector} is ${pctS(maxSectorW, 1)} of the portfolio`,
+    detail: sectorEntries.length
+      ? `${maxSector} is ${pctS(maxSectorW, 1)} of the portfolio${fundW > 0 ? ` (funds, ${pctS(fundW, 0)}, are diversified by construction and excluded)` : ""}`
+      : `Everything is in diversified funds (${pctS(fundW, 0)}) - no single-sector concentration to flag`,
     principle:
       sectorStatus === "pass"
         ? "Fisher: industries share fates - don't let one theme own your future"
@@ -185,7 +204,10 @@ export function computeIncome(rows: AnalyzedHolding[], fx: FxRates): IncomeEstim
     const value = toBase(r.currentValue ?? r.invested, r.holding.currency, fx);
     curTotal += value;
     investedTotal += toBase(r.invested, r.holding.currency, fx);
-    const y = r.data?.quote.dividendYield;
+    // Normalised at the source in lib/yahoo.ts; this stays as a second line of
+    // defence for rows restored from an older on-device cache.
+    const rawY = r.data?.quote.dividendYield;
+    const y = rawY !== undefined && rawY > 1 ? rawY / 100 : rawY;
     if (y && y > 0 && value > 0) {
       const inc = value * y;
       total += inc;
