@@ -264,6 +264,21 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     what: "A fire drill: it takes real past crashes (2000, 2008, 2020, 2022, and gold's own 1980 winter) and applies the damage each TYPE of investment took back then to what you hold today. You see your total before and after, which holdings get hit hardest, how long recovery took, and what happened to people who kept buying.",
     better: "There is no better or worse - it's not a prediction. The one question it answers: if your portfolio fell this much next year, would you panic-sell at the bottom? If yes, your position sizes are the problem, and the cheap time to fix them is NOW, while markets are calm.",
   },
+  posture: {
+    name: "Posture (buy, wait, or raise cash)",
+    what: "A target CASH BAND derived from the opportunity set, not from a forecast: what share of the businesses you scanned are actually inside their buy zone, how much of what you own is priced above fair value, and what the market weather adds. Cash is treated the way the masters used it - the residue of price discipline, not a market call.",
+    better: "There is no 'better' stance, only an honest one. Two hard guardrails: the band never targets 0% (dry powder turns a fall into an opportunity) and never targets more than 40% (going fully to cash has cost long-term investors more than the crashes, because nobody gets the re-entry right). Automatic index SIPs keep running in every stance.",
+  },
+  weatherproof: {
+    name: "Weatherproof score",
+    what: "Two separate reads. RECESSION RESILIENCE (0-100) is measured from the filings: leverage, interest cover, share of cash-positive years, loss years, margin stability and size - i.e. can this business fund itself through a bad year without dilution. AI DISRUPTION EXPOSURE is a hypothesis about the business MODEL by industry, shown with its counter-argument.",
+    better: "Higher resilience is better - above 75 means most of your capital sits in businesses that survive a downturn intact, which is what lets you hold through it. The AI column is not a score to maximise: it flags where one thesis is carrying too much of your portfolio (above ~40% in high-exposure models is a concentrated bet), and it is explicitly arguable.",
+  },
+  crashRecord: {
+    name: "Crash record",
+    what: "How this specific stock behaved in every real market shock its price history covers - peak-to-trough fall, the same window for the index, and how many months it took to regain the old high.",
+    better: "Smaller falls and faster recoveries are better, but the real use is rehearsal: if the number would have made you sell at the bottom, the position is too big TODAY. Survivor bias is total - the companies that never came back have no chart.",
+  },
   goldDesk: {
     name: "The gold desk read",
     what: "A tally of the forces that actually move gold, each marked as helping or hurting: the US 10-year REAL yield and its direction (gold pays no interest, so inflation-protected bond yields are its opportunity cost - the single biggest driver), the US dollar (gold is priced in it), gold vs its own 200-day average, where it sits in its 5-year trend channel, your own currency (a weaker rupee or loonie adds to your local gold return), and miners as sector confirmation.",

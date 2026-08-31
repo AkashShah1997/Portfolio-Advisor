@@ -71,6 +71,11 @@ await page.waitForSelector("text=see the ETFs tab", { timeout: 10000 });
 
 // ---- the Coach (simple mode): trim / hold / buy-dip / DCA per position ----
 await page.locator("button[aria-pressed]").filter({ hasText: /^Coach/ }).first().click();
+await page.waitForSelector("text=Posture - buy, wait, or raise cash?", { timeout: 10000 });
+const postureBody = await page.locator("body").textContent();
+if (!/target cash \d+%-\d+%/.test(postureBody)) throw new Error("posture cash band missing");
+if (!/What would put the cash back to work/.test(postureBody)) throw new Error("deploy triggers missing");
+if (!/never targets|dry powder/i.test(postureBody)) throw new Error("posture guardrail note missing");
 await page.waitForSelector("text=Position coach", { timeout: 10000 });
 await page.waitForSelector("text=Keep DCA-ing", { timeout: 30000 }); // NIFTYBEES core ETF
 await page.waitForSelector("text=The SIP plan", { timeout: 10000 });
@@ -137,7 +142,9 @@ await page.waitForSelector("text=✦ Strengths", { timeout: 10000 });
 await page.waitForSelector("text=⚑ Risks", { timeout: 10000 });
 await page.waitForSelector("text=12-mo target", { timeout: 10000 });
 await page.waitForSelector("text=F-Score", { timeout: 10000 });
-await page.waitForSelector("text=Decision board says", { timeout: 10000 }); // same engine as the Decisions tab, inline
+await page.waitForSelector("text=Decision board says", { timeout: 10000 });
+await page.waitForSelector("text=Best thing about it", { timeout: 5000 });
+await page.waitForSelector("text=Worst thing about it", { timeout: 5000 }); // same engine as the Decisions tab, inline
 if ((await page.locator("[data-testid=snowflake]").count()) < 2) throw new Error("stock-card snowflake missing");
 if (!(await page.locator("[data-infotip=pe]").count())) throw new Error("info tooltips not wired in stock card");
 
@@ -151,6 +158,10 @@ if (!/YES \/ NO \/ UNKNOWN/.test(gatesBody)) throw new Error("gates framing miss
 
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${shots}/04-card-open.png`, fullPage: true });
+
+// ---- the since-you-bought table labels the last FILED year and adds today's TTM ----
+const jBody = await page.locator("body").textContent();
+if (!/\(last filed\)/.test(jBody)) throw new Error("journey should label the last filed fiscal year");
 
 // ---- decisions tab ----
 await page.getByRole("button", { name: /^Decisions/ }).click();
@@ -201,6 +212,10 @@ await page.waitForSelector("text=Threats", { timeout: 5000 });
 await page.waitForSelector("text=Sector comparison", { timeout: 5000 });
 await page.waitForSelector("text=Coach's call on YOUR position", { timeout: 15000 }); // held, non-ETF
 await page.waitForSelector("text=Full breakdown", { timeout: 5000 });
+await page.waitForSelector("text=How it behaved when the market broke", { timeout: 15000 });
+await page.waitForSelector("text=deepest fall on record", { timeout: 30000 });
+const crBody = await page.locator("body").textContent();
+if (!/would you have kept holding/i.test(crBody)) throw new Error("crash record read missing");
 await page.waitForSelector("[data-testid=price-chart] canvas", { timeout: 25000 });
 await page.waitForSelector("text=Trend channel", { timeout: 5000 });
 await page.waitForSelector("text=up the channel", { timeout: 15000 }); // auto-channel read line
@@ -335,7 +350,7 @@ await page.waitForSelector("text=Verdict then", { timeout: 10000 });
 await page.screenshot({ path: `${shots}/21-backtest.png`, fullPage: true });
 
 // ---- crash stress test: real history applied to today's holdings (Checkup › Stress test) ----
-await page.getByRole("button", { name: "Stress test" }).click();
+await page.getByRole("button", { name: "Crash test" }).click();
 await page.waitForSelector("text=If history repeats", { timeout: 10000 });
 await page.waitForSelector("text=would have become", { timeout: 10000 }); // default: 2008
 await page.waitForSelector("text=What kept-buying did", { timeout: 5000 });
@@ -348,6 +363,11 @@ const stBody = await page.locator("body").textContent();
 if (!/Gold & silver funds/.test(stBody)) throw new Error("stress buckets missing the hedge sleeve");
 if (!/not a prediction of the future/.test(stBody)) throw new Error("stress caveat missing");
 await page.waitForTimeout(400);
+await page.waitForSelector("text=Weatherproof - recession & AI resilience", { timeout: 10000 });
+const wpBody = await page.locator("body").textContent();
+if (!/AI disruption hypothesis/.test(wpBody)) throw new Error("weatherproof AI column missing");
+if (!/But: /.test(wpBody)) throw new Error("AI counter-arguments missing");
+if (!/Recession resilience/.test(wpBody)) throw new Error("resilience score missing");
 await page.screenshot({ path: `${shots}/25-stress.png`, fullPage: true });
 
 // ---- cross-link: a hardest-hit name jumps straight to its chart ----

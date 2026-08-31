@@ -19,6 +19,8 @@ export interface JourneyRow {
   then?: number;
   now?: number;
   kind: "money" | "pct" | "x" | "num";
+  /** today's trailing-twelve-month figure, where Yahoo publishes one */
+  ttm?: number;
   /** true = improved, false = worsened, undefined = flat/no-data/neutral metric */
   better?: boolean;
   neutral?: boolean; // valuation-context rows (P/E) don't count toward the verdict
@@ -37,6 +39,14 @@ export interface Journey {
   rows: JourneyRow[];
   improved: number;
   worsened: number;
+  /**
+   * True when the newest ANNUAL report on file is already a year behind the
+   * calendar - normal between fiscal-year end and the annual filing. The UI
+   * says so instead of silently looking stale.
+   */
+  awaitingLatestFy: boolean;
+  /** the fiscal year the market is currently living in, if it isn't filed yet */
+  pendingFy?: number;
   verdict: { tone: "good" | "neutral" | "warning" | "critical"; line: string };
 }
 
@@ -97,6 +107,7 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
   if (thenR.year >= nowR.year) return undefined;
 
   const isFin = sc.isFinancialSector;
+  const q = data.quote;
   const mk = (
     key: string,
     label: string,
@@ -104,7 +115,8 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
     now: number | undefined,
     kind: JourneyRow["kind"],
     higherIsBetter = true,
-    neutral = false
+    neutral = false,
+    ttm?: number
   ): JourneyRow => ({
     key,
     label,
@@ -112,26 +124,33 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
     now,
     kind,
     neutral,
+    ttm,
     better: neutral ? undefined : judge(then, now, higherIsBetter),
   });
 
   const rows: JourneyRow[] = [
     mk("revenue", "Revenue", thenR.revenue, nowR.revenue, "money"),
     mk("netIncome", "Net income", thenR.netIncome, nowR.netIncome, "money"),
-    mk("eps", "EPS", thenR.eps, nowR.eps, "num"),
-    mk("roe", "ROE", thenR.roe, nowR.roe, "pct"),
+    mk("eps", "EPS", thenR.eps, nowR.eps, "num", true, false, q.epsTrailing),
+    mk("roe", "ROE", thenR.roe, nowR.roe, "pct", true, false, q.roeTTM),
     isFin
       ? mk("roa", "ROA", thenR.roa, nowR.roa, "pct")
       : mk("roce", "ROCE", thenR.roce, nowR.roce, "pct"),
-    mk("netMargin", "Net margin", thenR.netMargin, nowR.netMargin, "pct"),
+    mk("netMargin", "Net margin", thenR.netMargin, nowR.netMargin, "pct", true, false, q.profitMarginTTM),
     ...(isFin ? [] : [mk("d2e", "Debt / Equity", thenR.debtToEquity, nowR.debtToEquity, "x", false)]),
     ...(isFin ? [] : [mk("icr", "Interest cover", thenR.interestCoverage, nowR.interestCoverage, "x")]),
-    mk("fcf", "Free cash flow", thenR.fcf, nowR.fcf, "money"),
+    mk("fcf", "Free cash flow", thenR.fcf, nowR.fcf, "money", true, false, q.fcfTTM),
     mk("pe", "P/E (yr-end)", thenR.approxPE, nowR.approxPE, "x", false, true),
   ];
 
   const improved = rows.filter((r) => r.better === true).length;
   const worsened = rows.filter((r) => r.better === false).length;
+
+  // Annual reports land months after the fiscal year ends, so the newest FY on
+  // file is routinely one behind the calendar. Say so rather than looking stale.
+  const calendarYear = new Date().getFullYear();
+  const awaitingLatestFy = nowR.year < calendarYear;
+  const pendingFy = awaitingLatestFy ? calendarYear : undefined;
 
   // price since the buy month
   const monthOf = (d: string) => d.slice(0, 7);
@@ -192,6 +211,8 @@ export function buildJourney(row: AnalyzedHolding): Journey | undefined {
     rows,
     improved,
     worsened,
+    awaitingLatestFy,
+    pendingFy,
     verdict,
   };
 }

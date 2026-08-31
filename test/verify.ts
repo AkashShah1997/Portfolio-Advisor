@@ -32,6 +32,9 @@ import { snowflakeLeaders } from "../lib/snowflake";
 import { BUCKET_META, hedgeShare, runStress, STRESS_SCENARIOS, stressBucketOf } from "../lib/stress";
 import { maCrossings, maLenForInterval, regressionChannel, swingLevels } from "../lib/history";
 import { buildSwot } from "../lib/swot";
+import { fundingCandidates, opportunitySet, readPosture } from "../lib/posture";
+import { aiBucketFor, portfolioResilience } from "../lib/resilience";
+import { crashRecord, CRASH_WINDOWS, describeCrashRecord, worstEver } from "../lib/crashrecord";
 import { buildGoldSignals, GOLD_CONTEXT, GOLD_CONTEXT_ASOF, GOLD_HOWTO, mockGold, readGold } from "../lib/gold";
 import { PEER_METRICS, sectorPeers } from "../lib/peers";
 import { benchCagrSince, buildAsOf, cutoffISO, runBacktest } from "../lib/backtest";
@@ -1777,6 +1780,129 @@ console.log("\n== Plain-language glossary for the new features ==");
   }));
   check("the hedge entry carries the 1980 warning", /28 years/.test(METRIC_INFO.hedge.better));
   check("the stress entry frames it as sizing, not prediction", /not a prediction/.test(METRIC_INFO.stress.better));
+}
+
+console.log("\n== Posture: when to hold cash and wait ==");
+{
+  const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const mkUni = (n: number, status: "BUY_ZONE" | "FAIR" | "PRICEY", score = 70) =>
+    Array.from({ length: n }, (_, i) => ({
+      symbol: `U${status}${i}.NS`, name: "x", sector: "Technology", owned: false, watch: false,
+      score, verdict: "HOLD", valStatus: status, isFin: false, redFlags: 0, lossYears: 0,
+      pillarQuality: 60, pillarFortress: 60, pillarGrowth: 60, pillarValuation: 60,
+    })) as unknown as Parameters<typeof opportunitySet>[1];
+
+  // a market where nothing is cheap
+  const expensive = [...mkUni(2, "BUY_ZONE"), ...mkUni(10, "FAIR"), ...mkUni(28, "PRICEY")];
+  const oppExpensive = opportunitySet([], expensive, fxI);
+  check("opportunity set counts the buy zone across the scan", oppExpensive.scanned === 40 && oppExpensive.inBuyZone === 2);
+  check("buy-zone share computed once the scan is big enough", Math.abs((oppExpensive.buyZoneShare ?? 0) - 0.05) < 1e-9);
+  check("a tiny scan refuses to compute breadth (honest, not zero)", opportunitySet([], mkUni(4, "BUY_ZONE"), fxI).buyZoneShare === undefined);
+
+  const patient = readPosture(oppExpensive, "EXPENSIVE_CALM");
+  check("nothing cheap + calm highs → a raise-cash stance", patient.stance === "PATIENT" || patient.stance === "DEFENSIVE");
+  check("the cash band rises with the stance", patient.cashLow >= 0.15);
+  check("it explains itself with the actual number", patient.why.some((w) => /5%/.test(w) && /buy-below price/i.test(w)));
+
+  // a market full of bargains
+  const cheap = [...mkUni(20, "BUY_ZONE"), ...mkUni(10, "FAIR"), ...mkUni(10, "PRICEY")];
+  const deploy = readPosture(opportunitySet([], cheap, fxI), "FEAR");
+  check("bargains + fear → deploy, not hide", deploy.stance === "DEPLOY" && deploy.cashHigh <= 0.1);
+  check("fear is described as opportunity, not danger", deploy.why.some((w) => /mispriced by forced sellers/.test(w)));
+
+  // the two guardrails that keep this from becoming market timing
+  const stances = [deploy, readPosture(opportunitySet([], expensive, fxI), "EXPENSIVE_CALM"), readPosture(oppExpensive, "NORMAL")];
+  check("cash never targets 0% and never targets over 40%", stances.every((s) => s.cashLow >= 0.03 && s.cashHigh <= 0.4));
+  check("every stance keeps index SIPs alive or names them", stances.every((s) => /SIP|tranche|index/i.test(s.newMoney)));
+  check("deploy triggers are checkable conditions, not vibes", stances.every((s) => s.deployTriggers.length >= 3 && s.deployTriggers.some((t) => /buy-below price/.test(t))));
+
+  // no scan cached → says so instead of guessing
+  const blind = readPosture(opportunitySet([], [], fxI));
+  check("no scan → admits the gap rather than inventing a read", blind.why.some((w) => /No market scan cached/.test(w)));
+
+  // funding candidates come from the existing engine
+  const mkRow = (sym: string, value: number): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 10, avgCost: 100, currency: "INR" },
+      data, scorecard: buildScorecard(data), invested: value * 0.6, currentValue: value,
+    };
+  };
+  const funders = fundingCandidates([mkRow("TATAMOTORS.NS", 9000), mkRow("TCS.NS", 3000)], fxI);
+  check("funding list is ranked by value and explains each pick", funders.every((f) => f.reason.length > 20) && (funders.length === 0 || funders[0].value >= (funders[1]?.value ?? 0)));
+}
+
+console.log("\n== Weatherproof: recession + AI resilience ==");
+{
+  check("IT services is flagged as the high-AI-exposure model it is", aiBucketFor("Technology", "Information Technology Services").exposure === "high");
+  check("consumer staples read as low exposure", aiBucketFor("Consumer Defensive", "Packaged Foods").exposure === "low");
+  check("semis are beneficiaries - with the cyclicality warning attached", (() => {
+    const b = aiBucketFor("Technology", "Semiconductors");
+    return b.exposure === "beneficiary" && /cyclical/.test(b.counter);
+  })());
+  check("banks are judged on credit, not chatbots", /credit losses/.test(aiBucketFor("Financial Services", "Banks - Regional").counter));
+  check("every hypothesis ships with a counter-argument", ["Information Technology Services", "Packaged Foods", "Semiconductors", "Oil & Gas", "Pharmaceuticals"].every((i) => aiBucketFor("x", i).counter.length > 25));
+  check("an unknown sector stays unknown, not 'safe'", aiBucketFor(undefined, undefined).exposure === "unknown");
+  check("car makers get the auto thesis, not the packaged-goods one", (() => {
+    const b = aiBucketFor("Consumer Cyclical", "Auto Manufacturers");
+    return /vehicles is an atoms business/.test(b.thesis) && /EV transition/.test(b.counter);
+  })());
+
+  const fxI: FxRates = { base: "INR", rates: { INR: 1, CAD: 62, USD: 84 }, asOf: "t", source: "test" };
+  const mk = (sym: string, value: number): AnalyzedHolding => {
+    const data = mockStockData(sym);
+    return {
+      holding: { id: sym, broker: "zerodha", rawSymbol: sym, yahooSymbol: sym, quantity: 10, avgCost: 100, currency: "INR" },
+      data, scorecard: buildScorecard(data), invested: value * 0.8, currentValue: value,
+    };
+  };
+  const res = portfolioResilience([mk("TCS.NS", 5000), mk("INFY.NS", 3000), mk("RELIANCE.NS", 2000)], fxI);
+  check("produces a 0-100 portfolio resilience score", res.score !== undefined && res.score >= 0 && res.score <= 100);
+  check("rows are value-weighted and sorted heaviest first", res.rows.length === 3 && res.rows[0].weight >= res.rows[1].weight);
+  check("weights sum to ~1", Math.abs(res.rows.reduce((a, r) => a + r.weight, 0) - 1) < 1e-9);
+  check("an IT-heavy Indian book gets the concentration warning it deserves", res.aiHighShare >= 0.7 && /high AI-disruption exposure/.test(res.headline));
+  check("resilience notes cite the actual numbers", res.rows.some((r) => r.recessionNotes.some((n) => /D\/E|interest cover|cash/.test(n))));
+  check("a fragile holding leads with the warning, never a compliment", (() => {
+    const weak = portfolioResilience([mk("TATAMOTORS.NS", 5000)], fxI).rows[0];
+    return weak.grade !== "fragile" || /thin|leverage|loss year|rarely free-cash|small cap|has broken/.test(weak.recessionNotes[0] ?? "");
+  })());
+  const etfRes = portfolioResilience([mk("NIFTYBEES.NS", 1000)], fxI);
+  check("funds are not run through the single-business AI thesis", etfRes.rows[0].isEtf && etfRes.rows[0].ai.exposure === "low" && /index funds own the disruptors/i.test(etfRes.rows[0].ai.thesis));
+}
+
+console.log("\n== Crash record: how a stock behaved when the market broke ==");
+{
+  // a series that falls 40% through the 2020 window and recovers 8 months later
+  const c: Candle[] = [];
+  const push = (date: string, close: number) => c.push({ time: date, open: close, high: close, low: close, close });
+  const d0 = new Date("2019-06-01").getTime();
+  for (let i = 0; i < 700; i++) {
+    const day = new Date(d0 + i * 24 * 3600 * 1000);
+    const iso = day.toISOString().slice(0, 10);
+    let price = 100;
+    if (iso < "2020-02-01") price = 100;
+    else if (iso <= "2020-03-23") price = 100 - 40 * ((new Date(iso).getTime() - new Date("2020-02-01").getTime()) / (new Date("2020-03-23").getTime() - new Date("2020-02-01").getTime()));
+    else price = 60 + 45 * Math.min(1, (new Date(iso).getTime() - new Date("2020-03-23").getTime()) / (250 * 24 * 3600 * 1000));
+    push(iso, price);
+  }
+  const rows = crashRecord(c);
+  const covid = rows.find((r) => r.id === "covid2020")!;
+  check("finds the COVID window in the data", !!covid);
+  check("measures the peak-to-trough fall (~-40%)", Math.abs(covid.drawdown + 0.4) < 0.03, `got ${covid.drawdown}`);
+  check("measures months back to the old high", covid.recovered && (covid.recoveryMonths ?? 0) > 4 && (covid.recoveryMonths ?? 0) < 12);
+  check("windows outside the data are skipped, not faked", !rows.some((r) => r.id === "gfc2008"));
+
+  // vs the index
+  const bench: Candle[] = c.map((x) => ({ ...x, close: x.close >= 100 ? x.close : 100 - (100 - x.close) * 0.5, high: x.high, low: x.low, open: x.open }));
+  const withBench = crashRecord(c, bench).find((r) => r.id === "covid2020")!;
+  check("compares against the index over the same window", withBench.benchDrawdown !== undefined && withBench.vsBench !== undefined);
+  check("falling harder than the index reads as negative", (withBench.vsBench ?? 1) < 0);
+
+  const w = worstEver(c)!;
+  check("worst-ever drawdown found with its dates", Math.abs(w.drawdown + 0.4) < 0.03 && w.peakDate < w.troughDate);
+  check("the read ends on the question that matters", /would you have kept holding/i.test(describeCrashRecord(rows, w)));
+  check("too little history → an honest empty result", crashRecord(c.slice(0, 10)).length === 0);
+  check("all crash windows are dated and described", CRASH_WINDOWS.every((x) => x.from < x.to && x.blurb.length > 20));
 }
 
 console.log("\n== The gold desk ==");

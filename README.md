@@ -81,7 +81,11 @@ you to self-grade, the app builds a **research prompt** for any AI: it must answ
 unknowns to go and verify, and the bear case in three lines. Fewer than 8 clean YES answers means
 small position or skip.
 
-**Since you bought (fundamentals journey)** - every held stock gets a then-vs-now table: revenue,
+**Since you bought (fundamentals journey)** - the "now" column is labelled **last filed**, because
+annual reports land months after a fiscal year ends: when FY26 statements are not published yet the
+card says so, and adds a **Today (TTM)** column with the live trailing-twelve-month ROE, margin, EPS
+and free cash flow so nothing looks stale without an explanation. Every held stock gets a then-vs-now
+table: revenue,
 net income, EPS, ROE/ROCE, margins, leverage, interest cover and FCF **in the fiscal year you
 bought** versus **today**, each marked ▲ better / ▼ worse. The buy month is estimated from your
 average cost against the price history (editable - set the real month and it's saved on-device).
@@ -101,8 +105,22 @@ weather, even your own concentration); **sector comparison from YOUR OWN scan** 
 for ROE, ROCE, growth, P/E, P/B, yield against the scanned universe - the honest version of
 "industry P/E", where you can see exactly who the industry is); the **Coach's call** for held
 positions or an **entry plan** (fair estimate, buy-below, tranche ladder) for names you don't own;
-the **advanced chart**; **who owns it** (promoters/insiders, institutions, top funds); and the full
+**how it behaved when the market broke** (its actual peak-to-trough fall in every real shock the
+price history covers - 2008, 2013, 2015-16, COVID, 2022 - against the index over the same window,
+plus how many months it took to regain the old high, and the deepest fall on record); **best thing /
+worst thing about it** in two lines before any detail; the **advanced chart**; **who owns it** (promoters/insiders, institutions, top funds); and the full
 stock card opened - checks, intrinsic band, snowflake, journey, F-Score, pre-buy checklist.
+
+**Coach › Posture** - the one screen allowed to say **don't buy anything right now**. It never
+forecasts a crash (nobody times markets); it measures the OPPORTUNITY SET and lets cash be what the
+masters actually used it as - the residue of price discipline. It reads how much of the market you
+scanned is inside a buy zone, how much of what you own is priced above fair value, and what the
+weather adds, then sets a target **cash band** (in real money against your book), names the
+positions that would fund a raise, and lists the **checkable conditions that put the cash back to
+work**. Two guardrails are hard-coded: the band never targets 0% (dry powder turns a fall into an
+opportunity) and never targets more than 40% - going fully to cash has cost long-term investors
+more than the crashes did, because nobody gets the re-entry right. Automatic index SIPs keep
+running in every stance.
 
 **Coach** - the "I'm up 50% on this: now what?" screen. Every position gets ONE stance - **Trim a
 slice / Sit tight / Buy the dip / Keep DCA-ing / Exit review** - from your profit and weight, the
@@ -190,7 +208,18 @@ names is a sanity check, not statistics; price-only returns; survivor bias; free
 at ~3 years. Every stock card also carries a **Piotroski F-Score** (0–9 year-over-year
 fundamental-improvement tests, hover for the breakdown).
 
-**Checkup › Stress test** - real past crashes applied to what you hold TODAY: the 2000
+**Checkup › Crash test › Weatherproof** - "would this portfolio survive an AI shock AND a recession
+without forcing me to sell at the bottom?" Two halves, deliberately kept apart. **Recession
+resilience** (0-100, value-weighted) is measured from the filings - leverage, interest cover, share
+of cash-positive years, loss years, margin stability, size - i.e. who can fund themselves through a
+bad year without dilution. **AI disruption exposure** is explicitly a HYPOTHESIS about the business
+model, per industry, printed with its counter-argument next to it: IT services is flagged high (the
+pyramid billing model is what AI compresses) and so is the counter (these firms survived offshoring
+and cloud, and the market has known the story for two years). It matters most for Indian portfolios,
+which are structurally overweight exactly that sector. Output: a grade per holding and the three
+positions to fix first.
+
+**Checkup › Crash test** - real past crashes applied to what you hold TODAY: the 2000
 dot-com bust, the 2008 financial crisis, the 2020 COVID crash, the 2022 rate shock, and - because
 gold-pitch videos never mention it - the **1980 gold winter** (gold -65%, 28 years to recover).
 Each holding gets its TYPE's historical hit (index funds, gold/silver funds, large caps, mid/small
@@ -317,7 +346,8 @@ MOCK_DATA=1 npx tsx test/verify.ts   # parser, ratios, scorecard, valuation, dec
                                      # stress test, hard-asset chips, concentration analogs, the
                                      # regression channel + auto S/R, rule-based SWOT, sector peers
                                      # from the scan cache, the gold desk, the pre-buy
-                                     # research prompt (445+ checks)
+                                     # research prompt, posture/cash discipline, recession +
+                                     # AI resilience, per-stock crash records (490+ checks)
 ```
 
 `test/e2e.mjs` drives the whole UI with Playwright against a `MOCK_DATA=1` server: market landing,

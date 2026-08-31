@@ -38,6 +38,8 @@ import { MarketWeather } from "./MarketWeather";
 import { BacktestPanel } from "./BacktestPanel";
 import { StressTest } from "./StressTest";
 import { GoldPanel } from "./GoldPanel";
+import { PostureCard } from "./PostureCard";
+import { Weatherproof } from "./Weatherproof";
 import { DeepDive } from "./DeepDive";
 import { isEtfHolding } from "@/lib/etf";
 import { PromptGenerator } from "./PromptGenerator";
@@ -1071,7 +1073,7 @@ export function Dashboard({
                 onChange={setCheckupView}
                 options={[
                   { id: "health", label: "Health & income" },
-                  { id: "stress", label: "Stress test" },
+                  { id: "stress", label: "Crash test" },
                   { id: "backtest", label: "Backtest" },
                 ]}
               />
@@ -1083,7 +1085,10 @@ export function Dashboard({
               <HealthPanel rows={rows} fx={fx} base={base} onGo={(t, sub) => goTo(t as TabId, sub)} />
             )}
             {checkupView === "stress" && (
-              <StressTest rows={invRows} fx={fx} base={base} onOpenChart={(s) => { setChartFocus(s); setTab("chart"); }} />
+              <div className="space-y-4">
+                <StressTest rows={invRows} fx={fx} base={base} onOpenChart={(s) => { setChartFocus(s); setTab("chart"); }} />
+                <Weatherproof rows={invRows} fx={fx} />
+              </div>
             )}
             {checkupView === "backtest" && <BacktestPanel rows={rows} market={market} />}
           </div>
@@ -1091,7 +1096,12 @@ export function Dashboard({
 
         {tab === "chart" && <ChartPanel rows={rows} focusSymbol={chartFocus} />}
 
-        {tab === "coach" && <CoachPanel rows={rows} market={market} fx={fx} />}
+        {tab === "coach" && (
+          <div className="space-y-4">
+            <PostureCard rows={rows} universe={universe} market={market} fx={fx} base={base} onGo={(t, sub) => goTo(t as TabId, sub)} />
+            <CoachPanel rows={rows} market={market} fx={fx} />
+          </div>
+        )}
       </Switcher>
         </>
       )}

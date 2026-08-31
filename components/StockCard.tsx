@@ -446,6 +446,28 @@ export function StockCard({
             </div>
           )}
 
+          {/* the two lines that matter most, before the detail */}
+          {insights && (insights.strengths.length > 0 || insights.risks.length > 0) && (
+            <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
+              <div className="bg-page hairline rounded-xl px-3 py-2">
+                <div className="text-[10.5px] font-semibold text-success-text uppercase tracking-wide">
+                  Best thing about it
+                </div>
+                <p className="text-[12.5px] text-ink leading-snug mt-0.5">
+                  {insights.strengths[0] ?? "Nothing in the checks stands out as a durable edge."}
+                </p>
+              </div>
+              <div className="bg-page hairline rounded-xl px-3 py-2">
+                <div className="text-[10.5px] font-semibold text-status-critical uppercase tracking-wide">
+                  Worst thing about it
+                </div>
+                <p className="text-[12.5px] text-ink leading-snug mt-0.5">
+                  {insights.risks[0] ?? "No material risk flagged - which is itself worth a sceptical look."}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* strengths & risks - every bullet restates a check the engine ran */}
           {insights && (insights.strengths.length > 0 || insights.risks.length > 0) && (
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">

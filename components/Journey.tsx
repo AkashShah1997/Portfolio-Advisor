@@ -41,6 +41,7 @@ export function Journey({
 }) {
   const j = useMemo(() => buildJourney(row), [row]);
   const cur = (row.data?.quote.currency ?? row.holding.currency) as Currency;
+  const hasTtm = !!j?.rows.some((r) => r.ttm !== undefined);
   if (!j) return null;
 
   const [y, m] = j.sinceYM.split("-");
@@ -75,17 +76,32 @@ export function Journey({
           </Badge>
         )}
         <span className="text-[11px] text-muted ml-auto tnum">
-          FY{String(j.thenYear).slice(2)} → FY{String(j.nowYear).slice(2)} · {j.improved}▲ {j.worsened}▼
+          FY{String(j.thenYear).slice(2)} → FY{String(j.nowYear).slice(2)} (last filed)
+          {hasTtm ? " + TTM" : ""} · {j.improved}▲ {j.worsened}▼
         </span>
       </div>
 
+      {j.awaitingLatestFy && (
+        <p className="text-[11.5px] text-muted leading-snug mb-1.5">
+          FY{String(j.nowYear).slice(2)} is the newest ANNUAL report filed for this company - FY
+          {String(j.pendingFy).slice(2)} statements are not published yet (companies file months after their
+          fiscal year ends, and free data adds a little more lag).
+          {hasTtm
+            ? " The “Today (TTM)” column is the live trailing-twelve-month figure, so you can see what has happened since."
+            : " Yahoo publishes no trailing-twelve-month figures for this one, so the last filed year is the freshest honest number."}
+        </p>
+      )}
+
       <div className="overflow-x-auto">
-        <table className="text-[12px] w-full max-w-[560px]">
+        <table className="text-[12px] w-full max-w-[620px]">
           <thead>
             <tr className="text-left text-muted border-b border-grid">
               <th className="py-1 pr-3 font-medium">Fundamental</th>
               <th className="py-1 pr-3 font-medium text-right">Then (FY{String(j.thenYear).slice(2)})</th>
-              <th className="py-1 pr-3 font-medium text-right">Now (FY{String(j.nowYear).slice(2)})</th>
+              <th className="py-1 pr-3 font-medium text-right">
+                Last filed (FY{String(j.nowYear).slice(2)})
+              </th>
+              {hasTtm && <th className="py-1 pr-3 font-medium text-right">Today (TTM)</th>}
               <th className="py-1 font-medium text-right">Trend</th>
             </tr>
           </thead>
@@ -98,6 +114,11 @@ export function Journey({
                 </td>
                 <td className="py-1 pr-3 tnum text-right text-ink-2">{fmtVal(r.then, r.kind, cur)}</td>
                 <td className="py-1 pr-3 tnum text-right text-ink font-medium">{fmtVal(r.now, r.kind, cur)}</td>
+                {hasTtm && (
+                  <td className="py-1 pr-3 tnum text-right text-ink-2">
+                    {r.ttm !== undefined ? fmtVal(r.ttm, r.kind, cur) : "–"}
+                  </td>
+                )}
                 <td className="py-1 text-right">
                   {r.better === true && <span className="text-success-text font-bold">▲ better</span>}
                   {r.better === false && <span className="text-status-critical font-bold">▼ worse</span>}

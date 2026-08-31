@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AnalyzedHolding, Currency, FxRates, Scorecard, StockData } from "@/lib/types";
 import type { Market } from "@/lib/store";
 import { buildSwot } from "@/lib/swot";
+import { strengthsAndRisks } from "@/lib/insights";
 import { sectorPeers } from "@/lib/peers";
 import { capTierOf, CAP_TIER_META, toMetricRow, type MetricRow } from "@/lib/screens";
 import { buildValuation } from "@/lib/valuation";
@@ -18,6 +19,7 @@ import { VERDICT_META } from "@/lib/portfolio";
 import type { Candle } from "@/lib/history";
 import { Badge, Card, InfoTip, SectionTitle, Spinner } from "./ui";
 import { ChartPanel } from "./ChartPanel";
+import { CrashRecord } from "./CrashRecord";
 import { StockCard } from "./StockCard";
 
 /**
@@ -189,6 +191,10 @@ export function DeepDive({
         ? buildSwot({ scorecard: row.scorecard, data: row.data, valuation, momentum, capTier, regime, weightPct })
         : null,
     [row, scored, valuation, momentum, capTier, regime, weightPct]
+  );
+  const insights = useMemo(
+    () => (row?.scorecard && scored ? strengthsAndRisks(row.scorecard, valuation) : undefined),
+    [row, scored, valuation]
   );
   const peers = useMemo(() => {
     if (!row?.data || !row.scorecard || !scored) return null;
@@ -401,6 +407,28 @@ export function DeepDive({
               </div>
             </div>
           </Card>
+
+          {/* the two lines that matter most */}
+          {insights && (
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Card className="p-3.5">
+                <div className="text-[10.5px] font-semibold text-success-text uppercase tracking-wide">
+                  Best thing about it
+                </div>
+                <p className="text-[13px] text-ink leading-snug mt-0.5">
+                  {insights.strengths[0] ?? "Nothing in the checks stands out as a durable edge."}
+                </p>
+              </Card>
+              <Card className="p-3.5">
+                <div className="text-[10.5px] font-semibold text-status-critical uppercase tracking-wide">
+                  Worst thing about it
+                </div>
+                <p className="text-[13px] text-ink leading-snug mt-0.5">
+                  {insights.risks[0] ?? "No material risk flagged - which is itself worth a sceptical look."}
+                </p>
+              </Card>
+            </div>
+          )}
 
           {/* SWOT */}
           {swot && (
@@ -656,6 +684,9 @@ export function DeepDive({
               </div>
             </Card>
           )}
+
+          {/* how it behaved when the market broke */}
+          <CrashRecord symbol={symbol} market={market} />
 
           {/* the full breakdown - the entire stock card, opened */}
           <div>
