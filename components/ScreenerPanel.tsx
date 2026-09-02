@@ -318,6 +318,12 @@ export function ScreenerPanel({
         {active !== "custom" && screen && (
           <SectionTitle sub={`${screen.blurb} - ${screen.criteria}.`}>
             {screen.name} <span className="text-[12px] font-normal text-muted">· {screen.master}</span>
+            {screen.id === "fallen-quality" && (
+              <>
+                {" "}
+                <InfoTip k="longRunReversal" />
+              </>
+            )}
           </SectionTitle>
         )}
         {active === "custom" && (

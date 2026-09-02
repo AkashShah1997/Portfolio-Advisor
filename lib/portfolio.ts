@@ -216,6 +216,64 @@ export function benchmarkCompare(
   return { points, youCagr: cagr(last.you), benchCagr: cagr(last.bench), years };
 }
 
+// ---------- Jensen's alpha: did the picks beat the index AFTER the risk taken? ----------
+
+/**
+ * Jensen (1968, Journal of Finance) asked the only fair version of "did you
+ * beat the market": after adjusting for how much market risk you carried.
+ * His 115 mutual funds could not, on average, even before fees. The measure:
+ * regress the basket's monthly excess return on the index's monthly excess
+ * return; the slope is BETA (how hard you move with the market) and the
+ * intercept is ALPHA (what the picks added on their own), annualized.
+ *
+ * Honest limits, printed with the number: the basket is your CURRENT holdings
+ * priced over the window (survivors only - what you sold is not here), prices
+ * exclude dividends on both sides, and the risk-free rate is an assumption.
+ */
+export interface AlphaRead {
+  beta: number;
+  /** annualized (monthly intercept × 12), fraction */
+  alpha: number;
+  /** share of the basket's month-to-month variance that the index explains */
+  r2: number;
+  months: number;
+  rf: number; // annual risk-free assumption used
+}
+
+/** Assumed annual risk-free rates by base currency (short government paper, rounded; stated on the card). */
+export const RISK_FREE_ASSUMED: Record<Currency, number> = { INR: 0.06, CAD: 0.03, USD: 0.04 };
+
+export function jensenAlpha(points: BenchPoint[], rfAnnual: number): AlphaRead | undefined {
+  const rets: { p: number; m: number }[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (a.you === undefined || b.you === undefined || a.bench === undefined || b.bench === undefined) continue;
+    if (!(a.you > 0 && a.bench > 0)) continue;
+    rets.push({ p: b.you / a.you - 1, m: b.bench / a.bench - 1 });
+  }
+  const n = rets.length;
+  if (n < 24) return undefined; // two years of months is the floor for a slope worth printing
+  const rfm = Math.pow(1 + rfAnnual, 1 / 12) - 1;
+  const xs = rets.map((r) => r.m - rfm);
+  const ys = rets.map((r) => r.p - rfm);
+  const mx = xs.reduce((s, v) => s + v, 0) / n;
+  const my = ys.reduce((s, v) => s + v, 0) / n;
+  let sxx = 0;
+  let sxy = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxx += (xs[i] - mx) ** 2;
+    sxy += (xs[i] - mx) * (ys[i] - my);
+    syy += (ys[i] - my) ** 2;
+  }
+  if (sxx <= 0) return undefined;
+  const beta = sxy / sxx;
+  const alphaMonthly = my - beta * mx;
+  const r2 = syy > 0 ? (sxy * sxy) / (sxx * syy) : 0;
+  return { beta, alpha: alphaMonthly * 12, r2, months: n, rf: rfAnnual };
+}
+
 export const VERDICT_META: Record<
   Verdict,
   { label: string; icon: string; tone: "good" | "neutral" | "warning" | "serious" | "critical" | "muted" }

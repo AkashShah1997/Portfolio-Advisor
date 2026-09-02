@@ -251,6 +251,11 @@ export function CoachPanel({
                         {m?.pctFromHigh !== undefined && <span>{pf(m.pctFromHigh)} vs 52w high</span>}
                         {m?.vs200d !== undefined && <span>{pf(m.vs200d)} vs 200-day</span>}
                         {m?.ret3m !== undefined && <span>{pf(m.ret3m)} · 3m</span>}
+                        {m?.ret12m1 !== undefined && (
+                          <span>
+                            {pf(m.ret12m1, 0)} · 12-1m <InfoTip k="momentum12" />
+                          </span>
+                        )}
                         {mom[row.holding.yahooSymbol.toUpperCase()] === "error" && (
                           <span className="text-muted">momentum unavailable - stance uses fundamentals only</span>
                         )}

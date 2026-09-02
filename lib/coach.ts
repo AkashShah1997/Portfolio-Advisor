@@ -44,6 +44,14 @@ export interface MomentumStats {
   pctFromHigh?: number; // ≤ 0, distance from 52-week high
   vs200d?: number; // last vs 200-day average (or longest available ≥120d)
   ret3m?: number; // ~63 trading days
+  /**
+   * "12-1" momentum: the return from ~12 months ago to ~1 month ago, skipping
+   * the latest month on purpose (Jegadeesh & Titman 1993): the past year's
+   * trend tends to persist for another 3-12 months, while the latest month
+   * tends to bounce back. This is the ENTRY-PACING gauge - it never decides
+   * whether to buy, only how fast. Daily and weekly moves are never used.
+   */
+  ret12m1?: number;
   lastClose?: number;
   asOf?: string; // date of last candle
 }
@@ -60,12 +68,71 @@ export function momentumFromCandles(candles: Candle[]): MomentumStats {
   // and a "200-day average" needs 200 bars, not 120
   const dma = dmaWin.length >= 200 ? dmaWin.reduce((a, b) => a + b, 0) / dmaWin.length : undefined;
   const i3m = closes.length - 1 - 63;
+  // 12-1 momentum needs close to a year of bars: ~12 months ago → ~1 month ago
+  const i1m = closes.length - 1 - 21;
+  const i12m = Math.max(0, closes.length - 1 - 252);
+  const ret12m1 =
+    closes.length >= 240 && i1m > i12m && closes[i12m] > 0 ? closes[i1m] / closes[i12m] - 1 : undefined;
   return {
     pctFromHigh: high !== undefined && high > 0 ? last / high - 1 : undefined,
     vs200d: dma ? last / dma - 1 : undefined,
     ret3m: i3m >= 0 && closes[i3m] > 0 ? last / closes[i3m] - 1 : undefined,
+    ret12m1,
     lastClose: last,
     asOf: candles[candles.length - 1]?.time,
+  };
+}
+
+// ---------- entry timing: WHEN and HOW FAST, never WHETHER ----------
+
+export type EntryTimingKey = "FALLING" | "RISING" | "NEUTRAL" | "UNKNOWN";
+
+export interface EntryTiming {
+  key: EntryTimingKey;
+  label: string;
+  /** the plain-language read, always ending in what to do about the PACE */
+  text: string;
+}
+
+/**
+ * The value-plus-momentum finding, applied to one job only: a business that
+ * already passed the quality and price tests is bought at a PACE set by its
+ * own trend. Cheap stocks still in a year-long slide ("falling knives") tend
+ * to keep drifting for months before they turn, and cheap stocks in a
+ * year-long rise rarely hand you the dip you are waiting for. Neither fact
+ * ever decides WHETHER to buy - fundamentals and price decide that.
+ *
+ * Inputs are 12-1 momentum and the 200-day average. Nothing shorter is used:
+ * this week's move is noise, and the latest month is skipped on purpose.
+ */
+export function entryTiming(m: MomentumStats): EntryTiming {
+  if (m.ret12m1 === undefined) {
+    return {
+      key: "UNKNOWN",
+      label: "Trend unknown",
+      text: "Not enough price history for a 12-month trend read - use the standard 3-tranche ladder and let time do the pacing.",
+    };
+  }
+  const below = m.vs200d !== undefined && m.vs200d < 0;
+  const above = m.vs200d !== undefined && m.vs200d > 0;
+  if (m.ret12m1 <= -0.2 && !above) {
+    return {
+      key: "FALLING",
+      label: "Still falling - buy slower",
+      text: `Down ${pf(m.ret12m1, 0)} over the year to last month${below ? " and below its 200-day average" : ""}. A cheap stock in a year-long slide tends to keep drifting for months before it turns, so a good business bought here can sit flat for a long time. Do not skip it - buy it SLOWER: spread the tranches across 2-3 quarters, and let the last tranche wait for the price to reclaim its 200-day average.`,
+    };
+  }
+  if (m.ret12m1 >= 0.2 && !below) {
+    return {
+      key: "RISING",
+      label: "Trending up - do not wait for a dip",
+      text: `Up ${pf(m.ret12m1, 0)} over the year to last month${above ? " and above its 200-day average" : ""}. Year-long rises tend to persist, so the dip you are waiting for may never come - if the price is still sane, buy on a fixed schedule instead of waiting.`,
+    };
+  }
+  return {
+    key: "NEUTRAL",
+    label: "No strong trend",
+    text: `${pf(m.ret12m1, 0)} over the year to last month - no strong trend either way. The standard 3-tranche ladder is the right pace.`,
   };
 }
 
@@ -152,9 +219,11 @@ export function coachPosition(inp: CoachInput): CoachCall {
   }
   if (m.pctFromHigh !== undefined) {
     points.push(
-      `Momentum: ${pf(m.pctFromHigh, 1)} from its 52-week high${m.vs200d !== undefined ? `, ${pf(m.vs200d, 1)} vs its 200-day average` : ""}${m.ret3m !== undefined ? `, ${pf(m.ret3m, 1)} over 3 months` : ""}.`
+      `Momentum: ${pf(m.pctFromHigh, 1)} from its 52-week high${m.vs200d !== undefined ? `, ${pf(m.vs200d, 1)} vs its 200-day average` : ""}${m.ret3m !== undefined ? `, ${pf(m.ret3m, 1)} over 3 months` : ""}${m.ret12m1 !== undefined ? `, ${pf(m.ret12m1, 0)} over the year to last month (12-1 momentum)` : ""}.`
     );
   }
+  // Entry pacing (value + momentum): decides HOW FAST to act, never WHETHER.
+  const timing = entryTiming(m);
 
   // ---------- ETFs: DCA is the default state of the world ----------
   if (inp.isEtf) {
@@ -252,6 +321,7 @@ export function coachPosition(inp: CoachInput): CoachCall {
         ? "Quality business + market-wide fear + a real drawdown - the classic be-greedy setup, in tranches."
         : "The business passes the tests while the price has pulled back - that's a valuation reset, not decay."
     );
+    if (timing.key === "FALLING") points.push(`Entry pacing: ${timing.text}`);
     return {
       symbol: inp.symbol,
       stance: "BUY_DIP",
@@ -264,6 +334,8 @@ export function coachPosition(inp: CoachInput): CoachCall {
   if (qualityOk) {
     if (expensive || inp.valStatus === "PRICEY") {
       points.push("Price is rich for new money - holding what you own costs nothing; chasing does.");
+    } else if (timing.key === "RISING" && (inp.valStatus === "FAIR" || inp.valStatus === "BUY_ZONE")) {
+      points.push(`Entry pacing: ${timing.text}`);
     }
     return {
       symbol: inp.symbol,

@@ -6,7 +6,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { parseBrokerCsv } from "../lib/parse";
 import { mockHistory, mockStockData } from "../lib/mock";
 import { buildScorecard, computeRatios } from "../lib/scorecard";
-import { portfolioSeries, seriesWindow, summarize, toBase } from "../lib/portfolio";
+import { jensenAlpha, portfolioSeries, RISK_FREE_ASSUMED, seriesWindow, summarize, toBase, type BenchPoint } from "../lib/portfolio";
+import { returnOver } from "../lib/screens";
 import { buildPrompt } from "../lib/promptgen";
 import { decideAll, decideRow, priceCagrOf } from "../lib/decisions";
 import { capTierOf, CONSENSUS_MIN, consensusOf, runCustom, SCREENS, toMetricRow, type MetricRow } from "../lib/screens";
@@ -27,7 +28,7 @@ import { mockEtfData } from "../lib/mocketf";
 import { mockInvestorMoves } from "../lib/mock";
 import { buildPlan } from "../lib/plan";
 import { buildMacroItems, mockMacro, readRegime, seriesStats, vixBand } from "../lib/macro";
-import { coachPosition, momentumFromCandles, sipPlan, STANCE_META, trancheLadder } from "../lib/coach";
+import { coachPosition, entryTiming, momentumFromCandles, sipPlan, STANCE_META, trancheLadder } from "../lib/coach";
 import { buildChecklistPrompt, PREBUY_CHECKLIST } from "../lib/checklist";
 import { snowflakeLeaders } from "../lib/snowflake";
 import { BUCKET_META, hedgeShare, runStress, STRESS_SCENARIOS, stressBucketOf } from "../lib/stress";
@@ -2750,6 +2751,121 @@ console.log("\n== OUTLIER-AWARE AGREEMENT: the Graham floor stops poisoning the 
   check("…demanding period + source per item", /fiscal period and the source/.test(gapPrompt));
   const plainPrompt = buildChecklistPrompt({ symbol: "ITC.NS" });
   check("no gaps → no empty section", !/COULD NOT VERIFY/.test(plainPrompt));
+}
+
+console.log("\n== RESEARCH-BACKED ADDITIONS: Jensen alpha · entry timing (momentum as pace, never selection) · long-run reversal · option insurance ==");
+{
+  // ---------- Jensen (1968): alpha/beta from monthly returns ----------
+  const mkPoints = (n: number, benchRet: (i: number) => number, youRet: (i: number, m: number) => number): BenchPoint[] => {
+    const pts: BenchPoint[] = [{ date: "2021-01-01", you: 100, bench: 100 }];
+    for (let i = 1; i < n; i++) {
+      const m = benchRet(i);
+      const prev = pts[i - 1];
+      const y = 2021 + Math.floor(i / 12);
+      const mo = (i % 12) + 1;
+      pts.push({ date: `${y}-${String(mo).padStart(2, "0")}-01`, you: prev.you! * (1 + youRet(i, m)), bench: prev.bench! * (1 + m) });
+    }
+    return pts;
+  };
+  const wobble = (i: number) => 0.01 + 0.04 * Math.sin(i * 1.7); // a market that goes up and down
+  const same = jensenAlpha(mkPoints(37, wobble, (_i, m) => m), 0);
+  check("identical to the index → beta 1, alpha 0", !!same && Math.abs(same.beta - 1) < 1e-9 && Math.abs(same.alpha) < 1e-9, JSON.stringify(same));
+  const levered = jensenAlpha(mkPoints(37, wobble, (_i, m) => 1.5 * m), 0);
+  check("1.5x the index's moves → beta 1.5, alpha 0 (leverage is not skill)", !!levered && Math.abs(levered.beta - 1.5) < 1e-9 && Math.abs(levered.alpha) < 1e-9);
+  const skilled = jensenAlpha(mkPoints(37, wobble, (_i, m) => m + 0.005), 0);
+  check("+0.5%/month on top of the index → beta 1, alpha ≈ +6%/yr", !!skilled && Math.abs(skilled.beta - 1) < 1e-9 && Math.abs(skilled.alpha - 0.06) < 1e-9, `${skilled?.alpha}`);
+  check("R² is 1 when the index explains everything", !!skilled && Math.abs(skilled.r2 - 1) < 1e-9);
+  check("fewer than 24 months → no alpha printed", jensenAlpha(mkPoints(20, wobble, (_i, m) => m), 0) === undefined);
+  const withRf = jensenAlpha(mkPoints(37, wobble, (_i, m) => m), RISK_FREE_ASSUMED.INR);
+  check("risk-free assumption is carried on the result and does not move beta-1 alpha", !!withRf && withRf.rf === 0.06 && Math.abs(withRf.alpha) < 1e-9);
+  check("risk-free assumptions exist for every base currency", RISK_FREE_ASSUMED.INR > 0 && RISK_FREE_ASSUMED.CAD > 0 && RISK_FREE_ASSUMED.USD > 0);
+
+  // ---------- Jegadeesh & Titman (1993): 12-1 momentum as ENTRY PACING, never selection ----------
+  const daily = (n: number, f: (i: number) => number): Candle[] =>
+    Array.from({ length: n }, (_, i) => ({ time: `2025-${String(1 + Math.floor(i / 22)).padStart(2, "0")}-${String((i % 22) + 1).padStart(2, "0")}`, open: f(i), high: f(i), low: f(i), close: f(i), volume: 0 }));
+  const up = momentumFromCandles(daily(260, (i) => 100 + i * 0.5));
+  check("12-1 momentum = close ~21 bars back / close ~252 bars back - 1 (latest month skipped)", up.ret12m1 !== undefined && Math.abs(up.ret12m1 - (219 / 103.5 - 1)) < 1e-9, `${up.ret12m1}`);
+  check("12-1 momentum needs ~a year of bars", momentumFromCandles(daily(120, (i) => 100 + i)).ret12m1 === undefined);
+
+  const falling = entryTiming({ ret12m1: -0.3, vs200d: -0.1 });
+  check("year-long slide below the 200-day → FALLING: buy slower, last tranche after the 200-day is reclaimed", falling.key === "FALLING" && /buy it SLOWER/.test(falling.text) && /200-day average/.test(falling.text));
+  check("a slide that has already reclaimed its 200-day average is NOT a falling knife", entryTiming({ ret12m1: -0.3, vs200d: 0.05 }).key === "NEUTRAL");
+  const rising = entryTiming({ ret12m1: 0.35, vs200d: 0.1 });
+  check("year-long rise above the 200-day → RISING: do not wait for a dip", rising.key === "RISING" && /may never come/.test(rising.text));
+  check("a rise that has already broken below its 200-day is NOT 'trending up'", entryTiming({ ret12m1: 0.35, vs200d: -0.05 }).key === "NEUTRAL");
+  check("mild moves → NEUTRAL: the standard ladder", entryTiming({ ret12m1: 0.08, vs200d: 0.02 }).key === "NEUTRAL");
+  check("no history → UNKNOWN, still a pacing answer", entryTiming({}).key === "UNKNOWN" && /standard 3-tranche ladder/.test(entryTiming({}).text));
+  check("every timing read says what to do about the PACE, never whether", ["FALLING", "RISING", "NEUTRAL", "UNKNOWN"].every((k) => {
+    const t = k === "FALLING" ? falling : k === "RISING" ? rising : k === "NEUTRAL" ? entryTiming({ ret12m1: 0.05, vs200d: 0 }) : entryTiming({});
+    return /tranche|schedule|ladder/.test(t.text) && !/sell|exit|avoid|skip it\./i.test(t.text.replace("Do not skip it", ""));
+  }));
+
+  const slideBase = { symbol: "X.NS", isEtf: false, currency: "INR" as const, pnlPct: -0.1, weightPct: 0.05, verdict: "HOLD" as const, action: "HOLD" as const, valStatus: "FAIR" as const };
+  const slide = coachPosition({ ...slideBase, momentum: { pctFromHigh: -0.25, vs200d: -0.1, ret3m: -0.05, ret12m1: -0.3 } });
+  check("coach: quality dip in a year-long slide → still BUY_DIP (whether is unchanged), paced slower", slide.stance === "BUY_DIP" && slide.points.some((p) => /Entry pacing:.*buy it SLOWER/.test(p)), slide.stance);
+  const rise = coachPosition({ ...slideBase, pnlPct: 0.1, momentum: { pctFromHigh: -0.01, vs200d: 0.1, ret3m: 0.05, ret12m1: 0.35 } });
+  check("coach: year-long rise + fair price → HOLD, notes the dip may never come", rise.stance === "HOLD" && rise.points.some((p) => /may never come/.test(p)), rise.stance);
+  const risePricey = coachPosition({ ...slideBase, pnlPct: 0.1, valStatus: "PRICEY", momentum: { pctFromHigh: -0.01, vs200d: 0.1, ret3m: 0.05, ret12m1: 0.35 } });
+  check("…but never says 'buy on a schedule' into a PRICEY name - price still decides WHETHER", !risePricey.points.some((p) => /may never come/.test(p)));
+  check("momentum never changes a stance by itself: same inputs, no momentum → same stance", coachPosition({ ...slideBase, pnlPct: 0.1, momentum: {} }).stance === rise.stance);
+  check("the 12-1 figure is printed in the momentum evidence line", slide.points.some((p) => /12-1 momentum/.test(p)));
+
+  // ---------- Moskowitz, Ooi & Pedersen (2012): index trend paces the cash band ----------
+  const opp0 = { scanned: 50, inBuyZone: 8, qualityInBuyZone: 4, buyZoneShare: 0.16, heldPricey: 1, heldTotal: 5, heldPriceyShare: 0.2 };
+  const down = readPosture(opp0, "NORMAL", "NIFTY 50", -0.15);
+  check("index 15% below a year ago → tranche-pacing line", down.why.some((w) => /below where it stood a year ago/.test(w) && /scheduled tranches/.test(w)));
+  const upIdx = readPosture(opp0, "NORMAL", "NIFTY 50", 0.15);
+  check("index 15% above a year ago → 'the SIP never pauses' line", upIdx.why.some((w) => /above a year ago/.test(w) && /never pauses/.test(w)));
+  check("the trend line never changes the stance", down.stance === readPosture(opp0, "NORMAL", "NIFTY 50").stance && upIdx.stance === readPosture(opp0, "NORMAL", "NIFTY 50").stance);
+  check("no trend data → no trend line", !readPosture(opp0, "NORMAL", "NIFTY 50").why.some((w) => /a year ago/.test(w)));
+  check("macro payload carries the index stats for posture", mockMacro("india").index?.ret1y === 0.112);
+
+  // ---------- De Bondt & Thaler (1985): long-run reversal ----------
+  const monthly = (n: number, f: (i: number) => number) =>
+    Array.from({ length: n }, (_, i) => ({ date: `${2021 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`, close: f(i) }));
+  const r3 = returnOver(monthly(61, (i) => 100 + i), 3);
+  check("returnOver(3y) picks the close ~36 months back", r3 !== undefined && Math.abs(r3 - (160 / 124 - 1)) < 1e-9, `${r3}`);
+  check("returnOver refuses a window the series does not cover", returnOver(monthly(12, (i) => 100 + i), 3) === undefined);
+
+  const growthSym = ["TCS.NS", "HDFCBANK.NS", "TITAN.NS", "INFY.NS", "DMART.NS"].find((s) => {
+    const sc = buildScorecard(mockStockData(s));
+    return (sc.cagr.eps ?? 0) >= 0.08 && sc.totalScore >= 60;
+  })!;
+  const gData = mockStockData(growthSym);
+  const gSc = buildScorecard(gData);
+  const runner = monthly(61, (i) => 100 * Math.pow(1.35, i / 12)); // +35%/yr for 5 years
+  const winRisk = strengthsAndRisks(gSc, undefined, undefined, runner);
+  check(`${growthSym}: price +35%/yr vs earnings → multiple-expansion risk`, winRisk.risks.some((r) => /rising multiple/.test(r)), winRisk.risks.join("|"));
+  const laggard = monthly(61, (i) => 100 - i * 0.2); // drifting down for 5 years
+  const lagStrength = strengthsAndRisks(gSc, undefined, undefined, laggard);
+  check(`${growthSym}: flat-to-down price with growing earnings → laggard strength`, lagStrength.strengths.some((s) => /price laggard/.test(s)), lagStrength.strengths.join("|"));
+  const swotWin = buildSwot({ scorecard: gSc, data: { ...gData, prices: runner } });
+  check("SWOT threat: multiple expansion", swotWin.threats.some((t) => /rising multiple/.test(t.text)));
+  const swotLag = buildSwot({ scorecard: gSc, data: { ...gData, prices: laggard } });
+  check("SWOT opportunity: laggard with growing earnings", swotLag.opportunities.some((o) => /laggard/.test(o.text)));
+  check("no price history → neither reversal line", !strengthsAndRisks(gSc, undefined, undefined, []).risks.some((r) => /rising multiple/.test(r)));
+
+  const fallen = SCREENS.find((s) => s.id === "fallen-quality")!;
+  check("the Fallen quality screen exists and is outside the consensus count", !!fallen && !/fallen/i.test(SCREENS.find((s) => s.id === "consensus")!.criteria));
+  const baseRow = toMetricRow(gData, gSc, { owned: false });
+  check("metric rows carry ret3y and criticalFlags for the cache", baseRow.ret3y !== undefined && typeof baseRow.criticalFlags === "number");
+  const lagRow: MetricRow = { ...baseRow, ret3y: -0.2, epsCagr: 0.12, redFlags: 0, valStatus: "FAIR", score: 70 };
+  const hit = fallen.apply([lagRow, { ...lagRow, symbol: "UP.NS", ret3y: 0.1 }, { ...lagRow, symbol: "PRICEY.NS", valStatus: "PRICEY" }, { ...lagRow, symbol: "FLAG.NS", redFlags: 1 }, { ...lagRow, symbol: "OLD.NS", ret3y: undefined }]);
+  check("Fallen quality: laggard + growing + clean + sane price passes; winners, pricey, flagged and un-scanned rows do not", hit.length === 1 && hit[0].symbol === lagRow.symbol, hit.map((r) => r.symbol).join(","));
+  check("…ranked worst laggard first with a plain rank note", /3y price -20% · EPS \+12%\/yr/.test(hit[0].rankNote ?? ""), hit[0].rankNote);
+  const twoLag = fallen.apply([lagRow, { ...lagRow, symbol: "WORSE.NS", ret3y: -0.4 }]);
+  check("…worst laggard sorts first", twoLag[0].symbol === "WORSE.NS");
+
+  // ---------- Coval & Shumway (2001) + glossary ----------
+  check("entry-timing glossary says it never decides WHETHER and ignores this week's move", /NEVER decides whether/.test(METRIC_INFO.momentum12.better) && /This week's move is never used/.test(METRIC_INFO.momentum12.what));
+  check(
+    "glossary explains alpha/beta, entry timing, option insurance and long-run reversal in plain words",
+    ["alpha", "momentum12", "optionInsurance", "longRunReversal"].every((k) => {
+      const e = (METRIC_INFO as Record<string, { name: string; what: string; better: string }>)[k];
+      return !!e && e.what.length > 120 && e.better.length > 60;
+    })
+  );
+  check("option-insurance entry says buying options loses on average and names the honest alternatives", /loses money on average/.test(METRIC_INFO.optionInsurance.what) && /cash band/.test(METRIC_INFO.optionInsurance.better));
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : "\nALL CHECKS PASSED");

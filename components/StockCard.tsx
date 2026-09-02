@@ -227,9 +227,9 @@ export function StockCard({
   const insights = useMemo(
     () =>
       scorecard && scorecard.verdict !== "INSUFFICIENT_DATA"
-        ? strengthsAndRisks(scorecard, valuation, journey)
+        ? strengthsAndRisks(scorecard, valuation, journey, data?.prices)
         : undefined,
-    [scorecard, valuation, journey]
+    [scorecard, valuation, journey, data]
   );
   const flake = useMemo(() => (scorecard ? snowflakeOf(scorecard, data) : null), [scorecard, data]);
   // the same engine the Decisions tab runs - shown here so the two views can never disagree

@@ -40,9 +40,13 @@ export interface MetricRow {
   coffeeCan?: number; // 0..1 share of qualifying years
   isFin: boolean;
   redFlags: number;
+  /** solvency-level flags (subset of redFlags); absent on rows cached before this field existed */
+  criticalFlags?: number;
   lossYears: number;
   pillarQuality: number;
   pillarGrowth: number;
+  /** price return over the last ~3 years from the monthly series (long-run reversal input); absent on older cache rows */
+  ret3y?: number;
   /** full objects when freshly fetched; absent when revived from cache */
   data?: StockData;
   scorecard?: Scorecard;
@@ -52,6 +56,24 @@ export interface MetricRow {
 
 const avg = (xs: number[]): number | undefined =>
   xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined;
+
+/** Total price return from the point closest to `years` ago (within 60 days) to the last point. */
+export function returnOver(prices: { date: string; close: number }[], years: number): number | undefined {
+  if (prices.length < 2) return undefined;
+  const last = prices[prices.length - 1];
+  const target = new Date(last.date).getTime() - years * 365.25 * 86400000;
+  let best: { date: string; close: number } | undefined;
+  let bestDist = Infinity;
+  for (const p of prices) {
+    const d = Math.abs(new Date(p.date).getTime() - target);
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+    }
+  }
+  if (!best || bestDist > 60 * 86400000 || !(best.close > 0) || !(last.close > 0)) return undefined;
+  return last.close / best.close - 1;
+}
 
 export function toMetricRow(
   data: StockData,
@@ -103,9 +125,11 @@ export function toMetricRow(
     coffeeCan: coffee && coffee.status !== "na" ? coffee.score : undefined,
     isFin: sc.isFinancialSector,
     redFlags: sc.redFlags.length,
+    criticalFlags: sc.criticalFlags.length,
     lossYears: niSeries.filter((v) => v <= 0).length,
     pillarQuality: sc.pillars.find((p) => p.pillar === "quality")?.score ?? 0,
     pillarGrowth: sc.pillars.find((p) => p.pillar === "growth")?.score ?? 0,
+    ret3y: returnOver(data.prices, 3),
     data,
     scorecard: sc,
   };
@@ -357,7 +381,36 @@ const SMALLMID_SCREEN: ScreenDef = {
       .map((r) => ({ ...r, rankNote: `${CAP_TIER_META[capTierOf(r.marketCap, r.symbol)!].label}` })),
 };
 
-export const SCREENS: ScreenDef[] = [...BASE_SCREENS, SMALLMID_SCREEN, CONSENSUS_SCREEN];
+/**
+ * Long-run reversal (De Bondt & Thaler, 1985): the market overreacts, so
+ * portfolios of multi-year price LOSERS went on to beat multi-year winners
+ * over the following years. The value-school twist that keeps this from
+ * being a value trap: only losers whose BUSINESS kept growing qualify - a bad
+ * chart on good earnings is a mispricing, a bad chart on bad earnings is a
+ * warning. A time-dimension subset, deliberately outside the consensus count.
+ */
+const pctS = (v: number) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(0)}%`;
+const FALLEN_SCREEN: ScreenDef = {
+  id: "fallen-quality",
+  name: "Fallen quality (3-year laggards)",
+  master: "De Bondt & Thaler's overreaction",
+  blurb: "Long-run reversal: multi-year price losers have tended to beat multi-year winners over the years that follow - but only worth owning when the business itself kept growing.",
+  criteria: "Price no higher than 3 years ago · scorecard ≥ 60 · EPS growth ≥ 8% · zero red flags · not above fair value (rows scanned before this screen existed need a fresh scan)",
+  apply: (rows) =>
+    rows
+      .filter(
+        (r) =>
+          ok(r.ret3y, (v) => v <= 0) &&
+          r.score >= 60 &&
+          ok(r.epsCagr, (v) => v >= 0.08) &&
+          r.redFlags === 0 &&
+          r.valStatus !== "PRICEY"
+      )
+      .sort((a, b) => (a.ret3y ?? 0) - (b.ret3y ?? 0) || b.score - a.score)
+      .map((r) => ({ ...r, rankNote: `3y price ${pctS(r.ret3y!)} · EPS ${pctS(r.epsCagr!)}/yr` })),
+};
+
+export const SCREENS: ScreenDef[] = [...BASE_SCREENS, SMALLMID_SCREEN, FALLEN_SCREEN, CONSENSUS_SCREEN];
 
 export interface CustomFilter {
   minScore?: number;

@@ -1,6 +1,7 @@
 import type { Scorecard, StockData } from "./types";
 import type { Valuation } from "./valuation";
 import type { CapTier } from "./screens";
+import { priceCagrOf } from "./decisions";
 
 /**
  * SWOT for a stock - moneycontrol-style, but honest about its source: every
@@ -80,12 +81,26 @@ export function buildSwot(inp: SwotInput): Swot {
   if ((inp.capTier === "small" || inp.capTier === "mid") && (sc.cagr.revenue ?? 0) >= 0.12) o.push({ text: "Smaller company with a real growth engine - a longer runway than the giants, if it survives.", evidence: `revenue CAGR ${pct(sc.cagr.revenue!, 0)}` });
   if (q.targetMeanPrice !== undefined && q.price !== undefined && (q.numberOfAnalystOpinions ?? 0) >= 5 && q.targetMeanPrice / q.price - 1 >= 0.15) o.push({ text: "Analysts see meaningful upside - context only; their horizon is 1 year, yours is 5.", evidence: `${q.numberOfAnalystOpinions} analysts, ${pct(q.targetMeanPrice / q.price - 1)} to target` });
   if (inp.regime === "FEAR" && sc.totalScore >= 65) o.push({ text: "Market-wide fear regime: exactly when quality gets mispriced by forced sellers.", evidence: "see Market weather" });
+  // long-run reversal (De Bondt & Thaler 1985): a multi-year laggard whose
+  // earnings kept growing is the overreaction the research found reverses
+  const pc = priceCagrOf(inp.data.prices);
+  const longRun = pc.cagr !== undefined && pc.years !== undefined && pc.years >= 2.5;
+  if (longRun && pc.cagr! <= 0 && (sc.cagr.eps ?? 0) >= 0.08 && sc.totalScore >= 60)
+    o.push({
+      text: "Multi-year price laggard with growing earnings - the market's overreaction, not the business, is what is on sale (long-run reversal, De Bondt & Thaler).",
+      evidence: `price ${pct(pc.cagr!)}/yr vs EPS ${pct(sc.cagr.eps!)}/yr over ~${pc.years!.toFixed(0)}y`,
+    });
 
   // ---------- Threats: the situation working AGAINST you ----------
   for (const f of sc.redFlags) {
     t.push({ text: f, evidence: "red flag from the checks" });
     if (t.length >= 3) break;
   }
+  if (longRun && pc.cagr! >= 0.2 && sc.cagr.eps !== undefined && pc.cagr! - sc.cagr.eps >= 0.1)
+    t.push({
+      text: "The price has compounded far faster than earnings - most of the gain is a rising multiple, and multi-year winners have historically given part of it back (long-run reversal, De Bondt & Thaler).",
+      evidence: `price ${pct(pc.cagr!)}/yr vs EPS ${pct(sc.cagr.eps)}/yr over ~${pc.years!.toFixed(0)}y`,
+    });
   if (val?.status === "PRICEY") t.push({ text: "Priced for perfection - even a good business is a bad stock at the wrong price.", evidence: val.marginOfSafety !== undefined ? `${pct(-val.marginOfSafety)} above fair estimate` : undefined });
   if (failed("icr")) t.push({ text: "Thin interest cover - a bad year meets the lenders first.", evidence: ev("icr") });
   if (m.vs200d !== undefined && m.vs200d < -0.05 && m.ret3m !== undefined && m.ret3m < 0) t.push({ text: "In a downtrend - not a sell signal for quality, but average in tranches, don't catch knives in one buy.", evidence: `${pct(m.vs200d, 1)} vs 200-day average` });

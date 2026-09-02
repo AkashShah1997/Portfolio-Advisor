@@ -1,6 +1,7 @@
-import type { Scorecard } from "./types";
+import type { PricePoint, Scorecard } from "./types";
 import type { Valuation } from "./valuation";
 import type { Journey } from "./journey";
+import { priceCagrOf } from "./decisions";
 
 /**
  * Strengths & risks - the Simply-Wall-St-style bullet summary, generated from
@@ -40,9 +41,34 @@ const PHRASING: Record<string, { pass?: string; fail?: string }> = {
   pb: { pass: "Trades near book value with decent returns", fail: "Expensive versus book for a financial" },
 }
 
-export function strengthsAndRisks(sc: Scorecard, val?: Valuation, journey?: Journey): Insights {
+const pctS = (v: number) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(0)}%`;
+
+export function strengthsAndRisks(sc: Scorecard, val?: Valuation, journey?: Journey, prices?: PricePoint[]): Insights {
   const strengths: { w: number; text: string }[] = [];
   const risks: { w: number; text: string }[] = [];
+
+  // 0) long-run reversal (De Bondt & Thaler 1985): multi-year winners whose
+  // price outran their earnings tend to give part of it back; multi-year
+  // losers whose earnings kept growing tend to recover. Price vs EPS over the
+  // available history is the honest, checkable version of that finding.
+  if (prices?.length) {
+    const pc = priceCagrOf(prices);
+    if (pc.cagr !== undefined && pc.years !== undefined && pc.years >= 2.5) {
+      const eps = sc.cagr.eps;
+      if (pc.cagr >= 0.2 && eps !== undefined && pc.cagr - eps >= 0.1) {
+        risks.push({
+          w: 87,
+          text: `Price has compounded ${pctS(pc.cagr)}/yr against earnings of ${pctS(eps)}/yr over ~${pc.years.toFixed(0)} years - most of the gain is a rising multiple, which long-run reversal research finds winners tend to give partly back`,
+        });
+      }
+      if (pc.cagr <= 0 && (eps ?? 0) >= 0.08 && sc.totalScore >= 60 && !(journey && journey.verdict.tone === "good")) {
+        strengths.push({
+          w: 84,
+          text: `A multi-year price laggard (${pctS(pc.cagr)}/yr) whose earnings kept compounding ${pctS(eps!)}/yr - the overreaction setup that long-run reversal research favours`,
+        });
+      }
+    }
+  }
 
   // 1) valuation state first - it's the decision most people skip
   if (val?.status === "BUY_ZONE" && val.marginOfSafety !== undefined) {

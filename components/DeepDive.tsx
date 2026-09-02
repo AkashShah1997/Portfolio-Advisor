@@ -10,7 +10,7 @@ import { capTierOf, CAP_TIER_META, toMetricRow, type MetricRow } from "@/lib/scr
 import { buildValuation } from "@/lib/valuation";
 import { assessReadiness, READINESS_META } from "@/lib/readiness";
 import { ACTION_META, decideRow } from "@/lib/decisions";
-import { coachPosition, momentumFromCandles, STANCE_META, trancheLadder, type MomentumStats } from "@/lib/coach";
+import { coachPosition, entryTiming, momentumFromCandles, STANCE_META, trancheLadder, type MomentumStats } from "@/lib/coach";
 import type { MacroPayload } from "@/lib/macro";
 import { toBase } from "@/lib/portfolio";
 import { currencyForSymbol, fmtMoney, fmtNum, fmtPct } from "@/lib/symbols";
@@ -203,7 +203,7 @@ export function DeepDive({
     [row, scored, valuation, momentum, capTier, regime, weightPct]
   );
   const insights = useMemo(
-    () => (row?.scorecard && scored ? strengthsAndRisks(row.scorecard, valuation) : undefined),
+    () => (row?.scorecard && scored ? strengthsAndRisks(row.scorecard, valuation, undefined, row.data?.prices) : undefined),
     [row, scored, valuation]
   );
   const peers = useMemo(() => {
@@ -623,6 +623,20 @@ export function DeepDive({
                       </span>
                     )}
                   </div>
+                  {/* entry timing: what the stock is doing RIGHT NOW sets the pace, never the decision */}
+                  {(() => {
+                    const t = entryTiming(momentum);
+                    const tone = t.key === "FALLING" ? "warning" : t.key === "RISING" ? "good" : t.key === "NEUTRAL" ? "neutral" : "muted";
+                    return (
+                      <div className="mb-2 flex flex-wrap items-start gap-x-2 gap-y-1 text-[12.5px]">
+                        <span className="text-muted text-[11.5px] uppercase tracking-wide mt-0.5">
+                          Entry timing <InfoTip k="momentum12" />
+                        </span>
+                        <Badge tone={tone}>{t.label}</Badge>
+                        <span className="text-ink-2 leading-snug basis-full">{t.text}</span>
+                      </div>
+                    );
+                  })()}
                   {q?.price !== undefined && (
                     <div className="bg-page hairline rounded-xl px-3 py-2">
                       <div className="text-[11.5px] font-semibold text-muted uppercase tracking-wide">

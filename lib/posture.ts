@@ -100,7 +100,9 @@ export function opportunitySet(
 export function readPosture(
   opp: OpportunitySet,
   regime?: MacroRegime["key"],
-  benchLabel = "the index"
+  benchLabel = "the index",
+  /** the index's own 12-month return - PACING input only, it never moves the stance */
+  benchRet1y?: number
 ): PostureRead {
   const why: string[] = [];
   // start from a neutral 12% dry-powder band and move it with the evidence
@@ -160,6 +162,19 @@ export function readPosture(
   } else if (regime === "EXPENSIVE_CALM") {
     score += 1;
     why.push(`Calm at record highs: ${benchLabel} near its peak with low volatility is the classic setting for demanding a bigger margin of safety.`);
+  }
+
+  // The index's own 12-month trend (time-series momentum, Moskowitz-Ooi-
+  // Pedersen 2012) tends to persist for months. It never moves the stance -
+  // it only sets the PACE at which the cash band goes to work.
+  if (benchRet1y !== undefined && benchRet1y <= -0.1) {
+    why.push(
+      `Pacing: ${benchLabel} is ${pct(-benchRet1y)} below where it stood a year ago. Year-long index slides tend to persist for months before turning, so put the cash band to work in scheduled tranches across quarters - never in one go, however cheap it looks.`
+    );
+  } else if (benchRet1y !== undefined && benchRet1y >= 0.1) {
+    why.push(
+      `Pacing: ${benchLabel} is ${pct(benchRet1y)} above a year ago, and trends of that length tend to persist. The correction you might wait for may not arrive on schedule - which is exactly why the index SIP never pauses.`
+    );
   }
 
   let stance: Stance;

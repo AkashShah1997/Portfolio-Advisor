@@ -84,6 +84,9 @@ await page.waitForSelector("text=Position coach", { timeout: 10000 });
 await page.waitForSelector("text=Keep DCA-ing", { timeout: 30000 }); // NIFTYBEES core ETF
 await page.waitForSelector("text=The SIP plan", { timeout: 10000 });
 await page.waitForSelector("text=vs 52w high", { timeout: 30000 }); // momentum chips loaded
+await page.waitForSelector("text=12-1m", { timeout: 10000 }); // entry-timing momentum chip
+if (!(await page.locator("[data-infotip=momentum12]").count())) throw new Error("entry-timing tooltip missing");
+await page.waitForSelector("text=above a year ago", { timeout: 15000 }); // posture pacing line (mock index +11% 1y)
 const coachBody = await page.locator("body").textContent();
 if (!/never by itself a reason to sell/.test(coachBody)) throw new Error("coach profit framing missing");
 if (!/Sit tight|Trim a slice|Buy the dip/.test(coachBody)) throw new Error("coach stances missing");
@@ -134,6 +137,11 @@ await page.getByRole("button", { name: /vs NIFTY 50/ }).click();
 await page.waitForSelector("text=Your holdings", { timeout: 20000 });
 await page.waitForSelector("text=/\\/yr vs NIFTY 50/", { timeout: 20000 });
 await page.waitForSelector("text=both indexed to 100", { timeout: 5000 });
+// Jensen's alpha/beta caption - printed with its assumptions, or honestly withheld when the index explains almost nothing
+await page.waitForSelector("text=/beta -?\\d/", { timeout: 10000 });
+const alphaBody = await page.locator("body").textContent();
+if (!/risk-free assumed|alpha not meaningful/.test(alphaBody)) throw new Error("alpha caption missing its assumption or its refusal");
+if (!(await page.locator("[data-infotip=alpha]").count())) throw new Error("alpha info tooltip missing");
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${shots}/17-benchmark.png`, fullPage: false });
 await page.getByRole("button", { name: "Value", exact: true }).click();
@@ -255,6 +263,9 @@ await page.getByLabel("Deep-dive any stock").fill("DMART");
 await page.getByRole("button", { name: "Analyze", exact: true }).click();
 await page.waitForSelector("text=DMART.NS", { timeout: 30000 });
 await page.waitForSelector("text=Entry plan", { timeout: 20000 }); // not held → entry discipline, not position management
+await page.waitForSelector("text=Entry timing", { timeout: 20000 }); // what the stock is doing now sets the PACE of the buy
+const entryBody = await page.locator("body").textContent();
+if (!/Still falling|Trending up|No strong trend|Trend unknown/.test(entryBody)) throw new Error("entry-timing read missing from the entry plan");
 await page.waitForSelector("text=add to watchlist", { timeout: 5000 });
 await page.getByRole("button", { name: /Back to the dashboard/ }).click();
 await page.waitForSelector("text=Action summary", { timeout: 10000 });
@@ -295,6 +306,13 @@ await page.getByRole("button", { name: /Magic Formula/ }).first().click();
 await page.waitForTimeout(400);
 if (!(await page.locator("text=MF rank #1").count())) throw new Error("magic formula ranking missing");
 
+// ---- the long-run reversal screen (De Bondt-Thaler) ----
+await page.getByRole("button", { name: /Fallen quality/ }).first().click();
+await page.waitForSelector("text=Long-run reversal", { timeout: 5000 });
+if (!(await page.locator("[data-infotip=longRunReversal]").count())) throw new Error("long-run reversal tooltip missing");
+const fallenBody = await page.locator("body").textContent();
+if (!/3y price|Nothing passes/.test(fallenBody)) throw new Error("fallen-quality results/empty-state missing");
+
 // ---- info tooltips on screener headers: hover ⓘ → glossary card ----
 const scoreTip = page.locator("th [data-infotip=score]").first();
 if (!(await scoreTip.count())) throw new Error("screener header info icon missing");
@@ -329,6 +347,7 @@ const bodyEtf = await page.locator("body").textContent();
 if (!/GOLDIETF|ICICI Prudential Gold/.test(bodyEtf)) throw new Error("cheaper gold alternative missing");
 // a SWITCH/REDUCE is also a tax event - the market-specific caution must be on the tab
 if (!/also a TAX event/.test(bodyEtf)) throw new Error("ETF tax caution missing");
+if (!/Jensen's 1968 study/.test(bodyEtf)) throw new Error("fee-first rationale (Jensen) missing from the ETF tab");
 if (!/12\.5% LTCG/.test(bodyEtf)) throw new Error("India LTCG specifics missing from the ETF tax caution");
 // inspect an arbitrary fund by symbol
 await page.getByPlaceholder("JUNIORBEES.NS").fill("JUNIORBEES.NS");
@@ -391,6 +410,7 @@ await page.waitForSelector("text=sorted stocks by PRICE PAID", { timeout: 5000 }
 const stBody = await page.locator("body").textContent();
 if (!/Gold & silver funds/.test(stBody)) throw new Error("stress buckets missing the hedge sleeve");
 if (!/not a prediction of the future/.test(stBody)) throw new Error("stress caveat missing");
+if (!/Tempted to buy put options/.test(stBody)) throw new Error("option-insurance note missing (Coval-Shumway)");
 await page.waitForTimeout(400);
 await page.waitForSelector("text=Weatherproof - recession & AI resilience", { timeout: 10000 });
 const wpBody = await page.locator("body").textContent();

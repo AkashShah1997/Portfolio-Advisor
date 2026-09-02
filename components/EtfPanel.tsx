@@ -241,7 +241,7 @@ export function EtfPanel({
     <div className="space-y-4">
       {/* header / summary */}
       <Card className="p-4">
-        <SectionTitle sub="Fund units are judged the Bogle way - on fees, breadth, duplication and size - not on stock pillars. MERs come from Yahoo when available, else from a curated table (approximate).">
+        <SectionTitle sub="Fund units are judged the Bogle way - on fees, breadth, duplication and size - not on stock pillars. Why fees first: Jensen's 1968 study of 115 mutual funds found that on average they failed to beat a simple buy-the-market policy even BEFORE fees, and lost to it after - the finding that started index investing. MERs come from Yahoo when available, else from a curated table (approximate).">
           Your ETFs - cost-first analysis
         </SectionTitle>
         {etfRows.length === 0 ? (

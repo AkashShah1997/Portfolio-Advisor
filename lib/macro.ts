@@ -36,6 +36,8 @@ export interface MacroPayload {
   asOf: string;
   items: MacroItem[];
   regime: MacroRegime;
+  /** the benchmark index's own stats - its 12-month trend paces cash deployment (never times it) */
+  index?: SeriesStats;
   mock?: boolean;
   errors?: string[];
 }
@@ -293,6 +295,7 @@ export function buildMacroPayload(
       above200dma: stats.index?.above200dma,
       vix: stats.vix?.last,
     }),
+    index: stats.index,
     errors: errors?.length ? errors : undefined,
   };
 }

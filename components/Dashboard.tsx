@@ -14,7 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import type { AnalyzedHolding, Currency, FxRates, Holding, Scorecard, StockData, Verdict } from "@/lib/types";
-import { benchmarkCompare, portfolioSeries, seriesWindow, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
+import { benchmarkCompare, jensenAlpha, portfolioSeries, RISK_FREE_ASSUMED, seriesWindow, summarize, toBase, VERDICT_META } from "@/lib/portfolio";
 import { describeSnowflake, portfolioSnowflake, snowflakeLeaders } from "@/lib/snowflake";
 import { currencyForSymbol, fmtMoney, fmtPct } from "@/lib/symbols";
 import { nextId } from "@/lib/parse";
@@ -283,6 +283,11 @@ export function Dashboard({
     benchCmp?.youCagr !== undefined && benchCmp?.benchCagr !== undefined
       ? benchCmp.youCagr - benchCmp.benchCagr
       : undefined;
+  // Jensen's alpha: the beat-the-index question AFTER the market risk carried
+  const alphaRead = useMemo(
+    () => (benchCmp ? jensenAlpha(benchCmp.points, RISK_FREE_ASSUMED[meta.base]) : undefined),
+    [benchCmp, meta.base]
+  );
 
   const ok = useMemo(() => invRows.filter((r) => r.scorecard && r.data), [invRows]);
   const failed = useMemo(() => invRows.filter((r) => r.error || !r.data), [invRows]);
@@ -752,6 +757,30 @@ export function Dashboard({
                         {benchCmp.years ? ` over ${benchCmp.years.toFixed(1)}y` : ""}
                       </Badge>
                     )}
+                    {alphaRead &&
+                      (alphaRead.r2 >= 0.2 ? (
+                        <span className="inline-flex items-center gap-1.5 tnum">
+                          <Badge tone={alphaRead.alpha >= 0 ? "good" : "warning"}>
+                            alpha {alphaRead.alpha >= 0 ? "+" : ""}
+                            {fmtPct(alphaRead.alpha)} /yr · beta {alphaRead.beta.toFixed(2)}
+                          </Badge>
+                          <InfoTip k="alpha" />
+                          <span>
+                            {Math.round(alphaRead.r2 * 100)}% of the swings are just the market · risk-free assumed{" "}
+                            {fmtPct(alphaRead.rf, 0)}
+                          </span>
+                        </span>
+                      ) : (
+                        // when the index explains almost none of the basket's moves, the
+                        // slope is noise - printing an alpha off it would be fake precision
+                        <span className="inline-flex items-center gap-1.5 tnum">
+                          <Badge tone="muted">
+                            alpha not meaningful · beta {alphaRead.beta.toFixed(2)} explains only{" "}
+                            {Math.round(alphaRead.r2 * 100)}% of the swings
+                          </Badge>
+                          <InfoTip k="alpha" />
+                        </span>
+                      ))}
                   </div>
                 </>
               ) : benchRaw[benchSym] === "error" ? (

@@ -30,24 +30,25 @@ export function PostureCard({
   base: Currency;
   onGo?: (tab: string, sub?: string) => void;
 }) {
-  const [regime, setRegime] = useState<MacroPayload["regime"] | undefined>(undefined);
+  const [macro, setMacro] = useState<MacroPayload | undefined>(undefined);
+  const regime = macro?.regime;
   const inFlight = useRef(false);
   useEffect(() => {
-    if (regime !== undefined || inFlight.current) return;
+    if (macro !== undefined || inFlight.current) return;
     inFlight.current = true;
     void (async () => {
       await Promise.resolve();
       try {
         const res = await fetch(`/api/macro/${market}`);
         const j = (await res.json()) as MacroPayload;
-        setRegime(j?.regime);
+        setMacro(j);
       } catch {
         /* posture still works without the weather */
       } finally {
         inFlight.current = false;
       }
     })();
-  }, [market, regime]);
+  }, [market, macro]);
 
   // user-entered idle cash (per market, this device only) - lets the band talk
   // about YOUR actual cash instead of a percentage of money it cannot see
@@ -68,8 +69,8 @@ export function PostureCard({
 
   const opp = useMemo(() => opportunitySet(rows, universe, fx), [rows, universe, fx]);
   const read = useMemo(
-    () => readPosture(opp, regime?.key, MARKET_META[market].benchmark.label),
-    [opp, regime, market]
+    () => readPosture(opp, regime?.key, MARKET_META[market].benchmark.label, macro?.index?.ret1y),
+    [opp, regime, market, macro]
   );
   const funders = useMemo(() => fundingCandidates(rows, fx), [rows, fx]);
 

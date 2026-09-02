@@ -354,6 +354,26 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     what: "How much of the scorecard could actually be ANSWERED with available data, weighted by how much each check matters. 100% = every applicable check had real numbers. 50% = half the scorecard sits at n/a - and an n/a is an open question, never a pass.",
     better: "Higher is better. Below 60% the app refuses to recommend fresh money, and the total score should be read loosely: a 75/100 built on 40% coverage is a sketch, not a grade.",
   },
+  alpha: {
+    name: "Alpha and beta vs the index (Jensen, 1968)",
+    what: "The fair version of 'did my picks beat the index?'. Beta says how hard your holdings move with the market (1.0 = same as the index, 0.7 = gentler, 1.3 = wilder). Alpha is what your picks added per year AFTER giving the market credit for that: a beta-1.2 portfolio that beat the index by 2% mostly just took more risk. Computed from monthly moves of your current holdings vs the index over the window shown, with a stated risk-free rate assumption. Michael Jensen invented the measure in 1968 to test 115 mutual funds - on average they had no alpha even before fees.",
+    better: "Positive alpha over many years is the only real evidence of stock-picking skill; negative alpha for years says the index SIP would have done the job with less effort. Honest limits: this is your CURRENT holdings priced over the past (what you sold isn't here), dividends are excluded on both sides, and a 1-point error in the risk-free assumption moves alpha by only (1 - beta) points. When the index explains under 20% of your swings the app refuses to print an alpha at all - the beta is noise then, and an alpha built on noise is fake precision.",
+  },
+  momentum12: {
+    name: "Entry timing (12-1 month momentum)",
+    what: "What the stock has been doing over the past year: the price return from about 12 months ago to about 1 month ago, skipping the latest month on purpose (the latest month tends to bounce back; the prior year tends to keep going for another 3-12 months - Jegadeesh & Titman, 1993). This week's move is never used: that is noise. The value-investing use of it is narrow and specific: a cheap, good business that is still in a year-long slide tends to keep drifting for months before it turns, so buying it all at once means sitting on dead money for a while.",
+    better: "It NEVER decides whether to buy - the quality checks and the price decide that. It only sets the pace: 'still falling' means buy slower (tranches across quarters, last tranche after the price reclaims its 200-day average); 'trending up' means the dip you are waiting for may not come, so buy on a schedule; 'no strong trend' means the standard 3-tranche ladder. Trying to buy the exact bottom is not on offer from any measure.",
+  },
+  optionInsurance: {
+    name: "Put options as crash insurance",
+    what: "A put option pays out if the market falls below a level by a date - the tempting 'insurance' against the crash-test scenarios. Coval and Shumway (2001) measured what options actually return and found buying them loses money on average, consistently: the premium paid is larger than the payouts received, so the insurance is overpriced.",
+    better: "As an occasional, deliberate choice it can make sense; as a habit it is a steady leak that costs more than the crashes it protects against. Cheaper insurance that research supports: a cash band you actually hold, businesses that survive bad years, a small gold sleeve, and index SIPs that keep buying through the fall.",
+  },
+  longRunReversal: {
+    name: "Long-run reversal (De Bondt & Thaler, 1985)",
+    what: "The market overreacts. Stocks that were the biggest losers over the prior 3-5 years went on to beat the biggest winners over the following 3 years, by a wide margin - because bad news gets over-punished and good news over-rewarded. The app's use of it: a price that ran far ahead of earnings for years is a threat (the multiple tends to come back down), and a multi-year laggard whose earnings kept growing is an opportunity (the overreaction, not the business, is what is cheap).",
+    better: "Not a rule to buy every loser - most laggards are laggards for a reason. The 'Fallen quality' screen applies the value-school filter: price no higher than 3 years ago AND a growing, flag-free business at a sane price.",
+  },
   idleCash: {
     name: "Idle cash",
     what: "Money sitting in your bank or broker account waiting to be invested - NOT your emergency fund, and not money you'll need within about 2 years. Enter it (optional) and the posture card compares your actual cash against the band it suggests, instead of talking percentages about money it can't see. Stored only on this device, like everything else here.",

@@ -162,6 +162,19 @@ export function StressTest({
             </div>
           </div>
 
+          <div className="mt-3 bg-page hairline rounded-xl px-3 py-2">
+            <div className="text-[11.5px] font-semibold text-muted uppercase tracking-wide">
+              Tempted to buy put options as crash insurance? <InfoTip k="optionInsurance" />
+            </div>
+            <p className="text-[12.5px] text-ink-2 mt-1 leading-snug">
+              Don&apos;t, as a habit. Research on what options actually return (Coval &amp; Shumway, 2001) found
+              that buying them loses money on average, month after month - the price of the insurance is higher than
+              the payouts. Held every month it is a slow, certain leak to protect against a rare event. This app&apos;s
+              insurance is the boring kind: a cash band, quality businesses, a sane gold sleeve, and SIPs that keep
+              running through the fall.
+            </p>
+          </div>
+
           <p className="text-[11px] text-muted italic mt-3 leading-relaxed">
             Honest limits: each holding gets its TYPE&apos;s historical hit (index funds, gold funds, large caps,
             mid/small caps, expensive stocks) - your actual companies can do better or worse than their bucket.
